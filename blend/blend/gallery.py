@@ -65,8 +65,21 @@ def title(means: dict, subjects: Counter) -> str:
     z = zscores(means)
     k = max(z, key=lambda key: abs(z[key]))
     adj = ADJ[(k, z[k] > 0)]
-    subj = subjects.most_common(1)[0][0] if subjects else "landscape"
+    subj = distinctive_subject(subjects)
     return f"{adj} {NOUN.get(subj, 'Wanderer')}"
+
+
+def distinctive_subject(subjects: Counter) -> str:
+    """Subject with the highest lift over its catalog frequency (needs 2+ hits when possible)."""
+    if not subjects:
+        return "landscape"
+    cat = Counter(s for a in catalog.artworks().values() for s in a["subjects"])
+    n_cat = len(catalog.artworks())
+    total = sum(subjects.values())
+    def lift(s):
+        return (subjects[s] / total) / ((cat[s] + 1) / n_cat)
+    pool = [s for s, c in subjects.items() if c >= 2] or list(subjects)
+    return max(sorted(pool), key=lambda s: subjects[s] * lift(s) ** 0.5)
 
 
 def top_hues(hist, n: int = 3) -> list[str]:
