@@ -238,7 +238,7 @@ app.post("/demo/teammate", wrap(async (req, res) => {
 // Desktop preview of the app's globe gallery (same HTML the WebView renders), for quick checks.
 app.get("/dev/globe", wrap(async (req, res) => {
   const { GLOBE_HTML } = await import("../../app/src/components/globeHtml.js");
-  const ids = rounds.flatMap((r) => r.artwork_ids);
+  const ids = rounds.flatMap((r) => r.artwork_ids).slice(0, Number(req.query.n ?? 20));
   const tiles = ids.map((id: string, i: number) => ({ id, img: `${base(req)}/catalog/${artworks[id].image_path}`, tint: i % 2 ? "#FF7A59" : "#4CC9D8" }));
   const boot = `<script>setTimeout(function(){G.setTiles(${JSON.stringify(tiles)});
     setTimeout(function(){G.glowPairs([[${JSON.stringify(ids[0])},${JSON.stringify(ids[5])}]])},2500);},50)</script>`;

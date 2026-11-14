@@ -34,7 +34,7 @@ export const GLOBE_HTML = `<!doctype html><html><head>
   function layout(){
     var w=window.innerWidth,h=window.innerHeight,n=Math.max(tiles.length,1);
     R=Math.min(w,h)*0.40;
-    size=Math.max(34,Math.min(110,R*Math.sqrt(4*Math.PI/n)*0.78));
+    size=Math.max(34,Math.min(110,R*Math.sqrt(4*Math.PI/n)*1.0));
   }
   function place(t,i,n,lon,lat,z,scale){
     var tf='rotateY('+lon+'rad) rotateX('+(-lat)+'rad) translateZ('+z+'px) scale('+(scale||1)+')';
@@ -46,7 +46,10 @@ export const GLOBE_HTML = `<!doctype html><html><head>
   }
   window.G={
     setTiles:function(list){
-      sphere.innerHTML=''; tiles=[]; layout();
+      sphere.innerHTML=''; tiles=[];
+      // small galleries repeat around the globe so the sphere reads as a sphere
+      if(list.length && list.length<36){ var full=[]; for(var k=0;k<36;k++) full.push(list[k%list.length]); list=full; }
+      layout();
       list.forEach(function(d,i){
         var el=document.createElement('div');
         el.className='t'+(d.kind==='painting'?' painting':'');
@@ -70,20 +73,20 @@ export const GLOBE_HTML = `<!doctype html><html><head>
     glowPairs:function(pairs){
       var inPair={};
       pairs.forEach(function(p){
-        var a=tiles.find(function(t){return t.id===p[0]}), b=tiles.find(function(t){return t.id===p[1]&&t!==a});
+        var a=tiles.find(function(t){return t.id===p[0]&&!inPair['@'+tiles.indexOf(t)]}), b=tiles.find(function(t){return t.id===p[1]&&t!==a});
         if(!a) return;
         inPair[a.id]=1;
         if(!b){ a.el.classList.add('glow'); a.el.style.boxShadow='0 0 26px 6px #E8C47A'; return; }
         inPair[b.id]=1;
         var mlon=Math.atan2(Math.sin(a.lon)+Math.sin(b.lon),Math.cos(a.lon)+Math.cos(b.lon)), mlat=(a.lat+b.lat)/2;
         [a,b].forEach(function(t,k){
-          t.lon=mlon+(k?0.16:-0.16); t.lat=mlat;
+          t.lon=mlon+(k?0.3:-0.3); t.lat=mlat;
           t.el.classList.add('glow');
           t.el.style.boxShadow='0 0 26px 6px '+(t.tint||'#E8C47A');
-          place(t,0,0,t.lon,t.lat,R*1.08,1.25);
+          place(t,0,0,t.lon,t.lat,R*1.12,1.2);
         });
       });
-      tiles.forEach(function(t){ if(!inPair[t.id]) t.el.classList.add('dim'); });
+      tiles.forEach(function(t){ if(!inPair[t.id]) t.el.classList.add('dim'); else if(!t.el.classList.contains('glow')) t.el.classList.add('glow'); });
       if(pairs.length){ var f=tiles.find(function(t){return t.id===pairs[0][0]}); if(f){ ry=-f.lon*180/Math.PI; rx=f.lat*180/Math.PI*0.6; vy=0.04; } }
     },
     fold:function(){
