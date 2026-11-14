@@ -9,6 +9,7 @@ python -m blendlab run v3 --note "what changed"   # every non-legacy method x th
 python -m blendlab review                         # rate outputs at http://localhost:8790
 python -m blendlab ratings                        # average score per version and method
 python -m blendlab pair aic-11 path/to/photo.jpg  # try any two images -> runs/_scratch/
+python -m blendlab sheet v3 --open                # one image: A | B | merge per pair, checks in green/red
 ```
 
 A = composition / subject, B = the look (palette, brushwork, medium).
@@ -27,5 +28,9 @@ Each run folder (`runs/<version>/`, gitignored) keeps a copy of `methods.py`, so
 reproduced. Ratings live in `ratings.json` (tracked) and drive the next version.
 
 Legacy methods break a rule in the PDF (B's objects leak in, or two subjects get merged), so they
-only run when named: `--methods hybrid`. Test pairs follow the PDF: 10 pairs, including 2 opposite
-(p9, p10) and 1 identical (p11).
+only run when named: `--methods hybrid`.
+
+Test pairs (from v3 on) are oil and watercolor only: `ow1`-`ow5` use an oil painting as the subject and a
+watercolor as the style (result: watercolor), `wo1`-`wo5` the reverse (result: oil). `ow5` and `wo5` are the
+deliberately opposite pairs from the PDF; an identical pair can't be cross-medium, so there isn't one.
+v1 and v2 used mixed-medium pairs, kept in their own `runs/<version>/meta.json`.

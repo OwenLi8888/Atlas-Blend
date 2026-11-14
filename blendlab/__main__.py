@@ -5,6 +5,7 @@
   python -m blendlab pair aic-11 aic-138       blend any two images (ids or file paths)
   python -m blendlab review                    open the rating page (http://localhost:8790)
   python -m blendlab ratings                   print the average rating per version and method
+  python -m blendlab sheet v3 --open           one image: A | B | merge for every pair, with checks
 """
 from __future__ import annotations
 
@@ -101,6 +102,10 @@ def main(argv=None):
     v = sub.add_parser("review", help="serve the rating page")
     v.add_argument("--port", type=int, default=8790)
     sub.add_parser("ratings", help="summarize ratings")
+    sh = sub.add_parser("sheet", help="one image of A | B | merge for every pair in a version")
+    sh.add_argument("version")
+    sh.add_argument("--method", default="rules_local")
+    sh.add_argument("--open", action="store_true", help="open it in the image viewer")
     args = ap.parse_args(argv)
 
     from .methods import METHODS
@@ -124,6 +129,13 @@ def main(argv=None):
     elif args.cmd == "review":
         from .review import serve
         serve(args.port)
+    elif args.cmd == "sheet":
+        from .sheet import make_sheet
+        path = make_sheet(args.version, args.method)
+        print(path)
+        if args.open:
+            import os
+            os.startfile(path) if hasattr(os, "startfile") else print("open it from the path above")
     elif args.cmd == "ratings":
         from .review import summary
         for ver, rows in summary().items():
