@@ -11,3 +11,4 @@ catalog/data/cache/
 *.log
 .DS_Store
 catalog/data/images/
+blendlab/runs/
