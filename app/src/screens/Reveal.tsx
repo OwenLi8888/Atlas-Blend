@@ -165,7 +165,7 @@ export function Reveal({ blendId, onDone }: { blendId: string; onDone: () => voi
         {phase === "panel" && (
           <View style={styles.saved}>
             <Text style={styles.savedText}>{b.done ? "Saved to both galleries" : "Saving…"}</Text>
-            <Button title="Done" onPress={onDone} style={{ height: 44, paddingHorizontal: 20 }} />
+            <Button title="Add to globe" onPress={onDone} style={{ height: 44, paddingHorizontal: 20 }} />
           </View>
         )}
       </Animated.View>

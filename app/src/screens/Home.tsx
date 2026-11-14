@@ -8,16 +8,20 @@ import { Globe, type GlobeTile } from "../components/Globe";
 import type { Identity } from "../identity";
 import { C, serif } from "../theme";
 
-/** Your gallery on the sphere (M4) + gallery card (M3). Blend paintings appear as gold tiles. */
-export function Home({ me, gallery, onBlend, onRetake }: { me: Identity; gallery: Gallery; onBlend: () => void; onRetake: () => void }) {
+/**
+ * Home: the globe of your finished blend paintings (one tile per blend, newest first) + your
+ * gallery card (M3). `justBlended` is the blend that just finished: it lands on the globe last.
+ */
+export function Home({ me, gallery, justBlended, onBlend, onRetake }: {
+  me: Identity; gallery: Gallery; justBlended?: string; onBlend: () => void; onRetake: () => void;
+}) {
   const { height } = useWindowDimensions();
   const [tapped, setTapped] = useState<string | null>(null);
-  const tiles = useMemo<GlobeTile[]>(() => [
-    ...gallery.blend_tiles.map((t) => ({ id: `blend:${t.blend_id}`, img: t.thumb_url, kind: "painting" as const })),
-    ...gallery.artworks.map((a) => ({ id: a.id, img: a.image, kind: "art" as const })),
-  ], [gallery]);
-  const art = tapped && !tapped.startsWith("blend:") ? gallery.artworks.find((a) => a.id === tapped) : null;
-  const tile = tapped?.startsWith("blend:") ? gallery.blend_tiles.find((t) => `blend:${t.blend_id}` === tapped) : null;
+  const tiles = useMemo<GlobeTile[]>(() => gallery.blend_tiles.map((t) => (
+    { id: `blend:${t.blend_id}`, img: t.thumb_url, kind: "painting" as const, label: `With ${t.partner}` }
+  )), [gallery]);
+  const n = gallery.blend_tiles.length;
+  const tile = tapped ? gallery.blend_tiles.find((t) => `blend:${t.blend_id}` === tapped) : null;
 
   return (
     <View style={{ flex: 1 }}>
@@ -26,19 +30,18 @@ export function Home({ me, gallery, onBlend, onRetake }: { me: Identity; gallery
         <Pressable onPress={onRetake}><Text style={styles.retake}>Retake quiz</Text></Pressable>
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
-        <Globe tiles={tiles} onTap={setTapped} style={{ height: height * 0.46 }} />
-        <Text style={styles.hint}>Drag to explore · tap a tile</Text>
+        <Globe tiles={tiles} onTap={setTapped} style={{ height: height * 0.55 }} fill={false}
+          arrive={justBlended ? `blend:${justBlended}` : undefined}
+          emblem={n ? `${String(n).padStart(2, "0")} painting${n > 1 ? "s" : ""}` : "No blends yet"} />
+        <Text style={styles.hint}>{n ? "Drag to explore · tap a painting to replay it" : "Blend with a friend to put your first painting on the globe"}</Text>
         <View style={{ paddingHorizontal: 20, gap: 16 }}>
           <GalleryCard g={gallery} />
-          {gallery.blend_tiles.length > 0 && (
-            <Text style={styles.blends}>{gallery.blend_tiles.length} blend painting{gallery.blend_tiles.length > 1 ? "s" : ""} on your sphere (gold tiles)</Text>
-          )}
         </View>
       </ScrollView>
       <View style={styles.footer}>
         <Button title="Blend with a friend" onPress={onBlend} />
       </View>
-      <ArtworkSheet art={art} tile={tile} onClose={() => setTapped(null)} />
+      <ArtworkSheet tile={tile} onClose={() => setTapped(null)} />
     </View>
   );
 }
@@ -48,6 +51,5 @@ const styles = StyleSheet.create({
   hello: { color: C.text, fontSize: 22, fontFamily: serif },
   retake: { color: C.dim, fontSize: 13 },
   hint: { color: C.faint, fontSize: 12, textAlign: "center", marginBottom: 14 },
-  blends: { color: C.gold, fontSize: 13, textAlign: "center" },
   footer: { position: "absolute", left: 20, right: 20, bottom: 30 },
 });

@@ -11,7 +11,7 @@ import { Welcome } from "./src/screens/Welcome";
 import { C } from "./src/theme";
 
 type Screen =
-  | { name: "boot" } | { name: "welcome" } | { name: "quiz" } | { name: "home" }
+  | { name: "boot" } | { name: "welcome" } | { name: "quiz" } | { name: "home"; justBlended?: string }
   | { name: "lobby" } | { name: "reveal"; blendId: string };
 
 export default function App() {
@@ -34,9 +34,10 @@ export default function App() {
     })();
   }, []);
 
-  const refresh = async () => {
+  // a finished blend ends on Home, where its painting lands on the globe
+  const refresh = async (justBlended?: string) => {
     if (me) setGallery(await api.gallery(me.id).catch(() => gallery));
-    setScreen({ name: "home" });
+    setScreen({ name: "home", justBlended });
   };
 
   let body: React.ReactNode;
@@ -51,13 +52,13 @@ export default function App() {
       body = <Quiz me={me!} onDone={(g) => { setGallery(g); setScreen({ name: "home" }); }} />;
       break;
     case "home":
-      body = <Home me={me!} gallery={gallery!} onBlend={() => setScreen({ name: "lobby" })} onRetake={() => setScreen({ name: "quiz" })} />;
+      body = <Home me={me!} gallery={gallery!} justBlended={screen.justBlended} onBlend={() => setScreen({ name: "lobby" })} onRetake={() => setScreen({ name: "quiz" })} />;
       break;
     case "lobby":
       body = <Lobby me={me!} onBack={() => setScreen({ name: "home" })} onBlend={(blendId) => setScreen({ name: "reveal", blendId })} />;
       break;
     case "reveal":
-      body = <Reveal blendId={screen.blendId} onDone={refresh} />;
+      body = <Reveal blendId={screen.blendId} onDone={() => refresh(screen.blendId)} />;
       break;
   }
 

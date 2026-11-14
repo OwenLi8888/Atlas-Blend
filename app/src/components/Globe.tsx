@@ -8,23 +8,33 @@ import { GLOBE_HTML } from "./globeHtml";
 const WebView = RNWebView as unknown as React.ComponentType<any>;
 interface WebViewRef { injectJavaScript(js: string): void }
 
-export interface GlobeTile { id: string; img: string; tint?: string; tint2?: string; kind?: "art" | "painting" }
+export interface GlobeTile { id: string; img: string; tint?: string; tint2?: string; kind?: "art" | "painting"; label?: string }
 export interface GlobeHandle {
   glowPairs(pairs: [string, string][]): void;
   fold(): void;
   unfold(): void;
 }
 
-interface Props { tiles: GlobeTile[]; onTap?: (id: string) => void; style?: ViewStyle }
+/**
+ * `emblem`: short text at the sphere's core that always faces the viewer.
+ * `fill` (default true): repeat a small set of tiles so the sphere looks full; false shows each once.
+ * `arrive`: id of a tile that lands last, with the globe turning to face it (a just-finished blend).
+ */
+interface Props {
+  tiles: GlobeTile[]; onTap?: (id: string) => void; style?: ViewStyle; emblem?: string; fill?: boolean; arrive?: string;
+}
 
-export const Globe = forwardRef<GlobeHandle, Props>(function Globe({ tiles, onTap, style }, ref) {
+export const Globe = forwardRef<GlobeHandle, Props>(function Globe({ tiles, onTap, style, emblem, fill = true, arrive }, ref) {
   const web = useRef<WebViewRef>(null);
   const [ready, setReady] = useState(false);
   const run = useCallback((js: string) => web.current?.injectJavaScript(`try{${js}}catch(e){};true;`), []);
 
   useEffect(() => {
-    if (ready) run(`G.setTiles(${JSON.stringify(tiles)})`);
-  }, [ready, tiles, run]);
+    if (ready) run(`G.setTiles(${JSON.stringify(tiles)},${JSON.stringify({ fill, arrive })})`);
+  }, [ready, tiles, run]); // eslint-disable-line react-hooks/exhaustive-deps -- arrive/fill only matter with new tiles
+  useEffect(() => {
+    if (ready) run(`G.setEmblem(${JSON.stringify(emblem ?? "")})`);
+  }, [ready, emblem, run]);
 
   useImperativeHandle(ref, () => ({
     glowPairs: (pairs) => run(`G.glowPairs(${JSON.stringify(pairs)})`),

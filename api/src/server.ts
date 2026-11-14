@@ -239,9 +239,35 @@ app.post("/demo/teammate", wrap(async (req, res) => {
 app.get("/dev/globe", wrap(async (req, res) => {
   const { GLOBE_HTML } = await import("../../app/src/components/globeHtml.js");
   const ids = rounds.flatMap((r) => r.artwork_ids).slice(0, Number(req.query.n ?? 20));
-  const tiles = ids.map((id: string, i: number) => ({ id, img: `${base(req)}/catalog/${artworks[id].image_path}`, tint: i % 2 ? "#FF7A59" : "#4CC9D8" }));
-  const boot = `<script>setTimeout(function(){G.setTiles(${JSON.stringify(tiles)});
-    setTimeout(function(){G.glowPairs([[${JSON.stringify(ids[0])},${JSON.stringify(ids[5])}]])},2500);},50)</script>`;
+  const img = (id: string) => `${base(req)}/catalog/${artworks[id].image_path}`;
+  let boot: string;
+  if (req.query.pairs) {
+    // Reveal screen: two tinted galleries, then a matched pair glows
+    const tiles = ids.map((id: string, i: number) => ({ id, img: img(id), tint: i % 2 ? "#FF7A59" : "#4CC9D8" }));
+    boot = `<script>setTimeout(function(){G.setTiles(${JSON.stringify(tiles)});
+      setTimeout(function(){G.glowPairs([[${JSON.stringify(ids[0])},${JSON.stringify(ids[5])}]])},2500);},50)</script>`;
+  } else {
+    // Home screen: the globe of finished blend paintings. Starts empty, then one painting lands
+    // every 5s. Uses the real finished blends in the local store, else catalog stand-ins.
+    let paintings: { id: string; img: string; kind: string; label: string }[] = [];
+    try {
+      const db = JSON.parse(readFileSync(join(RUNTIME, "db.json"), "utf8"));
+      const seen = new Set<string>();
+      paintings = Object.values<any>(db.blends ?? {})
+        .filter((b) => b.thumb_url && !seen.has(b.thumb_url) && seen.add(b.thumb_url))
+        .map((b, i) => ({ id: `blend:${b.id}`, img: abs(req, b.thumb_url) as string, kind: "painting", label: `With ${b.names?.b ?? `friend ${i + 1}`}` }));
+    } catch { /* no local store */ }
+    if (!paintings.length) {
+      paintings = ids.slice(0, 6).map((id: string, i: number) => ({ id: `blend:demo${i}`, img: img(id), kind: "painting", label: `With friend ${i + 1}` }));
+    }
+    // ?arrive=1: what Home shows right after a blend: all paintings at once, the newest lands last
+    if (req.query.arrive) boot = `<script>setTimeout(function(){var b=${JSON.stringify(paintings)};
+      G.setTiles(b,{fill:false,arrive:b[0].id}); G.setEmblem(String(b.length).padStart(2,'0')+' paintings');},50)</script>`;
+    else boot = `<script>setTimeout(function(){var b=${JSON.stringify(paintings)},t=[],k=0;
+      function em(){ G.setEmblem(t.length?String(t.length).padStart(2,'0')+' painting'+(t.length>1?'s':''):'No blends yet'); }
+      G.setTiles(t,{fill:false}); em();
+      setInterval(function(){ if(k>=b.length) return; t=[b[k++]].concat(t); G.setTiles(t,{fill:false}); em(); },5000);},50)</script>`;
+  }
   res.type("html").send(GLOBE_HTML.replace("</body>", `<style>body{background:#0F0E0C}</style>${boot}</body>`));
 }));
 
