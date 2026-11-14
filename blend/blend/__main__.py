@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 from . import catalog
-from .gallery import summarize
+from .gallery import summarize, bars
 from .matching import match
 from .merge import merge
 from .still import make_still
@@ -28,6 +28,7 @@ def run_blend(req: dict) -> dict:
     print(json.dumps({"event": "matched", "score": m["score"], "seconds": round(t_match, 2)}), flush=True)
     mg = merge(ga, gb, m)
     still = make_still(mg, Path(req["out_dir"]))
+    still["painting_variables"]["bars"] = bars(still["painting_variables"])
     return {
         "blend_id": req.get("blend_id"),
         "users": {"a": {k: req["a"].get(k) for k in ("user_id", "name")},

@@ -84,6 +84,7 @@ async function run(store: Store, blend: Blend, aIds: string[], bIds: string[]) {
   await push(store, blend, "matched", {
     score: blend.score, per_variable: blend.per_variable, pairs: blend.pairs, groups: blend.groups,
     medium: blend.medium, still_url: blend.still_url, gallery_a: blend.gallery_a, gallery_b: blend.gallery_b,
+    painting_bars: (blend.painting_variables as any)?.bars,
   });
 
   // 2. painting worker and research agent, in parallel
@@ -127,6 +128,7 @@ async function replayCached(store: Store, blend: Blend, src: Blend) {
   await push(store, blend, "matched", {
     score: blend.score, per_variable: blend.per_variable, pairs: blend.pairs, groups: blend.groups,
     medium: blend.medium, still_url: blend.still_url, gallery_a: blend.gallery_a, gallery_b: blend.gallery_b,
+    painting_bars: (blend.painting_variables as any)?.bars,
   });
   const todos = src.events.filter((e) => e.type === "todos").at(-1);
   if (todos) await push(store, blend, "todos", todos.data);
