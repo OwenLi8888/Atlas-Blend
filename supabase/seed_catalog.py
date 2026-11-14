@@ -1,6 +1,9 @@
 """Emit SQL inserts for the artworks + quiz_rounds tables from catalog/data (pipe into psql or
 paste into the SQL editor):  python supabase/seed_catalog.py > seed.sql"""
 import json
+import sys
+
+sys.stdout.reconfigure(encoding="utf-8")
 from pathlib import Path
 
 D = Path(__file__).resolve().parents[1] / "catalog" / "data"
