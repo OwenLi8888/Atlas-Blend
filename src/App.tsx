@@ -63,7 +63,18 @@ export function App() {
   const onPaintingComplete = useCallback(
     (painting: FinalPainting | null) => {
       setFinished(painting);
-      if (painting) rememberFinalPainting(session.sessionId, painting);
+      if (!painting) return;
+      // The gallery room keeps one copy per room, and every Play again is a new room: the copies
+      // of earlier rooms go first, or a device that plays all day runs out of storage.
+      try {
+        const mine = `atlas:final:${session.sessionId}`;
+        for (const key of Object.keys(window.localStorage)) {
+          if (key.startsWith('atlas:final:') && key !== mine) window.localStorage.removeItem(key);
+        }
+      } catch {
+        // Storage is blocked: there is nothing to clear.
+      }
+      rememberFinalPainting(session.sessionId, painting);
     },
     [session],
   );

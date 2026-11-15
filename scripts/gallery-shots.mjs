@@ -174,6 +174,7 @@ async function flow(tag, size) {
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   await page.goto(`${url}?session=flow-${tag}-${Date.now().toString(36)}&user=1`);
   await page.getByRole('radio', { name: /Sunny/ }).click();
+  await page.getByPlaceholder('Type your name').fill('Shots'); // page 1 asks for a name before Continue
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.locator('.pick-tile').first().waitFor();
   for (let i = 0; i < 5; i++) await page.locator('.pick-tile').nth(i * 3).click();

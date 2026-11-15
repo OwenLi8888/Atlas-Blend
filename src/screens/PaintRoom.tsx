@@ -251,18 +251,22 @@ function Room({ character, session, record, player, onBack, onGallery, paused = 
           players.splice(players.indexOf(player2d), 1);
           finishedAt.push(i);
           setPainted((p) => [...p, i]);
-          saveWork({
-            // one copy per round of picks and easel: a room code that comes round again keeps the earlier visit's paintings
-            id: `${session.sessionId}:${session.user}:${record.pickedAt}:${i}`,
-            src: snapshot(sheet),
-            aspect: slot.aspect,
-            title: slot.painting.title,
-            sub: `Painted by ${character.name} in ${styleLabel(i)}`,
-            tag: slot.tag,
-            why: `${slot.why} ${character.name} painted it ${styleNote(STYLE[i])}.`,
-            group: slot.group,
-            at: new Date().toISOString(),
-          });
+          try {
+            saveWork({
+              // one copy per round of picks and easel: a room code that comes round again keeps the earlier visit's paintings
+              id: `${session.sessionId}:${session.user}:${record.pickedAt}:${i}`,
+              src: snapshot(sheet),
+              aspect: slot.aspect,
+              title: slot.painting.title,
+              sub: `Painted by ${character.name} in ${styleLabel(i)}`,
+              tag: slot.tag,
+              why: `${slot.why} ${character.name} painted it ${styleNote(STYLE[i])}.`,
+              group: slot.group,
+              at: new Date().toISOString(),
+            });
+          } catch {
+            // The canvas could not be copied: it is not kept, and the painter still moves on.
+          }
           if (i === current) scene?.workDone();
         },
       });
@@ -287,13 +291,17 @@ function Room({ character, session, record, player, onBack, onGallery, paused = 
           // Hand-off to the gallery room: see onPaintingComplete in Props.
           const hung = finishedAt.includes(BLEND) ? BLEND : finishedAt.at(-1);
           if (hung === undefined) return;
-          completeRef.current?.({
-            // a copy small enough to keep on the device, where the gallery room reads it back after a refresh
-            imageUrl: snapshot(sheets[hung], 720),
-            title: titles[hung],
-            style: styleLabel(hung),
-            createdAt: new Date().toISOString(),
-          });
+          try {
+            completeRef.current?.({
+              // a copy small enough to keep on the device, where the gallery room reads it back after a refresh
+              imageUrl: snapshot(sheets[hung], 720),
+              title: titles[hung],
+              style: styleLabel(hung),
+              createdAt: new Date().toISOString(),
+            });
+          } catch {
+            // The canvas could not be read: nothing to hang.
+          }
         },
         onCanvas: (i) => setViewing((v) => (v === i ? null : i)),
       });
