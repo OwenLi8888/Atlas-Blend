@@ -93,6 +93,7 @@ function passOn(req, res) {
     { hostname: gallery.hostname, port: gallery.port, path: req.url, method: req.method, headers: { ...req.headers, host: gallery.host } },
     (answer) => {
       res.writeHead(answer.statusCode ?? 502, answer.headers);
+      answer.on('error', () => res.destroy()); // the Gallery API went away mid-answer
       answer.pipe(res);
     },
   );
@@ -105,7 +106,13 @@ function passOn(req, res) {
 
 http
   .createServer((req, res) => {
-    const { pathname } = new URL(req.url ?? '/', 'http://localhost');
+    // A throw in here would stop the whole process, and a request target can be anything: check it first.
+    let pathname;
+    try {
+      ({ pathname } = new URL(req.url ?? '/', 'http://localhost'));
+    } catch {
+      return plain(res, 400, 'Bad request');
+    }
     picks(req, res, () => {
       if (pathname.startsWith('/api/')) {
         if (gallery) return passOn(req, res);

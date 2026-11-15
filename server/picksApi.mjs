@@ -23,8 +23,8 @@ const PICKS = 5;
 /** Sessions kept. Anyone who can reach the endpoint can write to it, so the file must not grow without end: past this, the oldest sessions go. */
 const MAX_SESSIONS = 500;
 
-/** When a session was last written to: the newest pickedAt of its records. */
-const lastPicked = (session) => Math.max(0, ...Object.values(session).map((r) => Date.parse(r?.pickedAt) || 0));
+/** When a session was last written to, by this server's clock (`savedAt`; records from before it existed count as oldest). */
+const lastSaved = (session) => Math.max(0, ...Object.values(session).map((r) => Date.parse(r?.savedAt) || 0));
 
 const distinctIds = (v, n) => Array.isArray(v) && v.length === n && new Set(v).size === n && v.every((id) => typeof id === 'string' && PHOTO.test(id));
 
@@ -109,11 +109,11 @@ export function picksMiddleware({ file = DEFAULT_FILE } = {}) {
         if (other && other.shown.some((id) => record.shown.includes(id))) {
           return send(res, 409, { error: 'These photos overlap with the other user’s photos' });
         }
-        all[record.sessionId] = { ...session, [record.user]: record };
+        // savedAt is this server's time, kept for the cap below: pickedAt comes from the device and cannot be trusted for it
+        all[record.sessionId] = { ...session, [record.user]: { ...record, savedAt: new Date().toISOString() } };
         const ids = Object.keys(all);
         if (ids.length > MAX_SESSIONS) {
-          // this session is never the one dropped, whatever its clock says
-          const oldest = ids.filter((id) => id !== record.sessionId).sort((a, b) => lastPicked(all[a]) - lastPicked(all[b]));
+          const oldest = ids.filter((id) => id !== record.sessionId).sort((a, b) => lastSaved(all[a]) - lastSaved(all[b]));
           for (const id of oldest.slice(0, ids.length - MAX_SESSIONS)) delete all[id];
         }
         try {

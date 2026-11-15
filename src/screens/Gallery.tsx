@@ -78,6 +78,12 @@ export function Gallery({ live, onBack }: Props) {
     sceneRef.current?.focus(reading);
   }, [reading]);
 
+  // the row of small copies follows the painting in front
+  const thumbsRef = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    thumbsRef.current?.children[index]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [index, reading]);
+
   const item = items[index];
   const here = item?.section;
 
@@ -146,7 +152,7 @@ export function Gallery({ live, onBack }: Props) {
               <p className="gallery-why">{item.why}</p>
             ) : (
               // every painting at a glance: the wall shows one at a time on a phone
-              <ul className="gallery-thumbs" aria-label="All paintings">
+              <ul ref={thumbsRef} className="gallery-thumbs" aria-label="All paintings">
                 {items.map((it, i) => (
                   <li key={i}>
                     <button type="button" className={i === index ? 'on' : undefined} aria-current={i === index} aria-label={`${it.title}, ${i + 1} of ${items.length}`} onClick={() => sceneRef.current?.go(i)}>
