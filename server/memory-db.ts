@@ -74,6 +74,9 @@ export function createMemoryDb(options: MemoryDbOptions = {}): MemoryDb {
     async findProfile(id) {
       return profiles.get(id) ?? null;
     },
+    async findProfiles(ids) {
+      return ids.flatMap(id => { const profile = profiles.get(id); return profile ? [profile] : []; });
+    },
     async findProfileByCode(code) {
       return [...profiles.values()].find(profile => profile.blend_code === code) ?? null;
     },

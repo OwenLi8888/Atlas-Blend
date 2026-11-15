@@ -56,6 +56,7 @@ export interface Db {
   /** Creates a profile. `code` fixes its blend code; otherwise a free one is generated. */
   createProfile(name: string, code?: string): Promise<Profile>;
   findProfile(id: string): Promise<Profile | null>;
+  findProfiles(ids: readonly string[]): Promise<Profile[]>;
   findProfileByCode(code: string): Promise<Profile | null>;
   deleteProfile(id: string): Promise<void>;
   /** Newest first. */
@@ -171,6 +172,13 @@ export function createSupabaseDb(url: string, secretKey: string): Db {
       const { data, error } = await client.from('profiles').select(PROFILE_COLUMNS).eq('id', id).maybeSingle();
       if (error) throw storageError(error);
       return data ? toProfile(data) : null;
+    },
+
+    async findProfiles(ids) {
+      if (ids.length === 0) return [];
+      const { data, error } = await client.from('profiles').select(PROFILE_COLUMNS).in('id', [...ids]);
+      if (error) throw storageError(error);
+      return data.map(toProfile);
     },
 
     async findProfileByCode(code) {

@@ -233,8 +233,8 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
   });
 
   app.get('/api/profile/:user_id', async (req, res: Response<ProfileResponse>) => {
-    const profile = await requireProfile(uuid(req.params.user_id));
-    const hearts = await heartsOf(profile.id);
+    const userId = uuid(req.params.user_id);
+    const [profile, hearts] = await Promise.all([requireProfile(userId), heartsOf(userId)]);
     res.json({
       profile,
       hearts: hearts.map(heart => ({ work: works[heart.index], why: heart.why, hearted_at: heart.heartedAt })),
@@ -293,8 +293,9 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
   });
 
   app.get('/api/recs/:user_id', async (req, res: Response<RecsResponse>) => {
-    const profile = await requireProfile(uuid(req.params.user_id));
-    const hearted = (await heartsOf(profile.id)).map(heart => heart.index);
+    const userId = uuid(req.params.user_id);
+    const [, hearts] = await Promise.all([requireProfile(userId), heartsOf(userId)]);
+    const hearted = hearts.map(heart => heart.index);
     const tastes = findTastes(corpus, hearted);
     const count = wholeNumber(req.query.count, 'count', WALL_SIZE, 1, MAX_WALL_SIZE);
     const picks = recommend(corpus, tastes, { count, exclude: new Set(hearted), artistOf });
@@ -386,21 +387,23 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
     const viewer = await requireProfile(uuid(req.params.user_id));
     const records = await db.listBlends(viewer.id, MAX_BLENDS_LISTED);
 
-    const blends: BlendSummary[] = [];
-    for (const record of records) {
+    const otherIds = [...new Set(records.map(record => record.userA === viewer.id ? record.userB : record.userA))];
+    const names = new Map((await db.findProfiles(otherIds)).map(profile => [profile.id, profile.name]));
+    const summaries = await Promise.all(records.map(async (record): Promise<BlendSummary | null> => {
       const revealIndex = record.result ? catalog.indexOf(record.result.revealId) : undefined;
-      if (!record.result || revealIndex === undefined) continue;
+      if (!record.result || revealIndex === undefined) return null;
       const commission = await commissions.status(record.id);
-      blends.push({
+      return {
         id: record.id,
         created_at: record.created_at,
-        friend: { name: await otherName(record, viewer.id) },
+        friend: { name: names.get(record.userA === viewer.id ? record.userB : record.userA) ?? '' },
         score: record.result.score,
         title: commission?.title ?? null,
         image_url: commission?.image_url ?? null,
         top_artwork: works[revealIndex],
-      });
-    }
+      };
+    }));
+    const blends = summaries.filter((blend): blend is BlendSummary => blend !== null);
     res.json({ blends });
   });
 
