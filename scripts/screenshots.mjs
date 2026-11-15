@@ -299,7 +299,29 @@ async function tracking() {
   await context.close();
 }
 
+/** Save downloads the finished painting as a PNG, and is off until the painting is finished. */
+async function saving() {
+  const context = await browser.newContext({ viewport: { width: 1180, height: 820 }, acceptDownloads: true });
+  const page = await context.newPage();
+  await openStudio(page, 1);
+  const save = page.getByRole('button', { name: 'Save', exact: true });
+  await page.evaluate(() => window.__restyle.seek(0.4));
+  const offEarly = await save.isDisabled();
+  await page.evaluate(() => window.__restyle.seek(1));
+  await page.waitForTimeout(300);
+  const [download] = await Promise.all([page.waitForEvent('download'), save.click()]);
+  const file = path.join(out, `saved-${download.suggestedFilename()}`);
+  await download.saveAs(file);
+  const bytes = readFileSync(file);
+  const png = bytes.subarray(1, 4).toString() === 'PNG';
+  const size = await page.evaluate(() => [document.querySelector('canvas').width, document.querySelector('canvas').height]);
+  note('Save is disabled until the painting is finished', offEarly, offEarly ? 'disabled at 40%' : 'enabled at 40%');
+  note('Save downloads the painting as a PNG', png && bytes.length > 20000, `${download.suggestedFilename()}, ${(bytes.length / 1024).toFixed(0)} kB, canvas ${size[0]} x ${size[1]} px`);
+  await context.close();
+}
+
 try {
+  await saving();
   await capture(PHONE, 'phone');
   await capture(KIOSK, 'kiosk');
   await fallbacks();

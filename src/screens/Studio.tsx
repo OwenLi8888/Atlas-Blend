@@ -169,6 +169,33 @@ export function Studio({ painting, character, onBack }: Props) {
     setPhase('painting');
   };
 
+  /** Saves the finished canvas (the painting only, no character) as a PNG. */
+  const save = async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) return;
+    const name = `${painting.title || 'painting'} - ${style}`.replace(/[^\w -]+/g, '').trim().replace(/[\s-]+/g, '-').toLowerCase();
+    const file = new File([blob], `${name}.png`, { type: 'image/png' });
+    // On a phone or tablet the share sheet is how an image gets into Photos; elsewhere, download it.
+    if (window.matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: painting.title });
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return; // the visitor closed the sheet
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = file.name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const styleLabel = STYLES.find((s) => s.id === style)!.label;
   const status =
     phase === 'planning'
@@ -252,6 +279,9 @@ export function Studio({ painting, character, onBack }: Props) {
           </button>
           <button type="button" className={`btn secondary hold${comparing ? ' held' : ''}`} {...hold}>
             Hold to compare
+          </button>
+          <button type="button" className="btn secondary save" disabled={phase !== 'done'} onClick={save}>
+            Save
           </button>
         </div>
       </section>
