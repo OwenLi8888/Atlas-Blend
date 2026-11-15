@@ -2,20 +2,21 @@ import { useCallback, useEffect, useState } from 'react';
 import { joinGallery, type GalleryPlayer } from './blend/gallery';
 import { characters } from './characters';
 import { savePicks, type PicksRecord } from './picks/picksStore';
-import { deviceStore, getSession, recallCharacter, rememberCharacter, setPicking, wasPicking } from './picks/session';
+import { deviceStore, getSession, joinRoom, newRoom, recallCharacter, rememberCharacter, setPicking, wasPicking } from './picks/session';
 import { Gallery, type GalleryItem } from './screens/Gallery';
 import { Home } from './screens/Home';
 import { PaintRoom } from './screens/PaintRoom';
 import { PhotoPicks } from './screens/PhotoPicks';
 
 /**
- * The flow, for two players on two devices in one session (?session=…&user=1|2):
- * 1 name yourself and choose a painter, 2 pick 5 of 25 pictures, 3 the painter paints one of your
- * picks, one of your friend's and the piece that blends you both, 4 the gallery wall.
+ * The flow, for two players on two devices in one room (player 2 types player 1's room code):
+ * 1 name yourself and choose a painter, 2 pick 5 of 25 pictures, 3 the painter paints a new work for
+ * you, one for your friend and the piece between you both. The gallery of everything this device
+ * has painted opens over page 1 or page 3 and closes back to it.
  * (The paintings screen and Museum setup are not in this flow; their components are in src/screens/.)
  */
-type Screen = 'home' | 'picks' | 'studio' | 'gallery';
-const ORDER: Screen[] = ['home', 'picks', 'studio', 'gallery'];
+type Screen = 'home' | 'picks' | 'studio';
+const ORDER: Screen[] = ['home', 'picks', 'studio'];
 
 export function App() {
   // The character, the name and the picks screen are remembered per session and user, so a refresh
@@ -26,7 +27,8 @@ export function App() {
   const [screen, setScreen] = useState<Screen>(() => (wasPicking(session) && recallCharacter(session) ? 'picks' : 'home'));
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
   const [record, setRecord] = useState<PicksRecord | null>(null);
-  const [wall, setWall] = useState<GalleryItem[]>([]);
+  /** The gallery, while it is open: the canvases still being painted, to hang beside the saved ones. Null when closed. */
+  const [wall, setWall] = useState<GalleryItem[] | null>(null);
   /** This player's profile in the Gallery API (server/); null while it is unknown or the API is not running. */
   const [player, setPlayer] = useState<GalleryPlayer | null>(null);
 
@@ -79,15 +81,21 @@ export function App() {
   const character = characters.find((c) => c.id === characterId) ?? characters[0];
 
   return (
+    <>
     <div key={screen} className={`screen screen-${screen} ${direction}`}>
       {screen === 'home' && (
         <Home
+          paused={wall !== null}
+          onGallery={() => setWall([])}
           characters={characters}
           selectedId={characterId}
           onSelect={selectCharacter}
           name={name}
           onName={rename}
           player={session.user}
+          room={session.sessionId}
+          onJoin={(code) => joinRoom(session, code)}
+          onLeave={newRoom}
           onContinue={() => go('picks')}
         />
       )}
@@ -109,14 +117,14 @@ export function App() {
           session={session}
           record={record}
           player={player}
+          paused={wall !== null}
           onBack={() => go('picks')}
-          onGallery={(items) => {
-            setWall(items);
-            go('gallery');
-          }}
+          onGallery={setWall}
         />
       )}
-      {screen === 'gallery' && <Gallery items={wall} onBack={() => go('studio')} />}
     </div>
+    {/* outside .screen: its entrance animation would otherwise hold the gallery's fixed box */}
+    {wall && <Gallery live={wall} onBack={() => setWall(null)} />}
+    </>
   );
 }

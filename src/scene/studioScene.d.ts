@@ -33,6 +33,8 @@ export interface StudioScene {
   setAspect(index: number, aspect: number): void;
   /** Bring the camera in on canvas `index` to look at it, or null to step back. Paint mode. */
   view(index: number | null): void;
+  /** Stop drawing while something covers the scene (the gallery), and start again after. */
+  pause(on: boolean): void;
   dispose(): void;
 }
 

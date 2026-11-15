@@ -733,7 +733,8 @@ export function createStudioScene(canvas, {
   };
   canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerdown', onDown);
-  const onVisible = () => renderer.setAnimationLoop(document.hidden || disposed || !ready ? null : loop);
+  let paused = false;
+  const onVisible = () => renderer.setAnimationLoop(document.hidden || disposed || !ready || paused ? null : loop);
   document.addEventListener('visibilitychange', onVisible);
 
   let last = 0;
@@ -765,6 +766,7 @@ export function createStudioScene(canvas, {
     setAspect(i, aspect) { shape(i, aspect); },
     view(i) { act.view = i ?? -1; },
     workDone() { const go = waiting; waiting = null; go?.(); },
+    pause(on) { paused = on; last = 0; onVisible(); },
     dispose() {
       disposed = true;
       renderer.setAnimationLoop(null);

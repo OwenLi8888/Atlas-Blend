@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './Home.css';
 import { studioCast, type Character } from '../characters';
+import { ROOM_CODE } from '../picks/session';
 import type { StudioScene } from '../scene/studioScene';
 
 interface Props {
@@ -12,6 +13,16 @@ interface Props {
   onName: (name: string) => void;
   /** Which of the two players this device is. */
   player: 1 | 2;
+  /** This room's code: the friend types it on their device to play together. */
+  room: string;
+  /** Player 1 typed a friend's code: move into that room. */
+  onJoin: (code: string) => void;
+  /** Player 2 leaves the friend's room. */
+  onLeave: () => void;
+  /** Open the gallery of everything this device has painted. */
+  onGallery: () => void;
+  /** The gallery is open over this screen: stop drawing the studio. */
+  paused?: boolean;
   onContinue: () => void;
 }
 
@@ -20,7 +31,9 @@ interface Props {
  * in the scene or on its name. On a phone the text sits above and the choice below the picture; on
  * a wide screen it is a column on the left and the picture moves right to make room.
  */
-export function Home({ characters, selectedId, onSelect, name, onName, player, onContinue }: Props) {
+export function Home({ characters, selectedId, onSelect, name, onName, player, room, onJoin, onLeave, onGallery, paused = false, onContinue }: Props) {
+  const [friendCode, setFriendCode] = useState('');
+  const canJoin = ROOM_CODE.test(friendCode) && friendCode !== room;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<StudioScene | null>(null);
@@ -70,6 +83,10 @@ export function Home({ characters, selectedId, onSelect, name, onName, player, o
     sceneRef.current?.select(selectedId);
   }, [selectedId]);
 
+  useEffect(() => {
+    sceneRef.current?.pause(paused);
+  }, [paused]);
+
   return (
     <main className="home">
       <canvas ref={canvasRef} className="home-scene" aria-hidden="true" />
@@ -91,6 +108,41 @@ export function Home({ characters, selectedId, onSelect, name, onName, player, o
               onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
             />
           </label>
+          <div className="room">
+            <p className="room-code">
+              <span className="eyebrow">{player === 1 ? 'Room code' : 'Friend’s room'}</span>
+              <strong>{room}</strong>
+            </p>
+            {player === 1 ? (
+              <form
+                className="room-join"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (canJoin) onJoin(friendCode);
+                }}
+              >
+                <label>
+                  <span className="eyebrow">Join a friend</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    maxLength={4}
+                    placeholder="Their code"
+                    value={friendCode}
+                    onChange={(e) => setFriendCode(e.target.value.replace(/\D/g, ''))}
+                  />
+                </label>
+                <button type="submit" className="btn primary" disabled={!canJoin}>
+                  Join
+                </button>
+              </form>
+            ) : (
+              <button type="button" className="btn ghost room-leave" onClick={onLeave}>
+                Leave room
+              </button>
+            )}
+          </div>
         </header>
 
         <div className="home-choice">
@@ -124,6 +176,9 @@ export function Home({ characters, selectedId, onSelect, name, onName, player, o
           </p>
           <button type="button" className="btn primary" disabled={!selectedId || !name.trim()} onClick={onContinue}>
             Continue
+          </button>
+          <button type="button" className="text-btn home-gallery" onClick={onGallery}>
+            Your gallery
           </button>
         </div>
       </div>

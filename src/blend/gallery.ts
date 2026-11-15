@@ -3,7 +3,7 @@
  * and blends. The API is optional: every call here fails soft (null) after a short timeout, and the
  * screens then fall back to what the two devices know on their own (the picks in /api/picks).
  */
-import type { BlendResponse, Commission, Profile } from '../rec/api';
+import type { BlendResponse, Commission, Profile, ProfileResponse, Recommendation, RecsResponse } from '../rec/api';
 
 export interface GalleryPlayer {
   profileId: string;
@@ -61,3 +61,23 @@ export async function waitForCommission(blendId: string, first: Commission, dead
 
 /** Same-origin copy of a collection artwork's image (the image host sends no CORS headers). */
 export const artworkImageUrl = (artId: string) => `api/image?id=${encodeURIComponent(artId)}`;
+
+/** The works the gallery recommends to this profile, best first. Empty until they have a heart, or when the API is not running. */
+export async function recommendations(profileId: string): Promise<Recommendation[]> {
+  const recs = await call<RecsResponse>('GET', `api/recs/${encodeURIComponent(profileId)}`);
+  return recs?.works ?? [];
+}
+
+/**
+ * Waits until a profile has hearts: a friend's device hearts their picks a moment after it saves
+ * them, and a blend or recommendations asked for before that would see an empty taste.
+ */
+export async function waitForHearts(profileId: string, deadlineMs = 8000): Promise<boolean> {
+  const end = Date.now() + deadlineMs;
+  for (;;) {
+    const profile = await call<ProfileResponse>('GET', `api/profile/${encodeURIComponent(profileId)}`);
+    if (profile?.hearts?.length) return true;
+    if (!profile || Date.now() >= end) return false;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+}

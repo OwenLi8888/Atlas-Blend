@@ -1,11 +1,26 @@
-/* ---- Screen 4: the gallery wall ----
-   The 3D wall fills the screen; a title on top and the caption of the picture in front below. */
+/* ---- The gallery wall ----
+   Opens over the screen it was called from. Black and white on purpose: the paintings carry all
+   the colour. The 3D wall fills the screen; the title and the parts of the hang sit on top, the
+   caption of the picture in front below. */
 
 .gallery-room {
-  position: relative;
-  height: 100dvh;
+  --ink: #111111;
+  --ink-soft: rgba(17, 17, 17, 0.62);
+  --line: rgba(17, 17, 17, 0.16);
+  --paper: #f1f1ef;
+  position: fixed;
+  inset: 0;
+  z-index: 20;
   overflow: hidden;
-  background: #e8d6b8;
+  background: var(--paper);
+  color: var(--ink);
+  animation: gallery-in 260ms ease-out both;
+}
+
+@keyframes gallery-in {
+  from {
+    opacity: 0;
+  }
 }
 
 .gallery-scene {
@@ -31,22 +46,18 @@
   pointer-events: none;
 }
 
-.gallery-panel > * {
-  pointer-events: auto;
+.gallery-head {
+  display: grid;
+  gap: 12px;
+  padding: calc(var(--pad) + env(safe-area-inset-top)) var(--pad) 28px;
+  background: linear-gradient(to bottom, rgba(241, 241, 239, 0.94) 60%, rgba(241, 241, 239, 0));
 }
 
-.gallery-head {
+.gallery-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: calc(var(--pad) + env(safe-area-inset-top)) var(--pad) 26px;
-  background: linear-gradient(to bottom, rgba(244, 236, 222, 0.92) 55%, rgba(244, 236, 222, 0));
-  pointer-events: none;
-}
-
-.gallery-head .btn {
-  pointer-events: auto;
 }
 
 .gallery-title {
@@ -54,22 +65,69 @@
 }
 
 .gallery-title h1 {
-  font-size: clamp(1.4rem, 5vw, 2rem);
+  font-size: clamp(1.5rem, 5.4vw, 2.2rem);
+  color: var(--ink);
 }
 
 .gallery-title p {
   font-size: 0.8rem;
-  color: var(--navy-soft);
+  color: var(--ink-soft);
+}
+
+.gallery-btn {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--ink);
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.9rem;
+  pointer-events: auto;
+}
+
+.gallery-tabs {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  pointer-events: auto;
+}
+
+.gallery-tabs button {
+  flex: none;
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.gallery-tabs button.on {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
 }
 
 .gallery-foot {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 34px var(--pad) calc(var(--pad) + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, rgba(241, 241, 239, 0.96) 68%, rgba(241, 241, 239, 0));
+}
+
+.gallery-row {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 30px var(--pad) calc(var(--pad) + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, rgba(244, 236, 222, 0.95) 62%, rgba(244, 236, 222, 0));
-  pointer-events: none;
+  width: 100%;
 }
 
 .gallery-caption {
@@ -77,7 +135,7 @@
   min-width: 0;
   max-width: 520px;
   display: grid;
-  gap: 3px;
+  gap: 4px;
   justify-items: center;
   text-align: center;
 }
@@ -85,7 +143,7 @@
 .gallery-caption strong {
   font-family: var(--serif);
   font-weight: 400;
-  font-size: clamp(1.15rem, 4.6vw, 1.5rem);
+  font-size: clamp(1.2rem, 4.8vw, 1.6rem);
   line-height: 1.15;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -94,45 +152,80 @@
   overflow: hidden;
 }
 
-.gallery-caption .paint-tag {
-  justify-self: center;
+.gallery-tag {
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .gallery-sub {
   font-size: 0.85rem;
-  color: var(--navy-soft);
+  color: var(--ink-soft);
 }
 
 .gallery-count {
   font-size: 0.75rem;
-  color: var(--navy-soft);
+  color: var(--ink-soft);
   font-variant-numeric: tabular-nums;
+}
+
+.gallery-why {
+  max-width: 46ch;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  text-align: center;
+  color: var(--ink);
 }
 
 .gallery-arrow {
   flex: none;
-  width: 48px;
-  height: 48px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
-  border: 1px solid var(--hairline);
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--navy);
-  font-size: 1.2rem;
+  border: 1px solid var(--ink);
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 1.15rem;
   pointer-events: auto;
 }
 
 .gallery-arrow:disabled {
-  opacity: 0.35;
+  opacity: 0.25;
+}
+
+.gallery-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  padding: var(--pad);
+  text-align: center;
+}
+
+.gallery-empty h2 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(1.6rem, 6vw, 2.4rem);
+  color: var(--ink);
+}
+
+.gallery-empty p {
+  color: var(--ink-soft);
 }
 
 /* Without WebGL: a strip that scrolls sideways. */
 .gallery-strip {
   list-style: none;
   margin: 0;
-  padding: 120px var(--pad) 40px;
+  padding: 130px var(--pad) 40px;
   height: 100%;
   display: flex;
-  gap: 24px;
+  gap: 28px;
   overflow-x: auto;
   align-items: center;
 }
@@ -147,5 +240,13 @@
 .gallery-strip img {
   max-height: 55dvh;
   max-width: 78vw;
-  border: 10px solid #b9733a;
+  border: 3px solid var(--ink);
+  padding: 12px;
+  background: #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-room {
+    animation: none;
+  }
 }

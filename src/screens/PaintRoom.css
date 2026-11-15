@@ -283,3 +283,11 @@
     animation: none;
   }
 }
+
+/* The way into the gallery, beside Back. */
+.paint-gallery {
+  min-height: 40px;
+  padding: 0 16px;
+  margin-right: auto;
+  font-size: 0.9rem;
+}
