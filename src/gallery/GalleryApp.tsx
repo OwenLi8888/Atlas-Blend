@@ -179,7 +179,10 @@ export function GalleryApp() {
           initial={firstVisit.choice}
           busy={signingUp}
           error={signUpError}
-          onBack={sofar => setFirstVisit(visit => visit && { ...visit, step: 'works', choice: sofar ?? visit.choice })}
+          onBack={sofar => {
+            setSignUpError(null);
+            setFirstVisit(visit => visit && { ...visit, step: 'works', choice: sofar ?? visit.choice });
+          }}
           onEnter={async choice => {
             const picks = firstVisit.picks;
             setFirstVisit(visit => visit && { ...visit, choice });
