@@ -100,7 +100,12 @@ export function createStudioScene(canvas, { base, cast, onPick, reducedMotion = 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 60);
   const look = new THREE.Vector3();
   const disposables = [];
-  const keep = (x) => (disposables.push(x), x);
+  // anything created after dispose() (a build still in flight) is freed at once
+  const keep = (x) => {
+    if (disposed) x.dispose?.();
+    else disposables.push(x);
+    return x;
+  };
 
   let disposed = false, ready = false, T0 = 0, selected = null, panel = 0;
   const clock = () => performance.now() / 1000 - T0;
@@ -191,7 +196,7 @@ export function createStudioScene(canvas, { base, cast, onPick, reducedMotion = 
     birds.position.z = 0.003; wall.children[0].add(birds);
 
     // ceiling and side walls from the plain left part of the same painted wall
-    const plain = await tex('wall-windows.webp');
+    const plain = wall.children[0].material.map;
     {
       const g = keep(new THREE.PlaneGeometry(9, 7));
       const uv = g.attributes.uv;
@@ -443,11 +448,12 @@ export function createStudioScene(canvas, { base, cast, onPick, reducedMotion = 
    * picture is shifted right so the painters stay clear of it.
    */
   let W = 1, H = 1;
+  const cam = new THREE.Vector3(), tgt = new THREE.Vector3();
   function frame(T) {
     const a = W / H, wide = clamp01((a - 0.75) / 0.85); // 0 = phone portrait, 1 = laptop landscape
     camera.fov = lerp(45 * Math.max(1, 0.46 / a), 38, wide);
-    const cam = new THREE.Vector3(lerp(0, 0.25, wide), lerp(1.95, 1.8, wide), lerp(6.3, 5.5, wide));
-    const tgt = new THREE.Vector3(lerp(0.1, 0.3, wide), lerp(1.15, 1.0, wide), lerp(0, -0.5, wide));
+    cam.set(lerp(0, 0.25, wide), lerp(1.95, 1.8, wide), lerp(6.3, 5.5, wide));
+    tgt.set(lerp(0.1, 0.3, wide), lerp(1.15, 1.0, wide), lerp(0, -0.5, wide));
     const intro = reducedMotion ? 1 : io(seg(T, 0, 5.6));
     const swing = Math.sin(intro * Math.PI) * 0.6;
     camera.position.set(
@@ -487,7 +493,7 @@ export function createStudioScene(canvas, { base, cast, onPick, reducedMotion = 
   };
   canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerdown', onDown);
-  const onVisible = () => renderer.setAnimationLoop(document.hidden || disposed ? null : loop);
+  const onVisible = () => renderer.setAnimationLoop(document.hidden || disposed || !ready ? null : loop);
   document.addEventListener('visibilitychange', onVisible);
 
   function loop() {

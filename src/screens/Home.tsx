@@ -34,8 +34,9 @@ export function Home({ characters, selectedId, onSelect, onContinue }: Props) {
     let cancelled = false;
     let ro: ResizeObserver | null = null;
     // three.js loads as its own chunk, so the rest of the app does not wait for it
+    // Without WebGL the studio stays a plain backdrop; the picker below still works.
     import('../scene/studioScene').then(({ createStudioScene }) => {
-      if (cancelled) return;
+      if (cancelled || !document.createElement('canvas').getContext('webgl2')) return;
       const scene = createStudioScene(canvas, {
         base: './studio/',
         cast: studioCast,
