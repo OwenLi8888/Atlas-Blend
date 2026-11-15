@@ -8,8 +8,11 @@ import type {
   CuratorNoteResponse,
   CuratorResponse,
   DiscoverResponse,
+  Friend,
   HeartResponse,
   OnboardingResponse,
+  PainterId,
+  PainterResponse,
   Profile,
   ProfileResponse,
   RecsResponse,
@@ -34,7 +37,7 @@ import {
 import type { Catalog } from './catalog';
 import { noCommissions, type Commissions } from './commission';
 import { ROOMS_MIN_SAVED, type Curator, type CuratorPerson } from './curator';
-import type { BlendRecord, Db, StoredBlend, StoredTrend } from './db';
+import { MAX_PAINTER_NAME_LENGTH, isPainterId, type BlendRecord, type Db, type StoredBlend, type StoredTrend } from './db';
 import { ApiError } from './errors';
 import { resizedImages } from './images';
 
@@ -168,7 +171,7 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
     record: BlendRecord,
     result: StoredBlend,
     viewerId: string,
-    friendName: string,
+    friend: Friend,
     commission: Commission,
   ): BlendResponse {
     const viewerIsA = record.userA === viewerId;
@@ -180,7 +183,7 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
     return {
       id: record.id,
       created_at: record.created_at,
-      friend: { name: friendName },
+      friend,
       commission,
       score: result.score,
       top_artwork: reveal,
@@ -189,14 +192,15 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
         return work ? [{ work, from: viewerIsA ? from : flip[from] }] : [];
       }),
       trends: { you: mine, friend: theirs },
-      story: blendStory(reveal, mine, theirs, friendName),
+      story: blendStory(reveal, mine, theirs, friend.name),
     };
   }
 
-  /** The name of the other person in a blend. */
-  async function otherName(record: BlendRecord, viewerId: string): Promise<string> {
-    const other = await db.findProfile(record.userA === viewerId ? record.userB : record.userA);
-    return other?.name ?? '';
+  /** The other person in a blend, as the viewer is shown them. Their profile's ID is never part of it. */
+  const asFriend = (profile: Profile | null): Friend => ({ name: profile?.name ?? '', painter: profile?.painter ?? null });
+
+  async function otherPerson(record: BlendRecord, viewerId: string): Promise<Friend> {
+    return asFriend(await db.findProfile(record.userA === viewerId ? record.userB : record.userA));
   }
 
   /**
@@ -310,13 +314,23 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
     const id = uuid(bodyField(req, 'id'), 'id');
     const name = text(bodyField(req, 'name'), 'name', MAX_NAME_LENGTH);
     const picks = onboardingPicks(bodyField(req, 'picks'));
+    const chosen = bodyField(req, 'painter_id');
+    const painterId = chosen === undefined || chosen === null ? undefined : painter(chosen);
 
     const existing = await db.findProfile(id);
     if (existing) {
       res.json(await profileResponse(existing));
       return;
     }
-    res.status(201).json(await profileResponse(await db.createProfile({ id, name, artIds: picks })));
+    res.status(201).json(await profileResponse(await db.createProfile({ id, name, artIds: picks, painterId })));
+  });
+
+  // The person's painter: which one, and what they call it. An empty name means the painter's own.
+  app.post('/api/profile/:user_id/painter', async (req, res: Response<PainterResponse>) => {
+    const userId = uuid(req.params.user_id);
+    const chosen = { id: painter(bodyField(req, 'id')), name: painterName(bodyField(req, 'name')) };
+    await db.savePainter(userId, chosen);
+    res.json({ painter: chosen });
   });
 
   // Someone who removed every heart chooses again, under the same rule as signing up.
@@ -470,7 +484,7 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
       friend: { name: friend.name, trends: trends.friend, notes: theirNotes },
     });
     const record: BlendRecord = { id: saved.id, created_at: saved.created_at, userA: me.id, userB: friend.id, result };
-    res.json(presentBlend(record, result, me.id, friend.name, commission));
+    res.json(presentBlend(record, result, me.id, asFriend(friend), commission));
   });
 
   // A person's saved blends: the ones they made and the ones made with them.
@@ -507,7 +521,7 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
       throw new ApiError(410, 'This blend can no longer be shown');
     }
     const commission = (await commissions.status(record.id)) ?? unavailableCommission;
-    res.json(presentBlend(record, record.result, viewerId, await otherName(record, viewerId), commission));
+    res.json(presentBlend(record, record.result, viewerId, await otherPerson(record, viewerId), commission));
   });
 
   app.get('/api/blend/:blend_id/commission', async (req, res: Response<Commission>) => {
@@ -693,6 +707,19 @@ function text(value: unknown, label: string, maxLength: number): string {
   if (typeof value !== 'string') throw new ApiError(400, 'Invalid ' + label);
   const trimmed = value.trim();
   if (trimmed === '' || trimmed.length > maxLength) throw new ApiError(400, 'Invalid ' + label);
+  return trimmed;
+}
+
+function painter(value: unknown): PainterId {
+  if (!isPainterId(value)) throw new ApiError(400, 'Invalid painter');
+  return value;
+}
+
+/** What someone calls their painter. Unlike other text it may be empty: the painter then keeps its own name. */
+function painterName(value: unknown): string {
+  if (typeof value !== 'string') throw new ApiError(400, 'Invalid name');
+  const trimmed = value.trim();
+  if (trimmed.length > MAX_PAINTER_NAME_LENGTH) throw new ApiError(400, 'Invalid name');
   return trimmed;
 }
 

@@ -31,7 +31,10 @@ export interface MemoryDbOptions {
 export function createMemoryDb(options: MemoryDbOptions = {}): MemoryDb {
   const { file } = options;
   const saved = file ? readSnapshot(file) : null;
-  const profiles = new Map<string, Profile>((saved?.profiles ?? []).map(profile => [profile.id, profile]));
+  // A file saved before painters were kept on the profile has none: those profiles have not chosen.
+  const profiles = new Map<string, Profile>(
+    (saved?.profiles ?? []).map(profile => [profile.id, { ...profile, painter: profile.painter ?? null }]),
+  );
   const hearts = new Map<string, Heart[]>(Object.entries(saved?.hearts ?? {}));
   const blends: StoredBlendRow[] = saved?.blends ?? [];
 
@@ -61,13 +64,19 @@ export function createMemoryDb(options: MemoryDbOptions = {}): MemoryDb {
 
   return {
     blends,
-    async createProfile({ name, id = randomUUID(), code, artIds = [] }) {
+    async createProfile({ name, id = randomUUID(), code, artIds = [], painterId }) {
       const existing = profiles.get(id);
       if (existing) return existing;
       if (code !== undefined && [...profiles.values()].some(profile => profile.blend_code === code)) {
         throw new ApiError(409, 'That blend code is already taken');
       }
-      const profile: Profile = { id, name, blend_code: code ?? generateBlendCode(), created_at: timestamp() };
+      const profile: Profile = {
+        id,
+        name,
+        blend_code: code ?? generateBlendCode(),
+        created_at: timestamp(),
+        painter: painterId ? { id: painterId, name: '' } : null,
+      };
       profiles.set(profile.id, profile);
       hearts.set(profile.id, [...new Set(artIds)].map(artId => ({ art_id: artId, why: null, created_at: timestamp() })));
       persist();
@@ -88,6 +97,13 @@ export function createMemoryDb(options: MemoryDbOptions = {}): MemoryDb {
       for (let i = blends.length - 1; i >= 0; i--) {
         if (blends[i].userA === id || blends[i].userB === id) blends.splice(i, 1);
       }
+      persist();
+    },
+    async savePainter(userId, painter) {
+      const profile = profiles.get(userId);
+      if (!profile) throw new ApiError(404, 'Profile not found');
+      // A new object: profiles already handed out stay as they were when read.
+      profiles.set(userId, { ...profile, painter: { ...painter } });
       persist();
     },
     async listHearts(userId, limit) {

@@ -18,11 +18,23 @@ export interface Artwork {
   caption: string | null;
 }
 
+/** The painters a person can have: their picture, and who stands in the room when they blend. */
+export type PainterId = 'ember' | 'sunny' | 'pop' | 'dot' | 'hue' | 'ivory';
+
+/** A person's own choice of painter. */
+export interface ChosenPainter {
+  id: PainterId;
+  /** What they call it; empty to use the painter's own name. */
+  name: string;
+}
+
 export interface Profile {
   id: string;
   name: string;
   blend_code: string;
   created_at: string;
+  /** Null for a profile that never chose: one is then picked for it, the same every time. */
+  painter: ChosenPainter | null;
 }
 
 export interface Heart {
@@ -51,6 +63,16 @@ export interface CreateProfileRequest {
   name: string;
   /** Artwork IDs; at least `min_picks` different ones. */
   picks: string[];
+  /** The painter chosen at the entrance. Left out, the profile has none until one is chosen. */
+  painter_id?: PainterId;
+}
+
+/** POST /api/profile/:user_id/painter: chooses the person's painter, or renames it. */
+export type PainterRequest = ChosenPainter;
+
+export interface PainterResponse {
+  /** The choice as saved: the name trimmed. */
+  painter: ChosenPainter;
 }
 
 /**
@@ -158,10 +180,17 @@ export interface WallItem {
   from: WallSource;
 }
 
+/** The other person in a blend, as much of them as their friend is shown. */
+export interface Friend {
+  name: string;
+  /** The painter they chose, or null when they have not chosen one. */
+  painter: ChosenPainter | null;
+}
+
 export interface BlendResponse {
   id: string;
   created_at: string;
-  friend: { name: string };
+  friend: Friend;
   /** Taste match, 50 to 100: lifted and curved from the raw overlap so it reads like a familiar match score. */
   score: number;
   /** A new artwork made for the two of them: the centrepiece. Poll GET /api/blend/:id/commission. */

@@ -7,7 +7,8 @@
   --rose: #a6445d;
   --veil: 244, 236, 222;
   position: relative;
-  height: calc(100dvh - var(--bar-h, 72px));
+  /* The rest of the window under the site's bar (the column is set up in gallery.css). */
+  flex: 1 0 auto;
   min-height: 520px;
   overflow: hidden;
   background: #e8d6b8;

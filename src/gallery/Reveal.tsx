@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Artwork, BlendResponse, Commission, Profile, Trend, WallSource } from '../rec/api';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Artwork, BlendResponse, Commission, Profile, Trend, WallItem, WallSource } from '../rec/api';
 import { Player } from '../engine/player';
 import { getPlan } from '../plan/planStore';
 import type { StrokePlan } from '../types';
@@ -7,9 +7,9 @@ import { api } from './api';
 import { Detail, useOverlay } from './Detail';
 import { possessive } from './format';
 import { revealUrl, thumbnailUrl } from './images';
-import { AtlasRoom, type RoomItem } from './AtlasRoom';
-import { friendPainter, myPainter } from './painter';
-import { PaintStudio, canOpenStudio } from './PaintStudio';
+import { AtlasRoom, type RoomArrival, type RoomItem, type RoomPainter } from './AtlasRoom';
+import { friendPainter, painterOf } from './painter';
+import { PIECE_KEY, PaintStudio, canOpenStudio, studioPair } from './PaintStudio';
 
 interface Props {
   me: Profile;
@@ -24,7 +24,7 @@ interface Props {
  * version settles into the real image at the end, so fine strokes are not needed.
  */
 const PAINTING_WIDTH_MM = 60;
-/** Frames in the room, as in the gallery room on main: twelve keeps each work large. */
+/** Frames in the room, as in the gallery room on main: twelve keeps each work large. A full room goes all the way round. */
 const ROOM_FRAMES = 12;
 /** How often to ask whether the piece being made is ready. */
 const COMMISSION_POLL_MS = 1000;
@@ -61,7 +61,12 @@ export function Reveal({ me, blend, revisit }: Props) {
    * and a new blend is painted in the room's own frame instead.
    */
   const [studio, setStudio] = useState<'open' | 'closed' | 'none'>(() => (!revisit && canOpenStudio() ? 'open' : 'none'));
-  const leaveStudio = useCallback(() => setStudio('closed'), []);
+  /** The canvases painted in the studio and where each stood on screen, for their flight into the room. */
+  const [arrivals, setArrivals] = useState<readonly RoomArrival[]>([]);
+  const leaveStudio = useCallback((painted: readonly RoomArrival[]) => {
+    setArrivals(painted);
+    setStudio('closed');
+  }, []);
   /** Everything is already painted when the room opens. */
   const hung = revisit || studio !== 'none';
 
@@ -74,6 +79,8 @@ export function Reveal({ me, blend, revisit }: Props) {
 
   const made = commission.status === 'ready' && commission.image_url !== null;
   const making = commission.status === 'pending';
+  /** No piece is coming: the work the two already meet at stays in front, and says what the piece would have. */
+  const noPiece = !made && !making;
   const subject = subjectOf(blend, commission);
   const subjectId = subject.planId;
   const finishPainting = useCallback(() => setPaintedId(subjectId), [subjectId]);
@@ -96,65 +103,94 @@ export function Reveal({ me, blend, revisit }: Props) {
   const story = commission.label?.story ?? (commission.label_status === 'pending' ? null : blend.story);
   const pieceTitle = commission.title ?? 'Your piece';
 
-  // Everything that hangs here, in order: the piece made for the two of them, the collection work
-  // they already meet at, then their shared wall. Whichever comes first is the one being painted.
+  // Each person's painter is the one on their profile.
+  const mine = painterOf(me);
+  const friendPainterInRoom: RoomPainter = friendPainter(blend.friend, mine.painter);
+
+  // The two works that hang either side of the front frame: one from each person's side. A new
+  // blend paints these two in the studio, on the easels either side of the piece.
+  const pair = useMemo(() => studioPair(blend.wall), [blend.wall]);
   const works = new Map<string, Artwork>([[meeting.id, meeting], ...blend.wall.map(({ work }): [string, Artwork] => [work.id, work])]);
-  const items: RoomItem[] = [
-    ...(made && commission.image_url
-      ? [{ key: 'piece', imageUrl: commission.image_url, title: pieceTitle, style: 'Made for you both', isNew: true, content: canvas, aspect: canvasAspect }]
-      : []),
-    {
-      key: meeting.id,
-      imageUrl: thumbnailUrl(meeting.id),
-      title: meeting.title,
-      style: 'Where you already meet',
-      credit: meeting.artist,
-      // Until the new piece arrives, this is the work the room is lit for.
-      isNew: !made,
-      content: made ? undefined : canvas,
-      aspect: made ? undefined : canvasAspect,
-    },
-    ...blend.wall.map(({ work, from }) => ({
-      key: work.id,
-      imageUrl: thumbnailUrl(work.id),
-      title: work.title,
-      style: tagFor[from],
-      credit: work.artist,
-      isNew: false,
-    })),
-  ].slice(0, ROOM_FRAMES);
+  const wallItem = ({ work, from }: WallItem): RoomItem => ({
+    key: work.id,
+    imageUrl: thumbnailUrl(work.id),
+    title: work.title,
+    style: tagFor[from],
+    credit: work.artist,
+    isNew: false,
+  });
+  const meetingItem: RoomItem = {
+    key: meeting.id,
+    imageUrl: thumbnailUrl(meeting.id),
+    title: meeting.title,
+    style: 'Where you already meet',
+    credit: meeting.artist,
+    // Until the new piece arrives, this is the work the room is lit for.
+    isNew: !made,
+    content: made ? undefined : canvas,
+    aspect: made ? undefined : canvasAspect,
+  };
+  // In front: the piece made for the two of them, or the work they already meet at until it arrives.
+  // Whichever is in front is the one being painted, when the room does its own painting. The piece
+  // is signed by the two painters; a collection work keeps its artist, wherever it hangs.
+  const lead: RoomItem =
+    made && commission.image_url
+      ? {
+          key: PIECE_KEY,
+          imageUrl: commission.image_url,
+          title: pieceTitle,
+          style: 'Made for you both',
+          credit: 'by ' + mine.name + ' & ' + friendPainterInRoom.name,
+          isNew: true,
+          content: canvas,
+          aspect: canvasAspect,
+        }
+      : meetingItem;
+  const others = [...(lead === meetingItem ? [] : [meetingItem]), ...blend.wall.filter(item => item !== pair.mine && item !== pair.theirs).map(wallItem)];
+  const items = hangRoom(lead, pair.mine && wallItem(pair.mine), pair.theirs && wallItem(pair.theirs), others).map(item => {
+    // A canvas flying in from the studio lands as the same picture, in a frame already its shape.
+    const arrival = arrivals.find(({ key }) => key === item.key);
+    return arrival ? { ...item, imageUrl: arrival.src, aspect: item.aspect ?? arrival.from.width / arrival.from.height } : item;
+  });
 
-  // Each person's painter; the visitor's own is the one they chose in Settings.
-  const mine = myPainter(me.id);
-  // The friend's painter is picked from their name, so it is the same one in every blend with them.
-  const theirs = friendPainter(blend.friend.name, mine.painter);
-
-  if (studio === 'open') return <PaintStudio blend={blend} commission={commission} painter={mine} friend={friend} onDone={leaveStudio} />;
+  if (studio === 'open') {
+    return <PaintStudio blend={blend} commission={commission} pair={pair} painter={mine} friendPainter={friendPainterInRoom} friend={friend} onDone={leaveStudio} />;
+  }
 
   return (
     <main>
       <AtlasRoom
         items={items}
-        painters={[mine, { painter: theirs, name: theirs.name }]}
+        painters={[mine, friendPainterInRoom]}
         eyebrow={(me.name || 'You') + ' & ' + friend + ' · ' + blend.score + '% taste match'}
         lede={making ? 'A new piece is being made for you both…' : 'Drag to look around. Tap a painting to see it up close.'}
         paused={open !== null || pieceOpen}
         still={still}
+        arrivals={arrivals}
         onOpen={item => {
-          if (item.key === 'piece') setPieceOpen(true);
+          if (item.key === PIECE_KEY) setPieceOpen(true);
           else setOpen(works.get(item.key) ?? null);
         }}
       />
 
-      {open && <Detail work={open} onClose={closeDetail} />}
+      {open && (
+        <Detail work={open} onClose={closeDetail}>
+          {noPiece && open.id === meeting.id && (
+            <div className="blend-account">
+              <p className="eyebrow">Where you already meet · {blend.score}% taste match</p>
+              <p className="piece-story">{blend.story}</p>
+              <BlendLeanings trends={blend.trends} friend={friend} onOpen={setOpen} />
+            </div>
+          )}
+        </Detail>
+      )}
       {pieceOpen && made && commission.image_url && (
         <PieceDetail
           imageUrl={commission.image_url}
           title={pieceTitle}
           story={story}
           score={blend.score}
-          yours={blend.trends.you}
-          theirs={blend.trends.friend}
+          trends={blend.trends}
           friend={friend}
           onClose={closePiece}
           onOpenWork={work => {
@@ -167,21 +203,33 @@ export function Reveal({ me, blend, revisit }: Props) {
   );
 }
 
+/**
+ * The order the room is hung in. Frames go round to the right from the one in front, so in a full
+ * room the last frame is the one just left of it: `left` and `right` then hang either side of
+ * `lead`, as on the easels. A room with frames to spare has nothing on the left, and both follow `lead`.
+ */
+function hangRoom(lead: RoomItem, left: RoomItem | undefined, right: RoomItem | undefined, others: readonly RoomItem[]): RoomItem[] {
+  const flanks = [right, left].filter((item): item is RoomItem => item !== undefined);
+  const middle = others.slice(0, ROOM_FRAMES - 1 - flanks.length);
+  const full = 1 + flanks.length + middle.length === ROOM_FRAMES;
+  if (!left || !full) return [lead, ...flanks, ...middle];
+  return [lead, ...(right ? [right] : []), ...middle, left];
+}
+
 interface PieceDetailProps {
   imageUrl: string;
   title: string;
   /** Null while the story is still being written. */
   story: string | null;
   score: number;
-  yours: readonly Trend[];
-  theirs: readonly Trend[];
+  trends: BlendResponse['trends'];
   friend: string;
   onClose: () => void;
   onOpenWork: (work: Artwork) => void;
 }
 
 /** A closer look at the piece made for the two people: its story, and what each of them leans toward. */
-function PieceDetail({ imageUrl, title, story, score, yours, theirs, friend, onClose, onOpenWork }: PieceDetailProps) {
+function PieceDetail({ imageUrl, title, story, score, trends, friend, onClose, onOpenWork }: PieceDetailProps) {
   const closeRef = useOverlay(onClose);
   return (
     <div className="detail" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
@@ -194,12 +242,19 @@ function PieceDetail({ imageUrl, title, story, score, yours, theirs, friend, onC
           <h2 className="detail-title">{title}</h2>
           <p className="detail-byline">Made for you both · {score}% taste match</p>
           <p className="piece-story">{story ?? 'Its story is still being written…'}</p>
-          <div className="piece-leanings">
-            <Leanings label="You lean toward" trends={yours} onOpen={onOpenWork} />
-            <Leanings label={friend + ' leans toward'} trends={theirs} onOpen={onOpenWork} />
-          </div>
+          <BlendLeanings trends={trends} friend={friend} onOpen={onOpenWork} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** What each of the two people leans toward, side by side. */
+function BlendLeanings({ trends, friend, onOpen }: { trends: BlendResponse['trends']; friend: string; onOpen: (work: Artwork) => void }) {
+  return (
+    <div className="piece-leanings">
+      <Leanings label="You lean toward" trends={trends.you} onOpen={onOpen} />
+      <Leanings label={friend + ' leans toward'} trends={trends.friend} onOpen={onOpen} />
     </div>
   );
 }

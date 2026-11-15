@@ -1,0 +1,117 @@
+/* The painter chooser at the entrance (PainterPicker.tsx): a small face, and the six to choose from above it. */
+
+.painter-picker {
+  position: relative;
+  flex: none;
+}
+
+.painter-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 0;
+  border-radius: 999px;
+  padding: 2px 6px 2px 2px;
+  background: none;
+  color: var(--muted);
+  transition: background-color 0.2s ease;
+}
+
+.painter-picker-trigger:hover,
+.painter-picker-trigger[aria-expanded='true'] {
+  background: var(--ground);
+}
+
+.painter-picker-trigger:focus-visible,
+.painter-option:focus-visible {
+  outline-offset: 2px;
+}
+
+.painter-face {
+  display: block;
+  flex: none;
+}
+
+/* Centred over the face it belongs to, clear of the bar's top edge, with a point joining the two. */
+.painter-popover {
+  position: absolute;
+  bottom: calc(100% + 22px);
+  left: 20px;
+  z-index: 20;
+  transform: translateX(-50%);
+  padding: 10px 12px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--wall);
+  box-shadow: var(--shadow);
+}
+
+.painter-popover::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--wall);
+  transform: rotate(45deg);
+}
+
+.painter-options {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.painter-option {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: none;
+  transition: background-color 0.2s ease;
+}
+
+.painter-option:hover {
+  background: var(--ground);
+}
+
+.painter-option[aria-checked='true'] {
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+
+.painter-popover-name {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Too narrow to centre over the face: the choices span the bar instead, and wrap if they must. */
+@media (max-width: 600px) {
+  .painter-picker {
+    position: static;
+  }
+
+  .painter-popover {
+    right: var(--pad);
+    bottom: calc(100% + 10px);
+    left: var(--pad);
+    transform: none;
+  }
+
+  .painter-popover::after {
+    display: none;
+  }
+
+  .painter-options {
+    flex-wrap: wrap;
+  }
+}

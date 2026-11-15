@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Artwork, Profile, ProfileResponse } from '../rec/api';
 import { api, ApiFailure } from './api';
 import { Hung } from './Hung';
+import { defaultPainter, type Painter } from './painter';
+import { PainterPicker } from './PainterPicker';
 import { Salon } from './Salon';
 import { newUserId } from './session';
 
@@ -17,13 +19,20 @@ const MAX_NAME_LENGTH = 80;
 /** The entrance: a spread of very different works. Choosing a few is the whole sign-up. */
 export function Onboarding({ profile, onDone }: Props) {
   const [works, setWorks] = useState<Artwork[] | null>(null);
+  /** Why the works could not be fetched; null while they are on their way and once they are here. */
+  const [unreachable, setUnreachable] = useState<string | null>(null);
+  /** How many times the works have been asked for again. */
+  const [retries, setRetries] = useState(0);
   const [minPicks, setMinPicks] = useState(3);
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** The ID this visit signs up with, kept across attempts so trying again never makes a second profile. */
-  const signUpId = useRef<string | null>(null);
+  const [signUpId] = useState(newUserId);
+  const [chosenPainter, setChosenPainter] = useState<Painter | null>(null);
+  /** Until one is chosen, the painter this ID would be given anyway. Either way it is saved with the profile. */
+  const painter = chosenPainter ?? defaultPainter(signUpId);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,12 +42,17 @@ export function Onboarding({ profile, onDone }: Props) {
         setWorks(response.works);
         setMinPicks(response.min_picks);
       },
-      (failure: unknown) => !cancelled && setError(messageOf(failure)),
+      (failure: unknown) => !cancelled && setUnreachable(messageOf(failure)),
     );
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [retries]);
+
+  const tryAgain = () => {
+    setUnreachable(null);
+    setRetries(count => count + 1);
+  };
 
   const toggle = (id: string) =>
     setChosen(current => {
@@ -58,8 +72,7 @@ export function Onboarding({ profile, onDone }: Props) {
       if (profile) {
         onDone(await api.choosePicks(profile.id, picks));
       } else {
-        signUpId.current ??= newUserId();
-        onDone(await api.createProfile(signUpId.current, name.trim() || 'Guest', picks));
+        onDone(await api.createProfile(signUpId, name.trim() || 'Guest', picks, painter.id));
       }
     } catch (failure) {
       setError(messageOf(failure));
@@ -74,7 +87,16 @@ export function Onboarding({ profile, onDone }: Props) {
         <p>Choose {minPicks} or more. There are no right answers.</p>
       </header>
 
-      {works === null && !error && <p className="quiet">Hanging the room…</p>}
+      {works === null && unreachable === null && <p className="quiet">Hanging the room…</p>}
+
+      {works === null && unreachable !== null && (
+        <div className="entrance-closed" role="alert">
+          <p className="quiet">{unreachable}</p>
+          <button type="button" className="button" onClick={tryAgain}>
+            Try again
+          </button>
+        </div>
+      )}
 
       {works && (
         <Salon className="salon-entrance" minColumnWidth={180} maxColumns={5}>
@@ -100,33 +122,38 @@ export function Onboarding({ profile, onDone }: Props) {
         </Salon>
       )}
 
-      <form
-        className="entry-bar"
-        onSubmit={event => {
-          event.preventDefault();
-          void enter();
-        }}
-      >
-        <p className="entry-count" role="status">
-          {error ?? (missing > 0 ? (chosen.size === 0 ? 'Nothing chosen yet' : 'Choose ' + missing + ' more') : chosen.size + ' chosen')}
-        </p>
-        {!profile && (
-          <label className="entry-name">
-            <span className="visually-hidden">Your name</span>
-            <input
-              type="text"
-              value={name}
-              maxLength={MAX_NAME_LENGTH}
-              placeholder="Your name"
-              autoComplete="given-name"
-              onChange={event => setName(event.target.value)}
-            />
-          </label>
-        )}
-        <button type="submit" className="button" disabled={missing > 0 || busy}>
-          {busy ? 'Opening…' : 'Open my gallery'}
-        </button>
-      </form>
+      {unreachable === null && (
+        <form
+          className="entry-bar"
+          onSubmit={event => {
+            event.preventDefault();
+            void enter();
+          }}
+        >
+          <p className="entry-count" role="status">
+            {error ?? (missing > 0 ? (chosen.size === 0 ? 'Nothing chosen yet' : 'Choose ' + missing + ' more') : chosen.size + ' chosen')}
+          </p>
+          {!profile && (
+            <PainterPicker painter={painter} onChoose={setChosenPainter} />
+          )}
+          {!profile && (
+            <label className="entry-name">
+              <span className="visually-hidden">Your name</span>
+              <input
+                type="text"
+                value={name}
+                maxLength={MAX_NAME_LENGTH}
+                placeholder="Your name"
+                autoComplete="given-name"
+                onChange={event => setName(event.target.value)}
+              />
+            </label>
+          )}
+          <button type="submit" className="button" disabled={missing > 0 || busy}>
+            {busy ? 'Opening…' : 'Open my gallery'}
+          </button>
+        </form>
+      )}
     </main>
   );
 }

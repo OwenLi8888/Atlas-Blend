@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import type { CuratorNoteResponse, CuratorResponse, Profile } from '../src/rec/api';
 import { createApp } from './app';
 import { createCollection } from './collection';
-import { ROOMS_MIN_SAVED, type Curator, type CuratorPerson } from './curator';
+import { parseRoomFile, ROOMS_MIN_SAVED, type Curator, type CuratorPerson } from './curator';
 import { createMemoryDb } from './memory-db';
 import { testCatalog } from './testing';
 
@@ -33,6 +33,64 @@ describe('collection', () => {
     expect(collection.moreLike('harbour-dawn', 2).map(work => work.id)[0]).toBe('harbour-dusk');
     expect(collection.moreLike('harbour-dawn', 5).map(work => work.id)).not.toContain('harbour-dawn');
     expect(collection.moreLike('nope', 5)).toEqual([]);
+  });
+});
+
+describe('room files', () => {
+  it('reads a room as its room-maker wrote it', () => {
+    const file = [
+      'Title: Quiet Interiors and Spaces',
+      'Text: These quiet interiors unfold through soft, layered compositions. In Home Again, window frames slice the canvas.',
+      'Works:',
+      'colbase:39061',
+      'cleveland:148765',
+      'smk:KMS8346',
+      'nga:75869',
+      '',
+    ].join('\n');
+    expect(parseRoomFile(file)).toEqual({
+      title: 'Quiet Interiors and Spaces',
+      text: 'These quiet interiors unfold through soft, layered compositions. In Home Again, window frames slice the canvas.',
+      workIds: ['colbase:39061', 'cleveland:148765', 'smk:KMS8346', 'nga:75869'],
+    });
+  });
+
+  it('reads through blank lines, markdown, list markers and labels after the IDs', () => {
+    const file = [
+      '## **Title:** "Village Life"',
+      '',
+      '**Text:**',
+      'Two village scenes,',
+      'side by side.',
+      '',
+      '**Works:**',
+      '- `nga:227844`',
+      '2. nga:227846 | "RaRaband" | Gérard Valcin, 1986',
+      '* smk:KMS4017 verso',
+      '- nga:227844',
+    ].join('\r\n');
+    expect(parseRoomFile(file)).toEqual({
+      title: 'Village Life',
+      text: 'Two village scenes, side by side.',
+      // An ID can have a space in it, and a work listed twice hangs once.
+      workIds: ['nga:227844', 'nga:227846', 'smk:KMS4017 verso'],
+    });
+  });
+
+  it('reads works listed on one line, and hangs eight at most', () => {
+    const ids = Array.from({ length: 10 }, (_, n) => 'moma:' + n);
+    expect(parseRoomFile('Title: Ten\nText: Too many.\nWorks: ' + ids.join(', '))?.workIds).toEqual(ids.slice(0, 8));
+  });
+
+  it('reads a list headed "Work IDs"', () => {
+    expect(parseRoomFile('Title: Vaults\nText: Three vaults.\nWork IDs:\n- a:1\n- a:2\n- a:3')?.workIds).toEqual(['a:1', 'a:2', 'a:3']);
+  });
+
+  it('is not a room when a part is missing or too few works are listed', () => {
+    expect(parseRoomFile('')).toBeNull();
+    expect(parseRoomFile('Text: No title.\nWorks:\na:1\na:2\na:3')).toBeNull();
+    expect(parseRoomFile('Title: No text\nWorks:\na:1\na:2\na:3')).toBeNull();
+    expect(parseRoomFile('Title: Thin\nText: Two works are not a room.\nWorks:\na:1\na:2')).toBeNull();
   });
 });
 

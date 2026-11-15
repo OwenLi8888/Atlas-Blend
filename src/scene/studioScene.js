@@ -103,10 +103,13 @@ const LADDER_H = 1.2;
 const LADDER_STEPS = [0, 0.15, 0.36, 0.55, 0.735, 0.93]; // floor, four treads, top: fractions of its height
 const JAR = { x: 1.0, y: 0.3, z: -0.72 };       // the brush jar, standing on the crate
 const BRUSH_LEN = 0.5;
+// Paint mode: the painters start on the floor here, one beside the other, and are this much larger than on the palette.
+const FLOOR_START = { x: 0.3, z: -1.0, gap: 0.5 };
+const FLOOR_SIZE = 1.1;
 
 export function createStudioScene(canvas, {
   base, cast, onPick, reducedMotion = false,
-  mode = 'pick', painterId = null, works = [], sequence, onReady, onAllDone, onCanvas,
+  mode = 'pick', painterId = null, painters, works = [], sequence, onReady, onAllDone, onCanvas,
 }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -380,8 +383,10 @@ export function createStudioScene(canvas, {
     const n = cast.length;
     for (const [i, c] of cast.entries()) {
       const t = n > 1 ? (i - (n - 1) / 2) / ((n - 1) / 2) : 0, back = i % 2 ? 0.26 : 0;
-      const x = 0.09 + t * 0.68, z = 1.5 - back + 0.08 * t * t;
-      place(await piece('puddle-white.webp', 0.14, { material: puddleMat(c.color) }), x, onPal(z) - 0.035, z - 0.03, 2.8 + i * 0.1, 'pop');
+      // Pick mode: on the palette, each on its puddle. Paint mode: on the floor, ready to work.
+      const x = PAINT ? FLOOR_START.x + i * FLOOR_START.gap : 0.09 + t * 0.68;
+      const z = PAINT ? FLOOR_START.z - i * 0.1 : 1.5 - back + 0.08 * t * t;
+      if (!PAINT) place(await piece('puddle-white.webp', 0.14, { material: puddleMat(c.color) }), x, onPal(z) - 0.035, z - 0.03, 2.8 + i * 0.1, 'pop');
       const mat = paintMat(c.color, i * 1.7, c.arms ?? 0.7);
       const ch = await piece(c.src, 0.46, { material: mat, segs: 16 });
       const { b, w, h } = ch.userData;
@@ -396,7 +401,7 @@ export function createStudioScene(canvas, {
           canBlink = true;
         }
       }
-      place(ch, x, onPal(z) + 0.01, z, 3.2 + i * 0.3, 'paint', { mat });
+      place(ch, x, PAINT ? 0 : onPal(z) + 0.01, z, 3.2 + i * 0.3, 'paint', PAINT ? { mat, size: FLOOR_SIZE } : { mat });
       paints.push({ id: c.id, ch, mat, hop: -9, nextBlink: 6 + i * 0.7, canBlink });
     }
 
@@ -502,10 +507,12 @@ export function createStudioScene(canvas, {
   }
 
   /*
-   * Paint mode (screen 3). The chosen painter hops off the palette, takes a brush from the jar and
-   * paints the canvases one after another. A stepladder shuffles along beside it: the painter
-   * stands on whichever tread puts its hand next to the stroke. The screen owns the stroke players;
-   * it is told when the painter is ready at a canvas and reports the brush position back.
+   * Paint mode. The painters are on the floor from the first frame, and the camera opens on the
+   * first easel. One painter at a time holds the brush and paints a canvas while the others watch
+   * from the floor beside it; the brush is tossed to whoever paints next. A stepladder shuffles
+   * along with the one painting, who stands on whichever tread puts its hand next to the stroke.
+   * The screen owns the stroke players; it is told when a painter is ready at a canvas and reports
+   * the brush position back.
    */
   const PAINT = mode === 'paint';
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -514,8 +521,34 @@ export function createStudioScene(canvas, {
   const wait = (s) => tween(s, () => {});
   const act = { p: null, entry: null, held: false, work: -1, focus: -1, view: -1, side: 1, step: 0, u: 0.5, v: 0.5, tex: null };
   const tip = V(0, 0, 0), tipGoal = V(0, 0, 0), hand = V(0, 0, 0);
+  /** The brush in the air between two painters: where it left from, and how far along it is. */
+  const toss = { on: false, k: 0, from: V(0, 0, 0) };
+  /** The brush's size, 0..1: it grows into the first hand and shrinks away when the work is done. */
+  let brushSize = 0;
   let waiting = null; // resolves when the screen reports the current canvas finished
   let sink = 0;
+  const handOf = (p, entry, into) => {
+    const a = p.ch, s = entry.size ?? 1;
+    return into.set(a.position.x - 0.17 * s, a.position.y + 0.25 * s, a.position.z + 0.03);
+  };
+  /** Puts the brush in a painter's hand: it grows into the first hand, and is tossed to the next. */
+  async function give(p) {
+    if (act.p === p) return;
+    const entry = set.find((s) => s.obj === p.ch);
+    toss.from.copy(hand);
+    act.p = p; act.entry = entry;
+    brush.material.uniforms.tint.value.set(cast.find((c) => c.id === p.id)?.color ?? '#ffffff');
+    if (act.held) {
+      toss.k = 0; toss.on = true;
+      await tween(0.5, (k) => (toss.k = k));
+      toss.on = false;
+      return;
+    }
+    handOf(p, entry, hand);
+    tip.set(hand.x - 0.08, hand.y + BRUSH_LEN * 0.92, hand.z);
+    brush.visible = true; act.held = true;
+    await tween(0.35, (k) => (brushSize = Math.max(0.01, spring(k))));
+  }
 
   function hopTo(obj, to, dur = 0.42, arc = 0.3) {
     const from = obj.position.clone();
@@ -538,30 +571,24 @@ export function createStudioScene(canvas, {
     });
   }
   async function paintScript() {
-    const me = paints.find((p) => p.id === painterId) ?? paints[0];
-    const a = me.ch, entry = set.find((s) => s.obj === a), home = a.position.clone();
-    act.p = me; act.entry = entry;
-    brush.material.uniforms.tint.value.set(cast.find((c) => c.id === me.id)?.color ?? '#ffffff');
-    await wait(0.8);
-    me.hop = clock();                                                        // "me!"
-    await wait(0.8);
-    await hopTo(a, V(a.position.x * 0.5, 0.74, 0.98), 0.45, 0.25);          // to the far rim of the palette
-    await Promise.all([                                                      // down onto the floor, growing a little
-      hopTo(a, V(0.4, 0, -0.15), 0.6, 0.45),
-      tween(0.6, (k) => (entry.size = lerp(1, 1.1, k))),
-    ]);
-    await hopTo(a, V(0.55, 0, -0.45), 0.36, 0.2);
-    await hopTo(a, V(JAR.x - 0.34, JAR.y + 0.02, JAR.z + 0.08), 0.5, 0.4);  // up onto the crate, beside the jar
-    tip.set(JAR.x, JAR.y + 0.55, JAR.z + 0.02);                              // the brush comes out of the jar
-    brush.visible = true; act.held = true;
-    await tween(0.35, (k) => brush.scale.setScalar(Math.max(0.01, spring(k))));
-    await wait(0.3);
-    await hopTo(a, V(0.2, 0, -1.0), 0.5, 0.35);
-    for (const i of sequence ?? canvases.map((_, k) => k)) {
-      if (!works[i] || !canvases[i]) continue;
-      const c = canvases[i], sx = c.x + c.w * 0.5 + 0.1, sz = c.z + 0.42;
+    const order = (sequence ?? canvases.map((_, k) => k)).filter((i) => works[i] && canvases[i]);
+    if (!order.length || !paints.length) return void onAllDone?.();
+    /** Who paints the `n`th canvas of the order. */
+    const artist = (n) => paints.find((p) => p.id === (painters?.[n] ?? painterId)) ?? paints[0];
+    act.focus = order[0];                                                    // the camera opens on the first easel
+    await wait(0.4);
+    for (const [n, i] of order.entries()) {
+      const me = artist(n), a = me.ch, c = canvases[i];
+      const sx = c.x + c.w * 0.5 + 0.1, sz = c.z + 0.42, foot = V(sx - 0.5, 0, sz + 0.12);
+      await give(me);
       act.focus = i;
-      await Promise.all([walkLadder(V(sx, 0, c.z + 0.34)), hopsTo(a, V(sx - 0.5, 0, sz + 0.12))]);
+      await Promise.all([
+        walkLadder(V(sx, 0, c.z + 0.34)),
+        hopsTo(a, foot),
+        // the others follow and watch from the floor, under the near corner of the canvas
+        ...paints.filter((p) => p !== me).map((p, k) =>
+          wait(0.2 + k * 0.15).then(() => hopsTo(p.ch, V(c.x - c.w * 0.5 + 0.08 - k * 0.42, 0, sz + 0.25)))),
+      ]);
       ladder.position.y = 0; ladder.children[0].rotation.z = 0;
       for (const s of [1, 2]) await hopTo(a, V(sx, LADDER_H * LADDER_STEPS[s], sz), 0.3, 0.2); // climb
       act.step = 2; act.side = 1; act.u = 0.5; act.v = 0.5;
@@ -576,19 +603,18 @@ export function createStudioScene(canvas, {
       ladder.children[0].rotation.z = 0;
       me.hop = clock();                                                      // done with this one
       await wait(0.5);
-      await hopTo(a, V(a.position.x - 0.45, 0, sz + 0.15), 0.45, 0.3);
+      await hopTo(a, foot, 0.45, 0.3);                                       // back down, clear of the ones watching
     }
+    // Everyone steps back to look at the finished canvases; the camera steps back with them.
     act.focus = -1;
-    // the ladder is put away by the wall, clear of the finished canvases
     walkLadder(V(2.5, 0, -1.7)).then(() => { ladder.position.y = 0; ladder.children[0].rotation.z = 0; });
-    // back home onto the palette, brush in hand
-    await hopsTo(a, V(home.x * 0.5, 0, -0.2));
-    await Promise.all([
-      hopTo(a, V(home.x * 0.6, 0.74, 0.98), 0.6, 0.5),
-      tween(0.6, (k) => (entry.size = lerp(1.1, 1, k))),
-    ]);
-    await hopTo(a, home, 0.45, 0.25);
-    for (let k = 0; k < 2; k++) { me.hop = clock(); await wait(0.75); }
+    await tween(0.3, (k) => (brushSize = Math.max(0.01, 1 - k)));
+    brush.visible = false; act.held = false;
+    await Promise.all(paints.map((p, k) => hopsTo(p.ch, V(-0.45 + k * 0.6, 0, -0.75))));               // left of the crate
+    for (let k = 0; k < 2; k++) {
+      for (const p of paints) p.hop = clock();
+      await wait(0.75);
+    }
     onAllDone?.();
   }
   /** Runs tweens and, while a canvas is being painted, keeps painter, ladder and brush on the stroke. */
@@ -632,7 +658,12 @@ export function createStudioScene(canvas, {
       }
       act.tex.needsUpdate = true;
     } else if (act.held) {
-      hand.set(a.position.x - 0.17 * s, a.position.y + 0.25 * s, a.position.z + 0.03);
+      handOf(act.p, act.entry, hand);
+      if (toss.on) {
+        // in the air: from the hand that let go to the hand that catches, over an arc
+        hand.lerpVectors(toss.from, hand, io(toss.k));
+        hand.y += Math.sin(Math.PI * toss.k) * 0.4;
+      }
       tipGoal.set(hand.x - 0.08, hand.y + BRUSH_LEN * 0.92, hand.z);
       tip.lerp(tipGoal, 1 - Math.exp(-dt * 12));
     }
@@ -644,7 +675,7 @@ export function createStudioScene(canvas, {
       brush.position.set(lerp(camera.position.x, tip.x, r), lerp(camera.position.y, tip.y, r), zb);
       const dx = hand.x - brush.position.x, dy = hand.y - brush.position.y;
       brush.rotation.z = Math.atan2(dy, dx);
-      brush.scale.set(THREE.MathUtils.clamp(Math.hypot(dx, dy) / BRUSH_LEN, 0.6, 1.5), 1, 1);
+      brush.scale.set(THREE.MathUtils.clamp(Math.hypot(dx, dy) / BRUSH_LEN, 0.6, 1.5) * brushSize, brushSize, 1);
     }
   }
 
@@ -765,6 +796,19 @@ export function createStudioScene(canvas, {
     setBrush(u, v) { act.u = u; act.v = v; },
     setAspect(i, aspect) { shape(i, aspect); },
     view(i) { act.view = i ?? -1; },
+    box(i) {
+      const c = canvases[i];
+      if (!c || !ready) return null;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      const corner = new THREE.Vector3();
+      // the cloth is a unit plane standing on its bottom edge, scaled to the picture
+      for (const [u, v] of [[-0.5, 0], [0.5, 0], [-0.5, 1], [0.5, 1]]) {
+        c.cloth.localToWorld(corner.set(u, v, 0)).project(camera);
+        const x = ((corner.x + 1) / 2) * W, y = ((1 - corner.y) / 2) * H;
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      }
+      return { left: x0, top: y0, width: x1 - x0, height: y1 - y0 };
+    },
     workDone() { const go = waiting; waiting = null; go?.(); },
     pause(on) { paused = on; last = 0; onVisible(); },
     dispose() {

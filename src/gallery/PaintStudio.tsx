@@ -1,28 +1,59 @@
 import './PaintStudio.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Artwork, BlendResponse, Commission, WallSource } from '../rec/api';
+import type { Artwork, BlendResponse, Commission, WallItem, WallSource } from '../rec/api';
 import { Player } from '../engine/player';
 import { getPlan } from '../plan/planStore';
 import type { StudioScene } from '../scene/studioScene';
 import type { StrokePlan } from '../types';
 import { possessive } from './format';
 import { revealUrl } from './images';
-import { PAINTERS, type Painter } from './painter';
+import type { RoomArrival, RoomPainter } from './AtlasRoom';
+
+/** The two works painted on the side easels: one from each person's side of the shared wall. */
+export interface StudioPair {
+  /** Painted by the visitor's painter, on the left easel. */
+  mine?: WallItem;
+  /** Painted by the friend's painter, on the right easel. */
+  theirs?: WallItem;
+}
+
+/** One work from each person's side of the shared wall, falling back to the next best work when a side has none. */
+export function studioPair(wall: readonly WallItem[]): StudioPair {
+  const pick = (from: readonly WallItem[], order: readonly WallSource[]) => {
+    for (const source of order) {
+      const found = from.find(item => item.from === source);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  const mine = pick(wall, ['you', 'both', 'new', 'friend']);
+  const theirs = pick(wall.filter(item => item !== mine), ['friend', 'both', 'new', 'you']);
+  return { mine, theirs };
+}
 
 interface Props {
   blend: BlendResponse;
   /** The piece being made for the two people, as it stands now: it can arrive while the sides are painted. */
   commission: Commission;
-  /** The visitor's painter, who does the painting, and what they call it. */
-  painter: { painter: Painter; name: string };
+  pair: StudioPair;
+  /** The visitor's painter, who paints their side and the piece for both, and what they call it. */
+  painter: RoomPainter;
+  /** The friend's painter, who paints the friend's side. */
+  friendPainter: RoomPainter;
   /** The friend's name, as it reads in a sentence. */
   friend: string;
-  /** Every canvas is painted (or the studio could not open): the room takes over. */
-  onDone: () => void;
+  /**
+   * The studio is finished with: the room takes over. `arrivals` are the painted canvases and
+   * where each was on screen, so the room can fly them to their frames; empty when the studio
+   * was skipped or could not open.
+   */
+  onDone: (arrivals: readonly RoomArrival[]) => void;
 }
 
 /** One picture for an easel. */
 interface Subject {
+  /** The work's key in the room, where it hangs afterwards. */
+  key: string;
   /** Names the stroke plan, so one image is only planned once (shared with the room's own canvas). */
   planId: string;
   /** Same-origin address of the image: the planner has to read its pixels. */
@@ -40,6 +71,9 @@ interface Prepared {
   image: HTMLImageElement | null;
 }
 
+/** The room's key for the piece made for the two people. */
+export const PIECE_KEY = 'piece';
+
 /** The three easels, left to right. The piece made for the two people goes on the big centre easel. */
 const LEFT = 0;
 const CENTRE = 1;
@@ -53,10 +87,14 @@ const PAINTING_WIDTH_MM = 60;
 const PAINT_MS = 8000;
 /** How long a painted canvas takes to settle into the picture itself. */
 const SETTLE_MS = 1500;
-/** How long the painter waits at the centre easel for the new piece before painting the collection work instead. */
-const PIECE_WAIT_MS = 8000;
-/** The pause on the finished studio before the room opens. */
-const HANDOFF_MS = 900;
+/**
+ * The longest the painter waits at the centre easel for the new piece. It is normally ready well
+ * before the side easels are done; past this something has gone wrong, and the collection work
+ * the two already meet at is painted instead.
+ */
+const PIECE_WAIT_MS = 45_000;
+/** The pause on the three finished canvases before they are hung in the room. */
+const HANDOFF_MS = 700;
 
 const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const sleep = (ms: number) => new Promise<void>(resolve => window.setTimeout(resolve, ms));
@@ -109,19 +147,19 @@ function aspectOf({ plan, image }: Prepared): number | null {
 }
 
 function workSubject(work: Artwork, note: string): Subject {
-  return { planId: 'blend:' + work.id, source: revealUrl(work.id), title: work.title, credit: work.artist, note };
+  return { key: work.id, planId: 'blend:' + work.id, source: revealUrl(work.id), title: work.title, credit: work.artist, note };
 }
 
 /**
- * The studio a new blend opens in. The visitor's painter takes a brush and paints three canvases:
- * two works that bring the two people together on the side easels, then the piece made for them
- * both in the centre. Each one is painted stroke by stroke and settles into the picture itself.
- * Nothing is asked of the visitor: when the last canvas is done the room opens by itself.
+ * The studio a new blend opens in, on the first easel. Three canvases are painted: the visitor's
+ * painter paints a work from the visitor's side, tosses the brush to the friend's painter for one
+ * from the friend's side, and takes it back for the piece made for them both in the centre. Each
+ * one is painted stroke by stroke and settles into the picture itself. Nothing is asked of the
+ * visitor: when the last canvas is done the three are hung in the room.
  *
- * Every picture is planned from the moment the studio opens, while the painter fetches its brush,
- * so no easel waits on its own picture.
+ * Every picture is planned from the moment the studio opens, so no easel waits on its own picture.
  */
-export function PaintStudio({ blend, commission, painter, friend, onDone }: Props) {
+export function PaintStudio({ blend, commission, pair, painter, friendPainter, friend, onDone }: Props) {
   const sceneRef = useRef<HTMLCanvasElement>(null);
   const sheetsRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -129,6 +167,13 @@ export function PaintStudio({ blend, commission, painter, friend, onDone }: Prop
   commissionRef.current = commission;
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
+  // Read when the studio opens. It reopens only if a painter or a picture changes, not on every render.
+  const castRef = useRef({ pair, painter, friendPainter });
+  castRef.current = { pair, painter, friendPainter };
+  const painterId = painter.painter.id;
+  const friendPainterId = friendPainter.painter.id;
+  const mineId = pair.mine?.work.id;
+  const theirsId = pair.theirs?.work.id;
   /** One preparation per picture, started as early as the picture is known. */
   const preparedRef = useRef(new Map<string, Promise<Prepared>>());
   const prepared = useCallback((subject: Subject): Promise<Prepared> => {
@@ -140,8 +185,8 @@ export function PaintStudio({ blend, commission, painter, friend, onDone }: Prop
     return entry;
   }, []);
 
-  /** The picture on the easel being worked at; null while the painter fetches its brush. */
-  const [now, setNow] = useState<Subject | null>(null);
+  /** The picture on the easel being worked at, and who is painting it; null before the first stroke and after the last. */
+  const [now, setNow] = useState<{ subject: Subject; by: string } | null>(null);
   const [waitingForPiece, setWaitingForPiece] = useState(false);
   const [finished, setFinished] = useState(false);
 
@@ -157,6 +202,7 @@ export function PaintStudio({ blend, commission, painter, friend, onDone }: Prop
     const host = sheetsRef.current;
     if (!canvas || !host) return;
 
+    const { pair, painter, friendPainter } = castRef.current;
     let cancelled = false;
     let scene: StudioScene | null = null;
     let player: Player | null = null;
@@ -172,9 +218,11 @@ export function PaintStudio({ blend, commission, painter, friend, onDone }: Prop
       new: 'New to you both',
     };
     const sides: Record<number, Subject | undefined> = {
-      [LEFT]: blend.wall[0] && workSubject(blend.wall[0].work, notes[blend.wall[0].from]),
-      [RIGHT]: blend.wall[1] && workSubject(blend.wall[1].work, notes[blend.wall[1].from]),
+      [LEFT]: pair.mine && workSubject(pair.mine.work, notes[pair.mine.from]),
+      [RIGHT]: pair.theirs && workSubject(pair.theirs.work, notes[pair.theirs.from]),
     };
+    /** Who paints each easel: each person's painter their own side, the visitor's the piece for both. */
+    const artists: Record<number, RoomPainter> = { [LEFT]: painter, [RIGHT]: friendPainter, [CENTRE]: painter };
     /** Painted in the centre if the new piece does not arrive: the collection work the two already meet at. */
     const meeting = workSubject(blend.top_artwork, 'Where you already meet');
     const sequence = [LEFT, RIGHT].filter(i => sides[i] !== undefined).concat(CENTRE);
@@ -191,6 +239,16 @@ export function PaintStudio({ blend, commission, painter, friend, onDone }: Prop
       host.append(sheet);
       return sheet;
     });
+    /** Bare canvas. A sheet is opaque, so resizing one leaves it black until something is drawn. */
+    const blank = (sheet: HTMLCanvasElement) => {
+      const ctx = sheet.getContext('2d', { alpha: false });
+      if (!ctx) return;
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = BLANK;
+      ctx.fillRect(0, 0, sheet.width, sheet.height);
+      ctx.restore();
+    };
     const shaped: (number | undefined)[] = [];
     /** Gives easel `i` its picture's proportions. Only before its first stroke: a resize clears the sheet. */
     const shape = (i: number, aspect: number) => {
@@ -202,11 +260,7 @@ export function PaintStudio({ blend, commission, painter, friend, onDone }: Prop
       sheet.style.height = height + 'px';
       sheet.width = Math.max(1, Math.round(SHEET_PX * dpr));
       sheet.height = Math.max(1, Math.round(height * dpr));
-      const ctx = sheet.getContext('2d', { alpha: false });
-      if (ctx) {
-        ctx.fillStyle = BLANK;
-        ctx.fillRect(0, 0, sheet.width, sheet.height);
-      }
+      blank(sheet);
       scene?.setAspect(i, aspect);
     };
     shape(LEFT, 0.8);
@@ -218,7 +272,7 @@ export function PaintStudio({ blend, commission, painter, friend, onDone }: Prop
     };
     progress(0);
 
-    /** The centre easel's picture: the new piece if it is ready or arrives shortly, else the meeting work. */
+    /** The centre easel's picture: the new piece, waited for if need be; the meeting work only if it could not be made. */
     const centreSubject = async (): Promise<Subject> => {
       const until = performance.now() + PIECE_WAIT_MS;
       if (commissionRef.current.status === 'pending') setWaitingForPiece(true);
@@ -263,18 +317,21 @@ export function PaintStudio({ blend, commission, painter, friend, onDone }: Prop
 
     /** Easels the painter has reached: from then on only the painter's own picture shapes the sheet. */
     const started = new Set<number>();
+    /** What ended up on each easel, for hanging in the room. */
+    const painted = new Map<number, Subject>();
     const paintAt = async (i: number) => {
       started.add(i);
       const subject = i === CENTRE ? await centreSubject() : sides[i];
       if (cancelled) return;
       if (!subject) return void scene?.workDone();
-      setNow(subject);
+      setNow({ subject, by: artists[i].name });
       const ready = await prepared(subject);
       if (cancelled) return;
       const aspect = aspectOf(ready);
       // Neither the strokes nor the picture could be had: the canvas stays blank and the painter moves on.
       if (aspect === null) return void scene?.workDone();
       shape(i, aspect);
+      if (ready.image) painted.set(i, subject);
       const sheet = sheets[i];
       const order = sequence.indexOf(i);
       const finish = async () => {
@@ -299,10 +356,28 @@ export function PaintStudio({ blend, commission, painter, friend, onDone }: Prop
         },
       });
       player = strokes;
+      // The player sizes the sheet for itself, which can clear it: it stays bare canvas, never black, until the first stroke.
+      blank(sheet);
     };
 
+    /** The room takes over, with each painted canvas and where it stands on screen right now. */
     const leave = () => {
-      if (!cancelled) doneRef.current();
+      if (cancelled) return;
+      const origin = canvas.getBoundingClientRect();
+      const arrivals: RoomArrival[] = [];
+      // Reduced motion: nothing flies, the room simply opens with everything hung.
+      if (!calm) {
+        for (const [i, subject] of painted) {
+          const box = scene?.box(i);
+          if (!box || box.width < 1 || box.height < 1) continue;
+          arrivals.push({
+            key: subject.key,
+            src: subject.source,
+            from: { left: origin.left + box.left, top: origin.top + box.top, width: box.width, height: box.height },
+          });
+        }
+      }
+      doneRef.current(arrivals);
     };
 
     import('../scene/studioScene').then(
@@ -311,9 +386,11 @@ export function PaintStudio({ blend, commission, painter, friend, onDone }: Prop
         try {
           scene = createStudioScene(canvas, {
             base: './studio/',
-            cast: PAINTERS.map(({ id, color }) => ({ id, color, src: id + '.webp', blink: id + '-blink.webp' })),
+            // Only the two people's painters are in the studio.
+            cast: [painter.painter, friendPainter.painter].map(({ id, color, art = id }) => ({ id, color, src: art + '.webp', blink: art + '-blink.webp' })),
             mode: 'paint',
             painterId: painter.painter.id,
+            painters: sequence.map(i => artists[i].painter.id),
             reducedMotion: calm,
             works: sheets.map((sheet, i) => ({ canvas: sheet, aspect: shaped[i] })),
             sequence,
@@ -350,24 +427,29 @@ export function PaintStudio({ blend, commission, painter, friend, onDone }: Prop
       scene?.dispose();
       for (const sheet of sheets) sheet.remove();
     };
-  }, [blend, friend, painter.painter.id, prepared]);
+  }, [blend, friend, painterId, friendPainterId, mineId, theirsId, prepared]);
 
   const status = finished
     ? 'Hanging them in your room…'
     : waitingForPiece
       ? 'The piece for you both is nearly ready…'
       : now
-        ? painter.name + ' is painting…'
-        : painter.name + ' is fetching a brush…';
+        ? now.by + ' is painting…'
+        : painter.name + ' is picking up a brush…';
 
   return (
     <main className="paint-studio">
-      <canvas ref={sceneRef} className="paint-studio-scene" role="img" aria-label={'The studio, where ' + painter.name + ' paints three canvases for you and ' + friend} />
+      <canvas
+        ref={sceneRef}
+        className="paint-studio-scene"
+        role="img"
+        aria-label={'The studio, where ' + painter.name + ' and ' + friendPainter.name + ' paint three canvases for you and ' + friend}
+      />
       <div ref={sheetsRef} className="paint-studio-sheets" aria-hidden="true" />
       <div className="paint-studio-caption">
-        <span className="eyebrow">{now ? now.note : 'You & ' + friend}</span>
-        <h1>{now ? now.title : 'Three paintings for the two of you'}</h1>
-        {now?.credit && <p className="paint-studio-credit">{now.credit}</p>}
+        <span className="eyebrow">{now ? now.subject.note : 'You & ' + friend}</span>
+        <h1>{now ? now.subject.title : 'Three paintings for the two of you'}</h1>
+        {now?.subject.credit && <p className="paint-studio-credit">{now.subject.credit}</p>}
         <div className="paint-studio-progress" aria-hidden="true">
           <div ref={barRef} />
         </div>
@@ -375,7 +457,7 @@ export function PaintStudio({ blend, commission, painter, friend, onDone }: Prop
           {status}
         </p>
       </div>
-      <button type="button" className="text-link paint-studio-skip" onClick={onDone}>
+      <button type="button" className="text-link paint-studio-skip" onClick={() => onDone([])}>
         Skip to the room
       </button>
     </main>
@@ -384,6 +466,7 @@ export function PaintStudio({ blend, commission, painter, friend, onDone }: Prop
 
 function pieceSubject(blendId: string, imageUrl: string, title: string | null): Subject {
   return {
+    key: PIECE_KEY,
     planId: 'commission:' + blendId,
     source: imageUrl,
     title: title ?? 'A piece made for the two of you',

@@ -14,6 +14,9 @@ import type {
   HeartRequest,
   HeartResponse,
   OnboardingResponse,
+  PainterId,
+  PainterRequest,
+  PainterResponse,
   PicksRequest,
   ProfileResponse,
   RecsResponse,
@@ -77,8 +80,11 @@ function request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unkn
 export const api = {
   onboarding: () => request<OnboardingResponse>('GET', '/api/onboarding'),
   /** Signs up with the works chosen at the entrance; the profile and its hearts are made together. Safe to repeat with the same `id`. */
-  createProfile: (id: string, name: string, picks: string[]) =>
-    request<ProfileResponse>('POST', '/api/profile', { id, name, picks } satisfies CreateProfileRequest),
+  createProfile: (id: string, name: string, picks: string[], painterId: PainterId) =>
+    request<ProfileResponse>('POST', '/api/profile', { id, name, picks, painter_id: painterId } satisfies CreateProfileRequest),
+  /** Keeps the person's painter and what they call it on their profile. */
+  savePainter: (userId: string, painter: PainterRequest) =>
+    request<PainterResponse>('POST', '/api/profile/' + userId + '/painter', painter),
   /** Chooses again for a profile left with no hearts. */
   choosePicks: (userId: string, picks: string[]) =>
     request<ProfileResponse>('POST', '/api/profile/' + userId + '/picks', { picks } satisfies PicksRequest),

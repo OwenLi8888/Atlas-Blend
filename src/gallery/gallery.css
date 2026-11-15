@@ -90,7 +90,7 @@ a {
 
 .bar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
   padding: 22px var(--pad);
@@ -106,7 +106,68 @@ a {
 .bar nav {
   display: flex;
   gap: 26px;
+  margin-left: auto;
   font-size: 13px;
+}
+
+.profile-menu {
+  position: relative;
+  flex: none;
+}
+
+.profile-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--ground);
+  transition: box-shadow 0.2s ease;
+}
+
+.profile-avatar:hover,
+.profile-avatar[aria-expanded='true'],
+.profile-avatar[aria-current='page'] {
+  box-shadow: 0 0 0 2px var(--wall), 0 0 0 3.5px var(--ink);
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 20;
+  min-width: 176px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--wall);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+}
+
+.profile-name {
+  margin: 0 0 6px;
+  padding: 8px 10px 10px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-dropdown a {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 6px;
+  text-decoration: none;
+}
+
+.profile-dropdown a:hover,
+.profile-dropdown a:focus-visible {
+  background: var(--ground);
+  outline: none;
 }
 
 .bar nav a {
@@ -118,6 +179,20 @@ a {
 .bar nav a:hover,
 .bar nav a[aria-current='page'] {
   color: var(--ink);
+}
+
+/* A blend's studio and its round room fill what is left of the window under the bar, however
+   tall the bar is: they are the growing part of a column (see PaintStudio.css and AtlasRoom.css). */
+#root:has(> .paint-studio, > main > .gallery) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+main:has(> .gallery) {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .page {
@@ -555,6 +630,13 @@ button.heart:hover svg {
   outline-color: var(--ink);
 }
 
+/* The works could not be fetched: what went wrong, and a way to ask again. */
+.entrance-closed {
+  display: grid;
+  justify-items: start;
+  gap: 18px;
+}
+
 .entry-bar {
   position: fixed;
   inset: auto 0 0;
@@ -831,6 +913,17 @@ button.heart:hover svg {
 }
 
 /* --- The piece's closer look ---------------------------------------------- */
+
+/* The same account under the work the two already meet at, when no piece could be made. */
+.blend-account {
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.blend-account .piece-story {
+  margin-top: 10px;
+}
 
 .piece-story {
   margin-top: 22px;

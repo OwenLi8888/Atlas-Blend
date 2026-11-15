@@ -26,8 +26,9 @@
   --navy-soft: rgba(20, 47, 64, 0.68);
   --shadow: 0 1px 2px rgba(20, 47, 64, 0.05), 0 10px 30px rgba(20, 47, 64, 0.08);
   position: relative;
-  /* Here the room sits under the site's bar, not on a page of its own. */
-  height: calc(100dvh - var(--bar-h, 72px));
+  /* Here the room sits under the site's bar, not on a page of its own: it takes the rest of the
+     window (the column is set up in gallery.css). */
+  flex: 1 0 auto;
   min-height: 520px;
   overflow: hidden;
   background: var(--ivory);
@@ -224,7 +225,6 @@ body:has(.gallery) {
   margin-top: 3px;
 }
 
-.gal-plaque-by,
 .gal-plaque-credit {
   font-size: 0.82rem;
   color: var(--navy-soft);
@@ -339,7 +339,15 @@ body:has(.gallery) {
   visibility: hidden;
 }
 
-/* ---- Title and buttons ---- */
+/* A frame whose canvas is still on its way from the studio hangs empty until it lands. */
+.gal-panel.awaited .gal-frame > *,
+.gal-panel.awaited .gal-reflection {
+  visibility: hidden;
+}
+
+/* ---- Title and buttons ----
+   The heading has the wall above the canvases to itself: AtlasRoom.tsx measures it and hangs the
+   canvases below it. It sits close under the site's bar, so that they stay as large as they can. */
 
 .gal-head {
   position: absolute;
@@ -351,7 +359,7 @@ body:has(.gallery) {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: calc(var(--pad) + env(safe-area-inset-top)) var(--pad) 26px;
+  padding: calc(12px + env(safe-area-inset-top)) var(--pad) 26px;
   background: linear-gradient(to bottom, rgba(244, 236, 222, 0.92) 55%, rgba(244, 236, 222, 0));
   pointer-events: none;
 }
@@ -364,6 +372,7 @@ body:has(.gallery) {
 
 .gal-title h1 {
   font-size: clamp(1.5rem, 5vw, 2.2rem);
+  line-height: 1.1;
 }
 
 .gal-title .lede {

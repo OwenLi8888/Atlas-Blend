@@ -19,14 +19,24 @@ export interface RoomItem {
   title: string;
   /** The small-capitals line on the plaque. */
   style: string;
-  /** A quiet line under it, such as the artist. */
+  /** A quiet line under the title: who made it. */
   credit?: string;
-  /** The work this room was made for: it gets the spotlight, and the painters' names on its plaque. */
+  /** The work this room is lit for: it gets the spotlight and the sparkles. */
   isNew: boolean;
   /** Shown in the frame in place of the picture, such as a canvas being painted. */
   content?: ReactNode;
   /** Width over height, when it is known before the picture has loaded. */
   aspect?: number;
+}
+
+/** A canvas arriving from somewhere else on screen, such as an easel in the studio: it flies to its frame. */
+export interface RoomArrival {
+  /** The key of the item it becomes once it is hung. */
+  key: string;
+  /** The picture, as it was shown where it comes from. */
+  src: string;
+  /** Where it was on screen, in viewport pixels. */
+  from: { left: number; top: number; width: number; height: number };
 }
 
 export interface RoomPainter {
@@ -47,13 +57,16 @@ interface Props {
   paused: boolean;
   /** True while the work in front is still being painted: the room does not turn away by itself. */
   still: boolean;
+  /** Canvases to fly into their frames as the room opens. Read once, when the room is first drawn. */
+  arrivals?: readonly RoomArrival[];
 }
 
 /**
- * The arrival, in order. `land`: the spotlight warms up. `enter`: the painters pop up in the
- * corners. `meet`: they hop together. `clap`: the high five. `settled`: the room is the visitor's.
+ * The arrival, in order. `fly`: canvases from the studio fly to their frames (only when there are
+ * any). `land`: the spotlight warms up. `enter`: the painters pop up in the corners. `meet`: they
+ * hop together. `clap`: the high five. `settled`: the room is the visitor's.
  */
-type Phase = 'loading' | 'land' | 'enter' | 'meet' | 'clap' | 'settled';
+type Phase = 'loading' | 'fly' | 'land' | 'enter' | 'meet' | 'clap' | 'settled';
 const STEPS: [Phase, number][] = [
   ['land', 0],
   ['enter', 600],
@@ -62,6 +75,10 @@ const STEPS: [Phase, number][] = [
   ['settled', 3300],
 ];
 
+/** A canvas's flight from the studio to its frame, and the gap between one taking off and the next. */
+const FLIGHT_MS = 900;
+const FLIGHT_STAGGER_MS = 90;
+
 const SLOTS = 12;
 const STEP_DEG = 360 / SLOTS;
 /** Idle time before the room starts to turn by itself, and how fast it turns. */
@@ -69,6 +86,12 @@ const IDLE_MS = 8000;
 const AUTO_DEG_PER_S = 3.2;
 /** Canvases further round than this are behind the visitor and not drawn. */
 const HIDE_DEG = 72;
+/** The furthest round the ring any wall is drawn: the far edge of the last canvas still shown. */
+const MAX_RAD = ((HIDE_DEG + STEP_DEG / 2) * Math.PI) / 180;
+/** How far the visitor's eye is from the canvas in front, in ring radii. */
+const EYE = 1.5;
+/** Clear wall kept between the heading and the nearest canvas. */
+const HEAD_GAP = 12;
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const STAR = 'M0,-1C0.12,-0.3 0.3,-0.12 1,0C0.3,0.12 0.12,0.3 0,1C-0.12,0.3 -0.3,0.12 -1,0C-0.3,-0.12 -0.12,-0.3 0,-1Z';
@@ -85,24 +108,52 @@ interface Dims {
   top: number;
 }
 
-function measure(el: HTMLElement): Dims {
+/**
+ * How many times its true size the wall is drawn, `x` pixels to the side of the room's centre line.
+ * The ring curves toward the visitor at the sides, so a canvas there is drawn larger than the one
+ * in front, and its top edge sits higher on the screen.
+ */
+function loomAt(x: number, r: number): number {
+  // Wall `a` radians round the ring is drawn EYE / (EYE - 1 + cos a) times its size, and
+  // r sin a times that far from the centre line. This is that second fact, solved for `a`.
+  const k = Math.abs(x) / r;
+  const a = Math.min(MAX_RAD, Math.atan2(k, EYE) + Math.asin(((EYE - 1) * k) / Math.hypot(EYE, k)));
+  return EYE / (EYE - 1 + Math.cos(a));
+}
+
+function measure(el: HTMLElement, title: HTMLElement): Dims {
   const vw = el.clientWidth, vh = el.clientHeight;
   // Narrow screens stand closer to the wall, so the edges of the neighbouring canvases stay in view.
   const r = Math.min(900, Math.max(520, vw * 1.45));
-  const p = r * 1.5;
+  const p = r * EYE;
   // 12 canvases share the circle: each gets 30 degrees of wall, and 84% of that is canvas.
   const slotW = Math.floor(2 * r * Math.tan(Math.PI / SLOTS) * 0.84);
   // A little smaller than in the painting flow, where the painters are the hosts.
   const char = Math.round(Math.min(104, Math.max(68, vw * 0.17)));
-  const head = vw < 600 ? 104 : 96, plaque = 92, below = char + 30;
-  const room = vh - head - plaque - below;
-  const slotH = Math.floor(Math.max(160, Math.min(slotW * 1.2, room)));
-  return { r, p, slotW, slotH, char, top: Math.round(head + Math.max(0, room - slotH) / 2) };
+  const plaque = 92, below = char + 30;
+  // How far down the canvases may reach: the plaques and the painters have the rest.
+  const wall = vh - plaque - below;
+  // The heading has the wall above the canvases to itself, so no canvas may reach higher than `clear`.
+  const box = el.getBoundingClientRect(), text = title.getBoundingClientRect();
+  const clear = text.bottom - box.top + HEAD_GAP;
+  // Out where the heading ends, a canvas is drawn larger than life and rises above the row's
+  // top by `lift` of the row's height: the row starts that much lower.
+  const centre = box.left + vw / 2;
+  const lift = (loomAt(Math.max(Math.abs(text.left - centre), Math.abs(text.right - centre)), r) - 1) / 2;
+  const slotH = Math.floor(Math.max(160, Math.min(slotW * 1.2, (wall - clear) / (1 + lift))));
+  // Centred on the wall under the heading, or lower when a looming canvas would otherwise reach it.
+  const top = Math.max(clear + lift * slotH, clear + Math.max(0, wall - clear - slotH) / 2);
+  return { r, p, slotW, slotH, char, top: Math.round(top) };
 }
 
-export function AtlasRoom({ items, painters, eyebrow, lede, onOpen, paused, still }: Props) {
+export function AtlasRoom({ items, painters, eyebrow, lede, onOpen, paused, still, arrivals }: Props) {
+  // The canvases that fly in are fixed when the room opens: a later render cannot start a second flight.
+  const [incoming] = useState<readonly RoomArrival[]>(() => (reducedMotion() ? [] : (arrivals ?? [])));
+  const flyerRefs = useRef(new Map<string, HTMLImageElement>());
+  const flights = useRef<Animation[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
   const [aspects, setAspects] = useState<Record<string, number>>({});
   const [dims, setDims] = useState<Dims | null>(null);
   const [phase, setPhase] = useState<Phase>('loading');
@@ -111,15 +162,17 @@ export function AtlasRoom({ items, painters, eyebrow, lede, onOpen, paused, stil
   const [calm] = useState(reducedMotion);
 
   useLayoutEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
+    const el = rootRef.current, title = titleRef.current;
+    if (!el || !title) return;
     const update = () => setDims((d) => {
-      const n = measure(el);
+      const n = measure(el, title);
       return d && d.r === n.r && d.slotW === n.slotW && d.slotH === n.slotH && d.char === n.char && d.top === n.top ? d : n;
     });
     update();
+    // The heading is watched too: it grows when its font arrives or its text wraps.
     const ro = new ResizeObserver(update);
     ro.observe(el);
+    ro.observe(title);
     return () => ro.disconnect();
   }, []);
 
@@ -269,12 +322,53 @@ export function AtlasRoom({ items, painters, eyebrow, lede, onOpen, paused, stil
     for (const [p, at] of STEPS) timers.current.push(window.setTimeout(() => setPhase(p), at));
   }, []);
 
+  const land = useCallback(() => {
+    for (const flight of flights.current) flight.cancel();
+    flights.current = [];
+  }, []);
+
+  /** Sends each incoming canvas from where it was to its frame, then starts the rest of the arrival. */
+  const fly = useCallback(() => {
+    setPhase('fly');
+    const run: Animation[] = [];
+    flights.current = run;
+    incoming.forEach((arrival, n) => {
+      const flyer = flyerRefs.current.get(arrival.key);
+      if (!flyer) return;
+      const { from } = arrival;
+      const panel = [...(ringRef.current?.children ?? [])].find((el): el is HTMLElement => el instanceof HTMLElement && el.dataset.key === arrival.key);
+      // The picture inside the frame, not the frame: the mat and the wood are already on the wall.
+      const target = panel && panel.style.visibility !== 'hidden' ? panel.querySelector<HTMLElement>('.gal-art') : null;
+      const to = target?.getBoundingClientRect();
+      const timing: KeyframeAnimationOptions = { duration: FLIGHT_MS, delay: n * FLIGHT_STAGGER_MS, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)', fill: 'both' };
+      if (!to || to.width < 1 || to.height < 1) {
+        // Its frame is out of sight: it lifts off the easel and is gone.
+        run.push(flyer.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-24px) scale(0.92)' }], timing));
+        return;
+      }
+      // FLIP: the flyer sits where it will land and is drawn back where it came from, so it is sharp at rest.
+      Object.assign(flyer.style, { left: `${to.left}px`, top: `${to.top}px`, width: `${to.width}px`, height: `${to.height}px` });
+      const dx = from.left + from.width / 2 - (to.left + to.width / 2);
+      const dy = from.top + from.height / 2 - (to.top + to.height / 2);
+      run.push(
+        flyer.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${from.width / to.width}, ${from.height / to.height})` }, { transform: 'none' }], timing),
+      );
+    });
+    // The rest of the arrival waits for the canvases themselves, not for a clock: a busy first
+    // frame can hold a flight back, and it must still be seen through. A skipped arrival
+    // (`land`) drops this run, and nothing follows it.
+    void Promise.allSettled(run.map((flight) => flight.finished)).then(() => {
+      if (flights.current === run) play();
+    });
+  }, [incoming, play]);
+
   const settle = useCallback(() => {
     for (const t of timers.current) window.clearTimeout(t);
     timers.current = [];
+    land();
     setSkipped(true);
     setPhase('settled');
-  }, []);
+  }, [land]);
 
   useEffect(() => {
     if (!ready || started.current) return;
@@ -284,18 +378,22 @@ export function AtlasRoom({ items, painters, eyebrow, lede, onOpen, paused, stil
       setPhase('settled');
       return;
     }
-    play();
-  }, [ready, calm, play]);
+    if (incoming.length > 0) fly();
+    else play();
+  }, [ready, calm, incoming, fly, play]);
 
   useEffect(
     () => () => {
       for (const t of timers.current) window.clearTimeout(t);
+      land();
     },
-    [],
+    [land],
   );
 
+  /** Canvases are on their way: their frames hang empty until they land. */
+  const flying = incoming.length > 0 && (phase === 'loading' || phase === 'fly');
   const arriving = phase !== 'settled' && phase !== 'loading';
-  const arrived = phase !== 'loading';
+  const arrived = phase !== 'loading' && phase !== 'fly';
   const clapped = phase === 'clap' || phase === 'settled';
 
   // ---- Input ----
@@ -307,7 +405,8 @@ export function AtlasRoom({ items, painters, eyebrow, lede, onOpen, paused, stil
     if (phase !== 'settled') return;
     touch();
     const e = eng.current;
-    const panel = (ev.target as HTMLElement).closest<HTMLElement>('.gal-panel');
+    // A canvas is its frame and its plaque: the wall around it and the floor under it are not.
+    const panel = (ev.target as HTMLElement).closest('.gal-frame, .gal-plaque')?.closest<HTMLElement>('.gal-panel') ?? null;
     drag.current = { id: ev.pointerId, x: ev.clientX, angle: e.angle, moved: false, panel: panel ? Number(panel.dataset.index) : null, t: performance.now(), lastX: ev.clientX };
     e.mode = 'drag';
     e.vel = 0;
@@ -381,7 +480,6 @@ export function AtlasRoom({ items, painters, eyebrow, lede, onOpen, paused, stil
   }, [phase, paused, arriving, settle, step]);
 
   // ---- Drawing ----
-  const byline = `by ${painters[0].name} & ${painters[1].name}`;
   const vars = dims
     ? ({ '--p': `${dims.p}px`, '--slot-w': `${dims.slotW}px`, '--slot-h': `${dims.slotH}px`, '--char': `${dims.char}px`, '--top': `${dims.top}px` } as CSSProperties)
     : undefined;
@@ -433,8 +531,9 @@ export function AtlasRoom({ items, painters, eyebrow, lede, onOpen, paused, stil
               return (
                 <figure
                   key={item.key}
-                  className={`gal-panel${item.isNew ? ' is-new' : ''}${known ? ' loaded' : ''}${i === front ? ' front' : ''}`}
+                  className={`gal-panel${item.isNew ? ' is-new' : ''}${known ? ' loaded' : ''}${i === front ? ' front' : ''}${flying && incoming.some((a) => a.key === item.key) ? ' awaited' : ''}`}
                   data-index={i}
+                  data-key={item.key}
                   style={{ transform: `rotateY(${-i * STEP_DEG}deg) translateZ(${-dims.r}px)`, ['--ar' as string]: ar }}
                 >
                   {item.isNew && <span className="gal-spot" aria-hidden="true" />}
@@ -443,7 +542,7 @@ export function AtlasRoom({ items, painters, eyebrow, lede, onOpen, paused, stil
                       <img
                         className="gal-art"
                         src={item.imageUrl}
-                        alt={item.isNew ? `${item.title}, the piece made for the two of you` : `${item.title}, ${item.style}`}
+                        alt={`${item.title}, ${item.style}`}
                         draggable={false}
                         onLoad={(ev) => {
                           const img = ev.currentTarget;
@@ -471,7 +570,7 @@ export function AtlasRoom({ items, painters, eyebrow, lede, onOpen, paused, stil
                   </div>
                   <figcaption className="gal-plaque">
                     <span className="gal-plaque-title">{item.title}</span>
-                    {item.isNew ? <span className="gal-plaque-by">{byline}</span> : item.credit && <span className="gal-plaque-credit">{item.credit}</span>}
+                    {item.credit && <span className="gal-plaque-credit">{item.credit}</span>}
                     <span className="gal-plaque-meta">{item.style}</span>
                   </figcaption>
                   <img className="gal-reflection" src={item.imageUrl} alt="" aria-hidden="true" draggable={false} />
@@ -481,8 +580,26 @@ export function AtlasRoom({ items, painters, eyebrow, lede, onOpen, paused, stil
         </div>
       </div>
 
+      {flying &&
+        incoming.map(({ key, src, from }) => (
+          <img
+            key={key}
+            ref={(el) => {
+              if (el) flyerRefs.current.set(key, el);
+              else flyerRefs.current.delete(key);
+            }}
+            className="gal-flyer"
+            src={src}
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            decoding="sync"
+            style={{ left: from.left, top: from.top, width: from.width, height: from.height }}
+          />
+        ))}
+
       <header className="gal-head">
-        <div className="gal-title">
+        <div ref={titleRef} className="gal-title">
           <p className="eyebrow">{eyebrow}</p>
           <h1>Our gallery</h1>
           <p className="lede">{lede}</p>

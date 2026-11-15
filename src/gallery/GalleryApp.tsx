@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { BlendResponse, HeartedWork, Profile, ProfileResponse } from '../rec/api';
+import type { BlendResponse, ChosenPainter, HeartedWork, Profile, ProfileResponse } from '../rec/api';
 import { api, ApiFailure, SESSION_LOST } from './api';
 import { BlendPage, Blends } from './Blends';
 import { Explore } from './Explore';
 import { Gallery } from './Gallery';
 import { Onboarding } from './Onboarding';
+import { painterOf } from './painter';
+import { ProfileMenu } from './ProfileMenu';
 import { Settings } from './Settings';
 import { forgetUserId, rememberedUserId, rememberUserId } from './session';
 
@@ -41,6 +43,20 @@ export function GalleryApp() {
   const [route, setRoute] = useState<Route>(routeFromHash);
   /** The blend made a moment ago, kept so it can be revealed without asking the server again. */
   const [freshBlend, setFreshBlend] = useState<BlendResponse | null>(null);
+  /** Shows a new choice of painter at once, in the bar and everywhere else; Settings saves it to the profile. */
+  const showPainter = useCallback((painter: ChosenPainter) => {
+    setSession(current =>
+      current.state === 'ready' && current.profile ? { ...current, profile: { ...current.profile, painter } } : current,
+    );
+  }, []);
+
+  /**
+   * Shows a change of hearts. It only ever changes the hearts of a profile that is still here: an
+   * answer that arrives after the profile was lost (see SESSION_LOST) must not bring its gallery back.
+   */
+  const showHearts = useCallback((hearts: HeartedWork[]) => {
+    setSession(current => (current.state === 'ready' && current.profile ? { ...current, hearts } : current));
+  }, []);
 
   useEffect(() => {
     const onHash = () => {
@@ -118,10 +134,14 @@ export function GalleryApp() {
             <a href="#/blends" aria-current={inBlends ? 'page' : undefined}>
               Blends
             </a>
-            <a href="#/settings" aria-current={route.page === 'settings' ? 'page' : undefined}>
-              Settings
-            </a>
           </nav>
+        )}
+        {hasGallery && profile && (
+          <ProfileMenu
+            name={profile.name}
+            painter={painterOf(profile).painter}
+            onSettings={route.page === 'settings'}
+          />
         )}
       </header>
 
@@ -147,12 +167,12 @@ export function GalleryApp() {
             <Gallery
               profile={profile}
               hearts={session.hearts}
-              onHearts={hearts => setSession({ state: 'ready', profile, hearts })}
+              onHearts={showHearts}
               tab={route.page === 'saved' || route.page === 'rooms' ? route.page : 'for-you'}
             />
           )}
           {route.page === 'explore' && (
-            <Explore profile={profile} hearts={session.hearts} onHearts={hearts => setSession({ state: 'ready', profile, hearts })} />
+            <Explore profile={profile} hearts={session.hearts} onHearts={showHearts} />
           )}
           {route.page === 'blends' && (
             <Blends
@@ -163,7 +183,7 @@ export function GalleryApp() {
               }}
             />
           )}
-          {route.page === 'settings' && <Settings profile={profile} />}
+          {route.page === 'settings' && <Settings profile={profile} onPainter={showPainter} />}
           {route.page === 'blend' && <BlendPage profile={profile} blendId={route.blendId} fresh={freshBlend} />}
         </>
       )}

@@ -18,6 +18,14 @@ export interface Work {
   aspect?: number;
 }
 
+/** A rectangle on screen, in CSS pixels. */
+export interface CanvasBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export interface StudioScene {
   /** Highlight a painter (glow, a hop), or none. Pick mode. */
   select(id: string | null): void;
@@ -33,6 +41,8 @@ export interface StudioScene {
   setAspect(index: number, aspect: number): void;
   /** Bring the camera in on canvas `index` to look at it, or null to step back. Paint mode. */
   view(index: number | null): void;
+  /** Where canvas `index` is on screen as last drawn, in CSS pixels from the scene's top-left corner. Null before the scene is ready. */
+  box(index: number): CanvasBox | null;
   /** Stop drawing while something covers the scene (the gallery), and start again after. */
   pause(on: boolean): void;
   dispose(): void;
@@ -44,11 +54,14 @@ export interface StudioSceneOptions {
   reducedMotion?: boolean;
   /**
    * 'pick' (default): the room arrives and a painter is chosen.
-   * 'paint': the same room; `painterId` takes a brush and paints `works` (up to three) in turn.
+   * 'paint': the same room with the cast on the floor; they paint `works` (up to three) in turn.
    */
   mode?: 'pick' | 'paint';
   onPick?: (id: string) => void;
+  /** Paint mode: who paints when `painters` does not say. */
   painterId?: string | null;
+  /** Paint mode: who paints each canvas of `sequence`, by cast ID, in the same order. The brush is tossed between them. */
+  painters?: string[];
   /** One per easel, left to right. */
   works?: Work[];
   /** The order the easels are painted in, as indexes into `works`. Default: left to right. */

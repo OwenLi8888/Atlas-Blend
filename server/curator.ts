@@ -9,7 +9,7 @@
  *   /memories/notes.md   what the person has told it, word for word
  *   /saved.md            the works they have saved (written before each run)
  *   /rooms/plan.md       the rooms it has decided on
- *   /rooms/room-N.md     each room as hung by a room-maker subagent
+ *   /rooms/room-N.md     each room as hung by a room-maker subagent (these are what is shown)
  *
  * Two things set it off. Saving works (or leaving a note) makes it rehang in
  * the background: it writes a short portrait and, once enough is saved, plans
@@ -18,7 +18,7 @@
  * straight away, and what the note says goes into its notes for next time.
  */
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ChatGoogle } from '@langchain/google';
 import { createDeepAgent, FilesystemBackend } from 'deepagents';
@@ -96,6 +96,8 @@ export const ROOMS_MIN_SAVED = 8;
 const ROOM_COUNT = 2;
 const MIN_WORKS_PER_ROOM = 3;
 const MAX_WORKS_PER_ROOM = 8;
+/** Every room shows at least this many works the person has not saved. */
+const NEW_WORKS_PER_ROOM = 2;
 const HANG_TIMEOUT_MS = 90_000;
 const NOTE_TIMEOUT_MS = 30_000;
 const RECURSION_LIMIT = 80;
@@ -108,6 +110,11 @@ const SAFE_ID = /^[0-9a-f-]{1,64}$/i;
 
 const TASTE_FILE = '/memories/taste.md';
 const NOTES_FILE = '/memories/notes.md';
+/** A room-maker's file in a person's rooms folder, such as room-2.md, and the room's number. */
+const ROOM_FILE = /^room-0*(\d+)\.md$/i;
+/** A line that opens one of a room file's three parts; what follows the colon starts that part. */
+const ROOM_PART = /^[\s#*_>-]*(title|text|works?(?:\s+ids)?)[\s*_]*:[\s*_]*(.*)$/i;
+type RoomPart = 'title' | 'text' | 'works';
 
 const hangSchema = z.object({
   portrait: z.string().describe('One or two plain sentences to the person about what they keep saving'),
@@ -276,6 +283,7 @@ export function createCurator({ apiKey, model: modelName = DEFAULT_MODEL, dir, c
   async function hang(person: CuratorPerson, fingerprint: string): Promise<void> {
     const started = performance.now();
     const folder = await prepare(person);
+    await clearRooms(folder);
     const withRooms = person.saved.length >= ROOMS_MIN_SAVED;
     const agent = createDeepAgent({
       model,
@@ -303,13 +311,26 @@ export function createCurator({ apiKey, model: modelName = DEFAULT_MODEL, dir, c
     const parsed = hangSchema.safeParse(result.structuredResponse);
     if (!parsed.success) throw new Error('The curator finished without a usable result');
 
-    const rooms: HungRoom[] = parsed.data.rooms
+    const told: HungRoom[] = parsed.data.rooms
       .map(room => ({
         title: room.title.trim(),
         text: room.text.trim(),
         workIds: [...new Set(room.work_ids.map(id => id.trim()))].slice(0, MAX_WORKS_PER_ROOM),
       }))
       .filter(room => room.title !== '' && room.text !== '');
+    // Each room-maker writes its room to a file, and the curator is asked to repeat those files.
+    // It sometimes repeats its plan instead, which lists only the saved works. So the files are
+    // what is hung, and the curator's account stands in only for a room whose file cannot be read.
+    const written = withRooms ? await writtenRooms(folder) : new Map<number, HungRoom>();
+    const saved = new Set(person.saved.map(({ work }) => work.id));
+    const hung = new Set<string>();
+    const rooms = Array.from({ length: Math.max(told.length, withRooms ? ROOM_COUNT : 0) }, (_, n) => written.get(n + 1) ?? told[n])
+      .filter((room): room is HungRoom => room !== undefined)
+      .map(room => {
+        const widened = widen(room, saved, hung, collection);
+        for (const id of widened.workIds) hung.add(id);
+        return widened;
+      });
     const answers = parsed.data.answers.map(answer => answer.trim()).filter(Boolean).slice(0, MAX_ANSWERS);
     const questionText = parsed.data.question.trim();
     const stored: StoredResult = {
@@ -382,6 +403,78 @@ export function createCurator({ apiKey, model: modelName = DEFAULT_MODEL, dir, c
       return taste === '' ? null : taste;
     },
   };
+}
+
+/**
+ * Reads a room as its room-maker wrote it: a title, the wall text, and the works, one ID to a
+ * line. Null when a part is missing or too few works are listed, so a file is never half used.
+ */
+export function parseRoomFile(file: string): HungRoom | null {
+  const parts: Record<RoomPart, string[]> = { title: [], text: [], works: [] };
+  let part: string[] | null = null;
+  for (const line of file.split(/\r?\n/)) {
+    const opening = ROOM_PART.exec(line);
+    if (opening) {
+      const name = opening[1].toLowerCase();
+      part = parts[name === 'title' || name === 'text' ? name : 'works'];
+      if (opening[2].trim() !== '') part.push(opening[2]);
+    } else if (part && line.trim() !== '') {
+      part.push(line);
+    }
+  }
+  const title = flat(parts.title.join(' ')).replace(/^["'“*_]+|["'”*_]+$/g, '');
+  const text = flat(parts.text.join(' '));
+  // An ID may come with its label after it, as in /saved.md ("id | title | ..."), or several to a line.
+  const listed = parts.works.flatMap(line => line.split('|', 1)[0].split(',')).map(bareId).filter(id => id !== '');
+  const workIds = [...new Set(listed)];
+  if (title === '' || text === '' || workIds.length < MIN_WORKS_PER_ROOM) return null;
+  return { title, text, workIds: workIds.slice(0, MAX_WORKS_PER_ROOM) };
+}
+
+/**
+ * A room-maker sometimes hangs only what the person already saved. A room is meant to show them
+ * something new, so such a room gets the nearest works to its own that they have not saved and
+ * that hang in no other room (`hung`), in place of its last works if it is full.
+ */
+function widen(room: HungRoom, saved: ReadonlySet<string>, hung: ReadonlySet<string>, collection: Collection): HungRoom {
+  const missing = NEW_WORKS_PER_ROOM - room.workIds.filter(id => !saved.has(id)).length;
+  if (missing <= 0) return room;
+  const added: string[] = [];
+  for (const id of room.workIds) {
+    if (added.length === missing) break;
+    const near = collection.moreLike(id, TOOL_RESULTS).find(work => !saved.has(work.id) && !hung.has(work.id) && !room.workIds.includes(work.id) && !added.includes(work.id));
+    if (near) added.push(near.id);
+  }
+  return { ...room, workIds: [...room.workIds.slice(0, MAX_WORKS_PER_ROOM - added.length), ...added] };
+}
+
+/** A listed ID without its list marker or the quoting around it. */
+function bareId(entry: string): string {
+  return entry
+    .trim()
+    .replace(/^(?:[-*+•]|\d+[.)])\s+/, '')
+    .replace(/^[`"'*]+|[`"'*.;]+$/g, '')
+    .trim();
+}
+
+/** The rooms the room-makers wrote in a person's folder, by room number. A file that does not read as a room is left out. */
+async function writtenRooms(folder: string): Promise<Map<number, HungRoom>> {
+  const dir = path.join(folder, 'rooms');
+  const rooms = new Map<number, HungRoom>();
+  for (const name of await readdir(dir)) {
+    const number = ROOM_FILE.exec(name)?.[1];
+    if (number === undefined) continue;
+    const room = parseRoomFile(await readText(path.join(dir, name)));
+    if (room) rooms.set(Number(number), room);
+  }
+  return rooms;
+}
+
+/** Takes down the rooms of the last hanging, so a room-maker that fails this time cannot leave an old room standing in. */
+async function clearRooms(folder: string): Promise<void> {
+  const dir = path.join(folder, 'rooms');
+  const old = (await readdir(dir)).filter(name => ROOM_FILE.test(name));
+  await Promise.all(old.map(name => rm(path.join(dir, name), { force: true })));
 }
 
 async function readText(file: string): Promise<string> {

@@ -5,6 +5,7 @@ import type {
   BlendResponse,
   HeartResponse,
   OnboardingResponse,
+  PainterResponse,
   Profile,
   ProfileResponse,
   RecsResponse,
@@ -133,6 +134,37 @@ describe('profiles', () => {
     expect((await call('POST', '/api/profile/' + MISSING_USER + '/picks', { picks: PICKS })).status).toBe(404);
   });
 
+  it('signs up with the painter chosen at the entrance, or with none', async () => {
+    const chose = await call<ProfileResponse>('POST', '/api/profile', { id: randomUUID(), name: 'Ada', picks: PICKS, painter_id: 'dot' });
+    expect(chose.body.profile.painter).toEqual({ id: 'dot', name: '' });
+    const skipped = await call<ProfileResponse>('POST', '/api/profile', { id: randomUUID(), name: 'Bo', picks: PICKS });
+    expect(skipped.body.profile.painter).toBeNull();
+    expect((await call('POST', '/api/profile', { id: randomUUID(), name: 'Cy', picks: PICKS, painter_id: 'blob' })).status).toBe(400);
+  });
+
+  it('keeps a choice of painter and what it is called on the profile', async () => {
+    const profile = await newProfile('Di');
+    const route = '/api/profile/' + profile.id + '/painter';
+    const { status, body } = await call<PainterResponse>('POST', route, { id: 'hue', name: '  Moss  ' });
+    expect(status).toBe(200);
+    expect(body.painter).toEqual({ id: 'hue', name: 'Moss' });
+    expect((await call<ProfileResponse>('GET', '/api/profile/' + profile.id)).body.profile.painter).toEqual({ id: 'hue', name: 'Moss' });
+
+    // An empty name gives the painter its own name back.
+    expect((await call<PainterResponse>('POST', route, { id: 'ivory', name: '' })).body.painter).toEqual({ id: 'ivory', name: '' });
+  });
+
+  it('rejects an unknown painter, a bad name, and a profile that is not there', async () => {
+    const profile = await newProfile('Ed');
+    const route = '/api/profile/' + profile.id + '/painter';
+    expect((await call('POST', route, { id: 'blob', name: '' })).status).toBe(400);
+    expect((await call('POST', route, { name: 'Moss' })).status).toBe(400);
+    expect((await call('POST', route, { id: 'hue' })).status).toBe(400);
+    expect((await call('POST', route, { id: 'hue', name: 'x'.repeat(17) })).status).toBe(400);
+    expect((await call('POST', '/api/profile/' + MISSING_USER + '/painter', { id: 'hue', name: '' })).status).toBe(404);
+    expect((await call<ProfileResponse>('GET', '/api/profile/' + profile.id)).body.profile.painter).toBeNull();
+  });
+
   it('keeps the reason on a work that was already hearted when choosing again', async () => {
     const profile = await newProfile('Hal');
     await call('POST', '/api/heart', { user_id: profile.id, art_id: 'a:1', why: 'the light' });
@@ -213,6 +245,20 @@ describe('recommendations', () => {
 });
 
 describe('blend', () => {
+  it('shows each person the painter the other chose', async () => {
+    const me = await newProfile('Ann', ['a:1']);
+    const friend = await newProfile('Ben', ['b:1']);
+    await call('POST', '/api/profile/' + friend.id + '/painter', { id: 'pop', name: 'Fizz' });
+
+    const made = await call<BlendResponse>('POST', '/api/blend', { user_id: me.id, code: friend.blend_code });
+    expect(made.body.friend).toEqual({ name: 'Ben', painter: { id: 'pop', name: 'Fizz' } });
+
+    // Chosen after the blend was made, and still what the friend sees when they open it.
+    await call('POST', '/api/profile/' + me.id + '/painter', { id: 'ember', name: '' });
+    const reopened = await call<BlendResponse>('GET', '/api/blend/' + made.body.id + '?user_id=' + friend.id);
+    expect(reopened.body.friend).toEqual({ name: 'Ann', painter: { id: 'ember', name: '' } });
+  });
+
   it('reveals a painterly work between the two people and tells the story', async () => {
     const me = await newProfile('Hal');
     await call('POST', '/api/heart', { user_id: me.id, art_id: 'a:1', why: 'so calm' });
@@ -225,7 +271,8 @@ describe('blend', () => {
     expect(status).toBe(200);
     // "mid-foil" scores highest, but "foil" must not count as oil paint.
     expect(body.top_artwork.id).toBe('mid-oil');
-    expect(body.friend.name).toBe('Ivy');
+    // The friend as they are shown: their name and painter, never their profile's ID.
+    expect(body.friend).toEqual({ name: 'Ivy', painter: null });
     expect(body.trends.you).toEqual([
       expect.objectContaining({ family: 'Family 0', share: 1, why: 'so calm', works: [expect.objectContaining({ id: 'a:1' })] }),
     ]);
