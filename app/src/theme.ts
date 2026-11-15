@@ -95,7 +95,7 @@ const SCRAPBOOK: { C: Palette; S: Shape } = {
     frame: { borderRadius: 1, padding: 6, paddingBottom: 20, backgroundColor: "#FFFDF6", shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 6, shadowOffset: { width: 0, height: 3 } },
     frameOn: { shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
     frameTilt: 2.2, canvasRadius: 0, tape: "rgba(200,85,61,0.6)", offOpacity: 0.8,
-    input: { height: 52, color: "#2B2520", fontSize: 26, fontFamily: ios("Bradley Hand"), borderBottomWidth: 2, borderColor: "#2B2520", borderStyle: "dotted", marginBottom: 8 },
+    input: { height: 52, color: "#2B2520", fontSize: 26, fontFamily: ios("Bradley Hand"), borderBottomWidth: 2, borderColor: "#2B2520", marginBottom: 8 },
     plaque: { borderRadius: 2, borderWidth: 1, backgroundColor: "#FFFDF6" },
     copy: {
       kicker: "AN ART TASTE JOURNAL",

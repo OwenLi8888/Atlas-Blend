@@ -12,7 +12,7 @@ export function GalleryCard({ g, color = C.a }: { g: Gallery; color?: string }) 
     <View style={{ gap: 18 }}>
       {/* the screen that hosts this card predates the skins: set the bar colour from here */}
       <StatusBar style={S.statusBar} />
-      {SKIN === "pet" && <Lcd row px={3.5} text={`${g.artworks.length} ARTWORKS · ${g.title.toUpperCase()}`} />}
+      {SKIN === "pet" && <Lcd row px={4} text={`${g.artworks.length} ARTWORKS · ${g.title.toUpperCase()}`} />}
       <Ticket
         stub={
           <>
