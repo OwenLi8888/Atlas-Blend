@@ -24,7 +24,8 @@ export interface Work {
 }
 
 const KEY = 'atlas:gallery';
-const MAX = 24;
+/** With copies of about 80 KB this stays well inside a phone browser's storage, which the name and picks share. */
+const MAX = 18;
 
 export function loadWorks(): Work[] {
   try {
@@ -48,10 +49,10 @@ export function saveWork(work: Work): void {
 }
 
 /** A small copy of a canvas, for keeping or for hanging while it is still being painted. */
-export function snapshot(sheet: HTMLCanvasElement, width = 480): string {
+export function snapshot(sheet: HTMLCanvasElement, width = 420): string {
   const copy = document.createElement('canvas');
   copy.width = width;
   copy.height = Math.max(1, Math.round((width * sheet.height) / sheet.width));
   copy.getContext('2d')!.drawImage(sheet, 0, 0, copy.width, copy.height);
-  return copy.toDataURL('image/jpeg', 0.82);
+  return copy.toDataURL('image/jpeg', 0.76);
 }

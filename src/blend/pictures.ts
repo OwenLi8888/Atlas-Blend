@@ -284,7 +284,7 @@ export function createPictures(opts: {
       return photoSlot(near.photo, CENTRE, {
         tag: 'Blend',
         group: 'together',
-        why: `Between the two of you. Of the works neither of you was shown, this one looks as close to your pick ${quote(near.because[0].title)} as to ${name}’s pick ${quote(near.because[1].title)}.`,
+        why: `Between the two of you. Of the works neither of you was shown, this one looks as close to your pick ${quote(near.because[0].title)} as to ${name}’s pick ${quote(near.because[1]?.title)}.`,
       });
     },
   };

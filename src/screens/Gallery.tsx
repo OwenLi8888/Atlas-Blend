@@ -82,7 +82,7 @@ export function Gallery({ live, onBack }: Props) {
   const here = item?.section;
 
   return (
-    <main className={`gallery-room${reading ? ' reading' : ''}`}>
+    <div className={`gallery-room${reading ? ' reading' : ''}`} role="dialog" aria-modal="true" aria-label="Your gallery">
       {!items.length ? (
         <div className="gallery-empty">
           <h2>Nothing on the wall yet</h2>
@@ -157,6 +157,6 @@ export function Gallery({ live, onBack }: Props) {
           </footer>
         )}
       </div>
-    </main>
+    </div>
   );
 }

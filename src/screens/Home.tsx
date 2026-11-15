@@ -41,6 +41,8 @@ export function Home({ characters, selectedId, onSelect, name, onName, player, r
   pickRef.current = onSelect;
   const selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
   const shown = characters.slice(0, 6);
   const selected = shown.find((c) => c.id === selectedId);
 
@@ -63,6 +65,7 @@ export function Home({ characters, selectedId, onSelect, name, onName, player, r
       });
       sceneRef.current = scene;
       scene.select(selectedRef.current);
+      scene.pause(pausedRef.current);
       // On a wide screen the UI is a column over the left of the picture: tell the scene its width.
       ro = new ResizeObserver(() => {
         const wide = window.matchMedia('(min-width: 900px) and (min-aspect-ratio: 1/1)').matches;

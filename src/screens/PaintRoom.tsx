@@ -42,6 +42,8 @@ const SHEET = 420;
 const SECONDS_EACH = 9;
 /** How long the painter waits at an easel for the friend to finish picking before painting another for you instead. */
 const FRIEND_WAIT_MS = 15000;
+/** Picks older than this were left in the room code by an earlier pair. */
+const FRIEND_FRESH_MS = 6 * 60 * 60 * 1000;
 
 const hasWebGL = () => !!document.createElement('canvas').getContext('webgl2');
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -82,6 +84,8 @@ function Room({ character, session, record, player, onBack, onGallery, paused = 
   const sheetsRef = useRef<HTMLCanvasElement[]>([]);
   const playerRef = useRef(player);
   playerRef.current = player;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
   /** What is on each easel, once decided. */
   const [slots, setSlots] = useState<(Slot | null)[]>([null, null, null]);
   /** The easel being worked at, or -1 while the painter fetches its brush. */
@@ -143,17 +147,28 @@ function Room({ character, session, record, player, onBack, onGallery, paused = 
     let blend: Promise<Slot | null> | null = null;
     // the profile is read once, here: one arriving later must not restart the painting
     const pictures = createPictures({ pool, session, record, player: playerRef.current });
+    /** Remembers a cropped picture's object URL so it is revoked when the studio closes (at once, if it already has). */
+    const track = (slot: Slot | null) => {
+      const src = slot?.painting.src;
+      if (src?.startsWith('blob:')) {
+        if (cancelled) URL.revokeObjectURL(src);
+        else if (!objectUrls.includes(src)) objectUrls.push(src);
+      }
+      return slot;
+    };
+    // a room code can come round again: picks left in it by an earlier pair are not this friend's
+    const recent = (r: PicksRecord) => Date.now() - Date.parse(r.pickedAt) < FRIEND_FRESH_MS;
     (async () => {
       const until = Date.now() + 180000;   // then stop asking: this is a one-player visit
       while (!cancelled && !friend && Date.now() < until) {
         const all = await getSessionPicks(session.sessionId);
-        friend = all.find((r) => r.user !== session.user) ?? null;
+        friend = all.find((r) => r.user !== session.user && recent(r)) ?? null;
         if (!friend) await sleep(1500);
       }
       if (cancelled || !friend) return;
       setFriendName(friend.name || 'your friend');
       // the piece between the two can take a while to be made: it is asked for as soon as both have picked
-      blend = pictures.between(friend).catch(() => null);
+      blend = pictures.between(friend).then(track, () => null);
     })();
     /** The friend's picks, waiting up to FRIEND_WAIT_MS for them, once: a second easel does not wait again. */
     let waitedOut = false;
@@ -172,7 +187,8 @@ function Room({ character, session, record, player, onBack, onGallery, paused = 
         const f = await friendSoon();
         if (i === FRIEND) return await pictures.forFriend(f);
         setWaiting('blend');
-        return await (blend ?? pictures.between(f));
+        // the early attempt may have failed (a picture that would not load): choose again
+        return (blend && (await blend)) ?? (await pictures.between(f));
       } catch {
         return null; // the picture could not be loaded: the canvas stays blank
       }
@@ -181,8 +197,7 @@ function Room({ character, session, record, player, onBack, onGallery, paused = 
     const paintAt = async (i: number) => {
       current = i;
       setIndex(i);
-      const slot = await slotFor(i);
-      if (slot?.painting.src.startsWith('blob:')) objectUrls.push(slot.painting.src);
+      const slot = track(await slotFor(i));
       if (cancelled || i !== current) return;
       if (!slot) {
         setWaiting(null);
@@ -251,6 +266,7 @@ function Room({ character, session, record, player, onBack, onGallery, paused = 
         onCanvas: (i) => setViewing((v) => (v === i ? null : i)),
       });
       studio.current = scene;
+      scene.pause(pausedRef.current);
       ro = new ResizeObserver(() => {
         const wide = window.matchMedia('(min-width: 900px) and (min-aspect-ratio: 1/1)').matches;
         scene?.setPanel(wide && panel ? panel.getBoundingClientRect().right : 0);
