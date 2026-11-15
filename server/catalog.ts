@@ -70,9 +70,16 @@ export async function loadCatalog(source: CatalogSource): Promise<Catalog> {
   // added or the families being reassigned both change the fingerprint.
   if (cached && (live === null || live === cached.fingerprint)) return buildCatalog(curate(cached.data));
 
-  const fresh = await fetchAll(source);
-  await writeCache(source, fresh, live ?? fingerprintOf(fresh.works));
-  return buildCatalog(curate(fresh));
+  try {
+    const fresh = await fetchAll(source);
+    await writeCache(source, fresh, live ?? fingerprintOf(fresh.works));
+    return buildCatalog(curate(fresh));
+  } catch (error) {
+    if (!cached) throw error;
+    // A changed fingerprint is not proof that every export page is reachable.
+    console.warn('Catalog refresh failed, using cached catalog: ' + describe(error));
+    return buildCatalog(curate(cached.data));
+  }
 }
 
 /** Media that are drawn or printed in one colour: pencil, ink, etching and the like. */

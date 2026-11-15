@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { Artwork } from '../src/rec/api';
-import { curate } from './catalog';
+import { curate, loadCatalog } from './catalog';
 import { FAMILY_NAMES } from './families';
 
 function work(id: string, cluster_id: number, medium: string | null): Artwork {
@@ -52,4 +55,15 @@ describe('curate', () => {
     expect(new Set(FAMILY_NAMES.map(family => family.name)).size).toBe(FAMILY_NAMES.length);
     expect(new Set(FAMILY_NAMES.map(family => family.anchor)).size).toBe(FAMILY_NAMES.length);
   });
+});
+
+it('serves the last cache when a changed catalog cannot be downloaded', async () => {
+  const cacheDir = await mkdtemp(path.join(tmpdir(), 'gallery-cache-'));
+  await writeFile(path.join(cacheDir,'art_v1.json'), JSON.stringify({version:2,collection:'art_v1',fingerprint:'old',dim:2,works:[work('cached',0,'Oil')]}));
+  await writeFile(path.join(cacheDir,'art_v1.f32'), new Uint8Array(new Float32Array([1,0]).buffer));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({results:[{found:2,hits:[]}]}))).mockRejectedValue(new Error('offline')));
+  try {
+    const catalog=await loadCatalog({cacheDir,collection:'art_v1',host:'https://example.test',apiKey:'test'});
+    expect(catalog.works[0].id).toBe('cached');
+  } finally { vi.unstubAllGlobals(); await rm(cacheDir,{recursive:true,force:true}); }
 });
