@@ -61,11 +61,20 @@
 
 .paint-title h1 {
   font-size: clamp(1.25rem, 5vw, 1.8rem);
+  /* collection titles can be long: two lines at most over the picture */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 .paint-title p {
   font-size: 0.8rem;
   color: var(--navy-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .paint-foot {

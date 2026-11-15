@@ -1,17 +1,47 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { characters } from './characters';
-import { loadPaintings } from './paintings';
+import type { PicksRecord } from './picks/picksStore';
+import { loadPool, photoUrl } from './picks/pool';
 import { getSession, recallCharacter, rememberCharacter, setPicking, wasPicking } from './picks/session';
-import { getPlan } from './plan/planStore';
 import { Home } from './screens/Home';
-import { MuseumSetup } from './screens/MuseumSetup';
-import { Paintings } from './screens/Paintings';
-import { PaintRoom } from './screens/PaintRoom';
+import { PaintRoom, type Picture } from './screens/PaintRoom';
 import { PhotoPicks } from './screens/PhotoPicks';
-import type { Painting } from './types';
 
-type Screen = 'home' | 'picks' | 'paintings' | 'studio';
-const ORDER: Screen[] = ['home', 'picks', 'paintings', 'studio'];
+/**
+ * The flow: 1 choose a painter in the studio, 2 pick 5 of 25 pictures, 3 the painter paints three
+ * of those picks in the studio. (The paintings screen and Museum setup are not in this flow; their
+ * components are still in src/screens/.)
+ */
+type Screen = 'home' | 'picks' | 'studio';
+const ORDER: Screen[] = ['home', 'picks', 'studio'];
+
+/** How many of the picks the painter paints: one per easel. */
+const EASELS = 3;
+
+/** Turns picked photo ids into pictures the studio can plan and paint, first pick first. */
+async function picturesFor(record: PicksRecord): Promise<Picture[]> {
+  const pool = await loadPool();
+  const byId = new Map(pool.map((p) => [p.id, p]));
+  return record.picks
+    .map((id) => byId.get(id))
+    .filter((p) => !!p)
+    .slice(0, EASELS)
+    .map((p) => ({
+      aspect: p.width / p.height,
+      painting: {
+        id: `pick-${p.id}`,
+        file: p.file,
+        title: p.title || 'Untitled',
+        artist: p.artist ?? '',
+        year: p.year ?? '',
+        credit: '',
+        widthMm: 200,
+        src: photoUrl(p.file),
+        // planned in the browser: there is no precomputed plan beside a pool photo
+        uploaded: true,
+      },
+    }));
+}
 
 export function App() {
   // The two-device session (?session=…&user=1|2). The character and the picks screen are remembered
@@ -20,22 +50,9 @@ export function App() {
   const [characterId, setCharacterId] = useState<string | null>(() => recallCharacter(session));
   const [screen, setScreen] = useState<Screen>(() => (wasPicking(session) && recallCharacter(session) ? 'picks' : 'home'));
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
-  const [paintings, setPaintings] = useState<Painting[] | null>(null);
-  const [paintingIndex, setPaintingIndex] = useState(0);
-  const [setupOpen, setSetupOpen] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    loadPaintings().then((list) => {
-      if (cancelled) return;
-      setPaintings(list);
-      // Warm the plans while the visitor is still choosing, so the studio starts at once.
-      for (const p of list) if (!p.missing) getPlan(p).catch(() => {});
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [pictures, setPictures] = useState<Picture[]>([]);
+  /** Bumped to remount the picks screen (its draft is kept) when the studio could not be set up. */
+  const [picksRun, setPicksRun] = useState(0);
 
   const go = useCallback(
     (next: Screen) => {
@@ -54,58 +71,38 @@ export function App() {
     [session],
   );
 
-  const markMissing = useCallback((index: number) => {
-    setPaintings((list) => list && list.map((p, i) => (i === index ? { ...p, missing: true } : p)));
-  }, []);
-
-  const replace = useCallback((index: number, painting: Painting) => {
-    setPaintings((list) => list && list.map((p, i) => (i === index ? painting : p)));
-    getPlan(painting).catch(() => {});
-  }, []);
-
   const character = characters.find((c) => c.id === characterId) ?? characters[0];
-  const painting = paintings?.[paintingIndex];
 
   return (
-    <>
-      <div key={screen} className={`screen screen-${screen} ${direction}`}>
-        {screen === 'home' && (
-          <Home characters={characters} selectedId={characterId} onSelect={selectCharacter} onContinue={() => go('picks')} />
-        )}
-        {screen === 'picks' && (
-          <PhotoPicks
-            character={character}
-            session={session}
-            onBack={() => go('home')}
-            onDone={() => {
-              // ---- HANDOFF: the recommendation step goes here ----
-              // This user's picks are saved by now. To read both users' records (same shape as the
-              // argument of onDone):
-              //   import { getSessionPicks } from './picks/picksStore';
-              //   const records = await getSessionPicks(session.sessionId);
-              // Add your screen to Screen/ORDER above and go to it here. Until it exists, the app
-              // carries on to the paintings screen.
-              go('paintings');
-            }}
-          />
-        )}
-        {screen === 'paintings' && (
-          <Paintings
-            paintings={paintings}
-            onBack={() => go('picks')}
-            onPick={(index) => {
-              setPaintingIndex(index);
-              go('studio');
-            }}
-            onMissing={markMissing}
-            onOpenSetup={() => setSetupOpen(true)}
-          />
-        )}
-        {screen === 'studio' && painting && !painting.missing && (
-          <PaintRoom key={painting.id} painting={painting} character={character} onBack={() => go('paintings')} />
-        )}
-      </div>
-      {setupOpen && paintings && <MuseumSetup paintings={paintings} onReplace={replace} onClose={() => setSetupOpen(false)} />}
-    </>
+    <div key={screen} className={`screen screen-${screen} ${direction}`}>
+      {screen === 'home' && (
+        <Home characters={characters} selectedId={characterId} onSelect={selectCharacter} onContinue={() => go('picks')} />
+      )}
+      {screen === 'picks' && (
+        <PhotoPicks
+          key={picksRun}
+          character={character}
+          session={session}
+          onBack={() => go('home')}
+          onDone={(record) => {
+            // ---- HANDOFF: the recommendation step can read both users' records here ----
+            //   import { getSessionPicks } from './picks/picksStore';
+            //   const records = await getSessionPicks(session.sessionId);
+            // If the pictures cannot be fetched, the picks screen comes back with the same picks.
+            picturesFor(record).then(
+              (list) => {
+                if (!list.length) return setPicksRun((n) => n + 1);
+                setPictures(list);
+                go('studio');
+              },
+              () => setPicksRun((n) => n + 1),
+            );
+          }}
+        />
+      )}
+      {screen === 'studio' && pictures.length > 0 && (
+        <PaintRoom pictures={pictures} character={character} onBack={() => go('picks')} />
+      )}
+    </div>
   );
 }
