@@ -1,4 +1,5 @@
 /** Typed calls to the gallery server. Every path is same-origin under /api. */
+import { cachedGet, invalidateReads } from './requestCache';
 import type {
   BlendRequest,
   BlendResponse,
@@ -31,11 +32,12 @@ export class ApiFailure extends Error {
 /** Fired on `window` when the server answers that the visitor's profile does not exist. */
 export const SESSION_LOST = 'gallery-blend:session-lost';
 
-async function request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
+async function networkRequest<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, {
       method,
+      signal: AbortSignal.timeout(20_000),
       headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
@@ -57,6 +59,16 @@ async function request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?
     throw new ApiFailure(response.status, typeof message === 'string' ? message : 'Something went wrong.');
   }
   return payload as T;
+}
+
+function request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
+  if (method === 'GET') {
+    // Short-lived recs survive tab switches; profile/status reads only share in-flight requests.
+    const ttl = path === '/api/onboarding' ? 300_000 : path.startsWith('/api/recs/') ? 30_000 : 0;
+    return cachedGet(path, () => networkRequest<T>(method, path), ttl);
+  }
+  invalidateReads();
+  return networkRequest<T>(method, path, body).finally(invalidateReads);
 }
 
 export const api = {
