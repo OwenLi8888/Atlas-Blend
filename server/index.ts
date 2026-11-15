@@ -9,6 +9,7 @@ import { createSupabaseDb, type Db } from './db';
 import { seedDemoProfile } from './demo';
 import { createGeminiImageMaker, DEFAULT_IMAGE_MODEL } from './gemini';
 import { createMemoryDb } from './memory-db';
+import { createFilePieceStore, createSupabasePieceStore, type PieceStore } from './pieces';
 
 const DEFAULT_PORT = 43871;
 
@@ -40,6 +41,20 @@ function databaseFromEnv(): Db {
 }
 
 const db = databaseFromEnv();
+
+/**
+ * Finished commissioned pieces go where the blends go: with Supabase, to its
+ * Storage, so both people see the piece whichever server they reach; with the
+ * local database, to a folder beside it.
+ */
+function pieceStoreFromEnv(): PieceStore {
+  if (process.env.GALLERY_DB === 'memory') return createFilePieceStore(path.join(import.meta.dirname, '.data', 'commissions'));
+  return createSupabasePieceStore({
+    url: requiredEnv('SUPABASE_URL'),
+    secretKey: requiredEnv('SUPABASE_SECRET_KEY'),
+    bucket: process.env.SUPABASE_PIECES_BUCKET || 'commissions',
+  });
+}
 
 // The catalog is loaded before the server accepts requests, so no request ever
 // sees a half-ready index. First start reads Typesense (about 15 s); later
@@ -75,7 +90,7 @@ function commissionsFromEnv(): Commissions {
     makeImage: createGeminiImageMaker({ apiKey, model: imageModel }),
     fetchImage: (url, init) => fetch(url, init),
     atelier: createAtelier({ apiKey, model: agentModel }),
-    dir: path.join(import.meta.dirname, '.data', 'commissions'),
+    store: pieceStoreFromEnv(),
   });
 }
 

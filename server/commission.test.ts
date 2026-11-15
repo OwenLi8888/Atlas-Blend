@@ -7,6 +7,7 @@ import type { BlendResponse, Commission, Profile, Trend } from '../src/rec/api';
 import { createApp } from './app';
 import { commissionBrief, commissionTitle, createCommissions, type ImageData, type ImageMaker } from './commission';
 import { createMemoryDb } from './memory-db';
+import { createFilePieceStore, type PieceImage, type PieceRecord, type PieceStore } from './pieces';
 import { testCatalog } from './testing';
 
 const jpeg = (bytes: number[]): ImageData => ({ bytes: Buffer.from(bytes), mimeType: 'image/jpeg' });
@@ -102,12 +103,12 @@ describe('kept pieces', () => {
         return { title: 'Harbour on gold', story: 'Ada and Bo\'s piece holds a harbour.' };
       },
     };
-    const first = createCommissions({ makeImage: async () => jpeg([5, 6]), fetchImage: referenceHost, atelier, dir });
+    const first = createCommissions({ makeImage: async () => jpeg([5, 6]), fetchImage: referenceHost, atelier, store: createFilePieceStore(dir) });
     first.start(request('aaaaaaaa-0000-4000-8000-000000000001'));
     await settled(() => first.status('aaaaaaaa-0000-4000-8000-000000000001'));
 
-    // A new server process has nothing in memory, only the folder.
-    const second = createCommissions({ makeImage: async () => jpeg([0]), fetchImage: referenceHost, dir });
+    // A new server process has nothing in memory, only the store.
+    const second = createCommissions({ makeImage: async () => jpeg([0]), fetchImage: referenceHost, store: createFilePieceStore(dir) });
     const found = await second.status('aaaaaaaa-0000-4000-8000-000000000001');
     expect(found).toMatchObject({ status: 'ready', title: 'Harbour on gold', label_status: 'ready' });
     expect(found?.label?.story).toContain('harbour');
@@ -118,9 +119,92 @@ describe('kept pieces', () => {
 
   it('refuses IDs that could escape its folder', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'commissions-'));
-    const commissions = createCommissions({ makeImage: async () => jpeg([1]), fetchImage: referenceHost, dir });
+    const commissions = createCommissions({ makeImage: async () => jpeg([1]), fetchImage: referenceHost, store: createFilePieceStore(dir) });
     expect(await commissions.status('../../etc/passwd')).toBeNull();
     await rm(dir, { recursive: true });
+  });
+});
+
+/** A store two servers can share, counting what is asked of it. */
+function sharedStore() {
+  const kept = new Map<string, { record: PieceRecord; image: PieceImage }>();
+  const asked = { reads: 0, images: 0 };
+  const store: PieceStore = {
+    save: async (blendId, record, image) => void kept.set(blendId, { record, image }),
+    read: async blendId => {
+      asked.reads++;
+      return kept.get(blendId)?.record ?? null;
+    },
+    image: async blendId => {
+      asked.images++;
+      return kept.get(blendId)?.image ?? null;
+    },
+  };
+  return { store, asked };
+}
+
+describe('pieces shared between servers', () => {
+  const blendId = 'bbbbbbbb-0000-4000-8000-000000000001';
+
+  it('shows a piece made on one server from another, fetching the image only when it is asked for', async () => {
+    const { store, asked } = sharedStore();
+    const maker = createCommissions({ makeImage: async () => jpeg([7, 8]), fetchImage: referenceHost, store });
+    const other = createCommissions({ makeImage: async () => jpeg([0]), fetchImage: referenceHost, store });
+    maker.start(request(blendId));
+    await settled(() => maker.status(blendId));
+
+    expect(await other.status(blendId)).toMatchObject({ status: 'ready', title: 'For Ada and Bo' });
+    expect(asked.images).toBe(0);
+    expect(await other.image(blendId)).toEqual(jpeg([7, 8]));
+    expect(await other.image(blendId)).toEqual(jpeg([7, 8]));
+    expect(asked.images).toBe(1);
+  });
+
+  it('does not ask the store again straight away about a blend with no piece, then finds one made since', async () => {
+    const { store, asked } = sharedStore();
+    const maker = createCommissions({ makeImage: async () => jpeg([1]), fetchImage: referenceHost, store });
+    const other = createCommissions({ makeImage: async () => jpeg([0]), fetchImage: referenceHost, store, missTtlMs: 30 });
+
+    expect(await other.status(blendId)).toBeNull();
+    expect(await other.status(blendId)).toBeNull();
+    expect(asked.reads).toBe(1);
+
+    maker.start(request(blendId));
+    await settled(() => maker.status(blendId));
+    await new Promise(resolve => setTimeout(resolve, 40));
+    expect(await other.status(blendId)).toMatchObject({ status: 'ready' });
+  });
+
+  it('treats a store that cannot be reached as no piece, and asks again the next time', async () => {
+    let down = true;
+    const { store } = sharedStore();
+    const flaky: PieceStore = {
+      ...store,
+      read: async blendId => {
+        if (down) throw new Error('storage is down');
+        return store.read(blendId);
+      },
+    };
+    await store.save(blendId, { title: 'Kept', label: null }, jpeg([3]));
+    const commissions = createCommissions({ makeImage: async () => jpeg([0]), fetchImage: referenceHost, store: flaky });
+
+    expect(await commissions.status(blendId)).toBeNull();
+    down = false;
+    expect(await commissions.status(blendId)).toMatchObject({ status: 'ready', title: 'Kept' });
+  });
+
+  it('still announces a piece the store refused to keep', async () => {
+    const failing: PieceStore = {
+      save: async () => {
+        throw new Error('bucket is full');
+      },
+      read: async () => null,
+      image: async () => null,
+    };
+    const commissions = createCommissions({ makeImage: async () => jpeg([4]), fetchImage: referenceHost, store: failing });
+    commissions.start(request(blendId));
+    expect(await settled(() => commissions.status(blendId))).toMatchObject({ status: 'ready' });
+    expect(await commissions.image(blendId)).toEqual(jpeg([4]));
   });
 });
 

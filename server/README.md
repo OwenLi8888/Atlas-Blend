@@ -16,7 +16,7 @@ To run without Supabase, use `npm run dev:local` instead. Profiles, hearts and b
 
 With Supabase, run `supabase/migrations/001_blend_result.sql` and `002_create_profile.sql` once in the SQL editor. The first adds the column that lets a saved blend be reopened; without it blends still work but are not listed afterwards. The second makes signing up one transaction; without it signing up still works, in two steps.
 
-The API listens on `127.0.0.1:43871`. The screens are at `/gallery.html` on the Vite dev server. Run the normal Vite dev server from the repo root; its `/api` proxy forwards here. For deployment, put a same-origin `/api` reverse proxy in front of it (the Vite proxy only exists in development).
+The API listens on `127.0.0.1:43871`. The screens are served by the Vite dev server: run `npm run dev` from the repo root; its `/api` proxy forwards here. For deployment, put a same-origin `/api` reverse proxy in front of it (the Vite proxy only exists in development).
 
 **Startup.** The server loads the whole art catalog into memory before it accepts requests. The first start reads it from Typesense (about 15 seconds) and saves a copy in `server/.cache/` (git-ignored, about 36 MB). Every later start reads that copy in under 2 seconds, and still works if Typesense is unreachable. The copy is rebuilt automatically when works are added or removed, or when the families stored in Typesense change; delete `server/.cache/` to force a rebuild.
 
@@ -33,6 +33,7 @@ The API listens on `127.0.0.1:43871`. The screens are at `/gallery.html` on the 
 | `db.ts` | Profiles, hearts and blends in Supabase |
 | `memory-db.ts` | The same contract in memory, for tests and `dev:local` |
 | `commission.ts` | Makes the new piece for each blend in the background |
+| `pieces.ts` | Keeps finished pieces: Supabase Storage, or a local folder |
 | `atelier.ts` | The deep agent that writes its brief and wall label |
 | `curator.ts` | The deep agent that keeps notes on each person and hangs their rooms |
 | `collection.ts` | How the curator searches the catalog: by words and by likeness |
@@ -54,7 +55,7 @@ At 6,757 works the collection is about 30 MB of vectors, so every request is sco
 
 **Shared wall.** Like a shared playlist, it is mostly the two people's own hearts: works both hearted, then three of each person's hearts that the other is closest to, and six new works close to both. Each is tagged `both`, `you`, `friend` or `new`, and they take turns down the wall.
 
-**Commissioned piece.** With `GEMINI_API_KEY` set, every blend also gets a new artwork made for the two people: the centrepiece of the reveal. The blend answers at once with the piece marked `pending`, and the screen polls until the image and its wall label are ready, then paints it. Finished pieces are written to `server/.data/commissions/` (git-ignored), so a saved blend still has its piece after a restart. That folder is on the machine running the server: a piece made on one machine is not there on another. Without a key, or if the image model fails, the reveal paints the collection work instead.
+**Commissioned piece.** With `GEMINI_API_KEY` set, every blend also gets a new artwork made for the two people: the centrepiece of the reveal. The blend answers at once with the piece marked `pending`, and the screen polls until the image and its wall label are ready, then paints it. Finished pieces are kept where the blends are (`pieces.ts`). With Supabase they go to a private Storage bucket (`commissions`, or `SUPABASE_PIECES_BUCKET`; made on first use), so both people see the piece whichever server they reach, and it survives restarts. With `dev:local` they are written to `server/.data/commissions/` (git-ignored) on that machine. A server only looks up kept pieces when it has `GEMINI_API_KEY` set itself. Without a key, or if the image model fails, the reveal paints the collection work instead.
 
 **The atelier (deep agent).** The piece is briefed and labelled by a LangChain `deepagents` agent running on Gemini (`atelier.ts`). Its virtual filesystem starts with each person's taste portrait (`/portraits/you.md`, `/portraits/friend.md`: leanings with shares, a few loved works with captions, and their own words). The lead delegates to three subagents:
 

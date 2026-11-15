@@ -3,10 +3,9 @@
  * them loves. It is made in the background after a blend, so the blend itself
  * answers at once and the screen can show something while the piece is made.
  */
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import type { Commission, CommissionLabel, Trend } from '../src/rec/api';
 import type { Atelier } from './atelier';
+import { isSafePieceId, type PieceStore } from './pieces';
 
 export interface ImageData {
   bytes: Buffer;
@@ -50,10 +49,13 @@ interface Options {
   /** How long to wait for the atelier's brief before painting from the template instead. */
   briefTimeoutMs?: number;
   /**
-   * Folder where finished pieces are kept, so a saved blend still has its piece
-   * after the server restarts. Without it pieces live in memory only.
+   * Where finished pieces are kept, so a saved blend still has its piece after
+   * the server restarts, and on every server that shares the store. Without it
+   * pieces live in memory only.
    */
-  dir?: string;
+  store?: PieceStore;
+  /** How long a blend found to have no kept piece is not looked up again. */
+  missTtlMs?: number;
   /** How many pieces are held in memory; the oldest are dropped past this many. */
   maxKept?: number;
 }
@@ -61,23 +63,18 @@ interface Options {
 interface Piece {
   status: Commission['status'];
   title: string;
+  /** Null until it is made. For a piece found in the store, null until it is first asked for. */
   image: ImageData | null;
   labelStatus: Commission['label_status'];
   label: CommissionLabel | null;
-  /** The last write of this piece to disk; writes queue behind it so they never overlap. */
+  /** The last write of this piece to the store; writes queue behind it so they never overlap. */
   saving: Promise<void>;
 }
 
-/** What is written beside a kept image. */
-interface SavedPiece {
-  title: string;
-  mimeType: string;
-  label: CommissionLabel | null;
-}
-
-/** Blend IDs become file names, so only plain IDs are accepted. */
-const SAFE_ID = /^[0-9a-f-]{1,64}$/i;
 const DEFAULT_MAX_KEPT = 40;
+const DEFAULT_MISS_TTL_MS = 15_000;
+/** How many blends without a kept piece are remembered at once. */
+const MAX_MISSES = 500;
 const DEFAULT_BRIEF_TIMEOUT_MS = 10_000;
 const REFERENCE_TIMEOUT_MS = 15_000;
 const MAX_CAPTION_LENGTH = 320;
@@ -90,8 +87,22 @@ export const noCommissions: Commissions = {
 };
 
 export function createCommissions(options: Options): Commissions {
-  const { makeImage, fetchImage, atelier, dir, briefTimeoutMs = DEFAULT_BRIEF_TIMEOUT_MS, maxKept = DEFAULT_MAX_KEPT } = options;
+  const {
+    makeImage,
+    fetchImage,
+    atelier,
+    store,
+    briefTimeoutMs = DEFAULT_BRIEF_TIMEOUT_MS,
+    maxKept = DEFAULT_MAX_KEPT,
+    missTtlMs = DEFAULT_MISS_TTL_MS,
+  } = options;
   const pieces = new Map<string, Piece>();
+  /**
+   * Blends the store had no piece for, with when to look again. A list of saved
+   * blends asks about every one of them, and most were made without a piece.
+   */
+  const misses = new Map<string, number>();
+  const problem = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
   const view = (blendId: string, piece: Piece): Commission => ({
     status: piece.status,
@@ -147,7 +158,7 @@ export function createCommissions(options: Options): Commissions {
         referenceImages([...request.you.trends, ...request.friend.trends], fetchImage),
       ]);
       piece.image = await makeImage(brief, references);
-      // Kept before it is announced, so a piece that reads as ready is already on disk.
+      // Kept before it is announced, so a piece that reads as ready is already in the store.
       await keep(request.blendId, piece);
       piece.status = 'ready';
       console.log('Commission ' + request.blendId + ' ready in ' + Math.round(performance.now() - started) + ' ms');
@@ -165,46 +176,71 @@ export function createCommissions(options: Options): Commissions {
     }
   };
 
-  /** Writes a finished piece to disk. A failure only costs the saved copy, never the blend. */
+  /** Writes a finished piece to the store. A failure only costs the kept copy, never the blend. */
   function keep(blendId: string, piece: Piece): Promise<void> {
-    if (!dir || !SAFE_ID.test(blendId)) return Promise.resolve();
-    const folder = dir;
+    if (!store || !isSafePieceId(blendId)) return Promise.resolve();
     piece.saving = piece.saving.then(async () => {
       if (!piece.image) return;
       try {
-        await mkdir(folder, { recursive: true });
-        const saved: SavedPiece = { title: piece.title, mimeType: piece.image.mimeType, label: piece.label };
-        await writeFile(path.join(folder, blendId + '.image'), piece.image.bytes);
-        await writeFile(path.join(folder, blendId + '.json'), JSON.stringify(saved));
+        await store.save(blendId, { title: piece.title, label: piece.label }, piece.image);
       } catch (error) {
-        console.error('Could not save commission ' + blendId + ': ' + (error instanceof Error ? error.message : String(error)));
+        console.error('Could not keep commission ' + blendId + ': ' + problem(error));
       }
     });
     return piece.saving;
   }
 
-  /** A piece from memory, or one kept on disk by an earlier run of the server. */
+  const rememberMiss = (blendId: string) => {
+    if (misses.size >= MAX_MISSES) misses.clear();
+    misses.set(blendId, Date.now() + missTtlMs);
+  };
+
+  /** A piece from memory, or one kept in the store by another server or an earlier run of this one. */
   async function find(blendId: string): Promise<Piece | null> {
     const held = pieces.get(blendId);
     if (held) return held;
-    if (!dir || !SAFE_ID.test(blendId)) return null;
+    if (!store || !isSafePieceId(blendId)) return null;
+    if ((misses.get(blendId) ?? 0) > Date.now()) return null;
+
+    let kept;
     try {
-      const saved = JSON.parse(await readFile(path.join(dir, blendId + '.json'), 'utf8')) as SavedPiece;
-      const bytes = await readFile(path.join(dir, blendId + '.image'));
-      const piece: Piece = {
-        status: 'ready',
-        title: saved.title,
-        image: { bytes, mimeType: saved.mimeType },
-        labelStatus: saved.label ? 'ready' : 'unavailable',
-        label: saved.label,
-        saving: Promise.resolve(),
-      };
-      remember(blendId, piece);
-      return piece;
-    } catch {
-      // Nothing was kept for this blend.
+      kept = await store.read(blendId);
+    } catch (error) {
+      // Not remembered as a miss: the store may answer the next time.
+      console.error('Could not look up commission ' + blendId + ': ' + problem(error));
       return null;
     }
+    if (!kept) {
+      rememberMiss(blendId);
+      return null;
+    }
+    // Made here while the store was being asked: that one is the piece.
+    const made = pieces.get(blendId);
+    if (made) return made;
+    misses.delete(blendId);
+    const piece: Piece = {
+      status: 'ready',
+      title: kept.title,
+      image: null,
+      labelStatus: kept.label ? 'ready' : 'unavailable',
+      label: kept.label,
+      saving: Promise.resolve(),
+    };
+    remember(blendId, piece);
+    return piece;
+  }
+
+  /** The image of a finished piece; one found in the store is fetched the first time it is asked for. */
+  async function imageOf(blendId: string): Promise<ImageData | null> {
+    const piece = await find(blendId);
+    if (!piece || piece.status !== 'ready') return null;
+    if (piece.image || !store) return piece.image;
+    try {
+      piece.image = await store.image(blendId);
+    } catch (error) {
+      console.error('Could not fetch the image of commission ' + blendId + ': ' + problem(error));
+    }
+    return piece.image;
   }
 
   return {
@@ -218,6 +254,7 @@ export function createCommissions(options: Options): Commissions {
         saving: Promise.resolve(),
       };
       remember(request.blendId, piece);
+      misses.delete(request.blendId);
       void make(request, piece);
       return view(request.blendId, piece);
     },
@@ -225,9 +262,7 @@ export function createCommissions(options: Options): Commissions {
       const piece = await find(blendId);
       return piece ? view(blendId, piece) : null;
     },
-    async image(blendId) {
-      return (await find(blendId))?.image ?? null;
-    },
+    image: imageOf,
   };
 }
 
