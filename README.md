@@ -1,105 +1,92 @@
-# Blend
+# Restyle
 
-Spotify Blend for art. Each person builds a gallery of artworks in a five-round taste quiz. Two
-people connect with a join code, the app compares their **whole galleries**, and it paints a new
-artwork from both, stroke by stroke, as a video. A side panel, researched by a LangChain
-**deepagents** agent, explains what was combined and why the two matched.
+A museum's same paintings, a new experience every visit. A visitor picks a character, picks one of
+four featured paintings and watches the character repaint it stroke by stroke in one of three
+styles: **Swirl** (inspired by Van Gogh), **Shapes** (inspired by Picasso's cubism) or **Print**
+(linocut). It is a static web app for a gallery kiosk tablet or a visitor's phone (QR code beside
+the real painting). No install, no backend.
 
-HackPrinceton: Entertainment (main track) + LangChain "Best use of deepagents".
-
-```
-iPhone app (Expo) ──REST──▶ API server (Node+TS) ◀──▶ Supabase or local JSON store
-                               │ job
-                               ▼
-                         Blend service (Python) ──prompt──▶ image model (optional)
-                     variables · CLIP match · groups · merge
-                        │ packet            │ still
-                        ▼                   ▼
-             Research agent (deepagents)   Painting worker (Node)
-             subagent per source artwork   stroke plan · brushes · ffmpeg MP4
-                        │
-                 Art Institute of Chicago API
-```
-
-| Folder | What it is |
-|---|---|
-| `app/` | Expo SDK 58 iPhone app: quiz, globe gallery, gallery card, join code, reveal, side panel |
-| `api/` | Node + TypeScript API: sessions, jobs, SSE/polling progress, storage, demo prerender |
-| `blend/` | Python blend service: six variables, gallery matching, merge, still + color correction |
-| `agent/` | Python research agent on deepagents, grounding validator, deterministic fallback |
-| `worker/` | Node painting worker: layered stroke planner, 5 brush sets, MP4 encode |
-| `catalog/` | 120 public-domain (CC0) Art Institute of Chicago artworks + 5 quiz rounds |
-| `supabase/` | Schema (data model from the PRD) + catalog seed |
+HackPrinceton, Entertainment track. Spec: [`docs/PRD.md`](docs/PRD.md).
 
 ## Run it
 
-Needs Node 22 and Python 3.11+. ffmpeg comes from `ffmpeg-static`.
+Needs only Node 22 or newer. Works on Windows, macOS and Linux.
 
-```bash
-pip install -r blend/requirements.txt -r agent/requirements.txt
-npm install                      # api + worker workspaces
-(cd app && npm install)
-cp .env.example .env             # every key is optional, see below
-
-npm run prerender -w api         # demo teammate gallery + 3 cached fallback blends
-npm run api                      # API on :8787
-cd app && npx expo start         # scan the QR with Expo Go on each iPhone (same Wi-Fi)
+```
+npm install
+npm run dev        # http://localhost:5173, and on your phone at the Network URL it prints
 ```
 
-**Desktop, two-image blend:** `npm run api`, then `cd app && npx expo start --web` and open
-<http://localhost:8081>. Enter a name, tap **Just blend two images** (or **Blend two images** on
-Home), pick A (the picture: a painting from the list, or upload your own) and B (the painting
-whose technique to use; always the other medium: oil A takes a watercolor B and vice versa), then
-**Paint it**. The worker reads B's technique (medium, palette and values, how broken or blended
-its brushwork is, stroke direction, toned ground), repaints A that way stroke by stroke with
-impasto, and the video plays, about 2-3 s after the tap (`worker/src/technique.ts`,
-`worker/src/transfer.ts`, kept warm by `api/src/painter.ts`). **Add to globe** lands it on your
-globe. The picker offers only paintings with a clear subject (`catalog/data/pickable.json`).
+```
+npm run build      # type-checks, then writes static files to dist/
+npm run preview    # serves dist/
+```
 
-The app finds the API automatically on the laptop running Expo (`EXPO_PUBLIC_API_URL` overrides).
-`http://<laptop>:8787/dev/globe` previews the globe gallery in a desktop browser.
+`dist/` can be hosted from any folder on any static host (`base` is `./`).
 
-**Optional keys** (everything runs without them, and the output says which path ran):
+## Swap a painting
 
-| Key | With it | Without it |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | deepagents agent on `claude-opus-5-5` plans, spawns one researcher subagent per source artwork, writes the panel | Deterministic run with the same plan, tools, per-artwork researchers and validator |
-| `OPENAI_API_KEY` | Still from an image model given the matched-pair + bridge references | Bridge artwork composited with the matched pair's layout and color |
-| `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` | Postgres tables + public storage bucket (`supabase/schema.sql`) | `data/runtime/db.json` + files served by the API |
-| `PAINT_ENGINE` | The team's existing stroke engine, loaded as a package dependency | Built-in layered stroke planner |
+1. Put the image in `public/paintings/`. To shrink a large file to a web-sized JPEG:
+   `npm run add-painting -- "C:\path\to\image.png" my-id` writes `public/paintings/my-id.jpg`.
+2. Edit its entry in `public/paintings/paintings.json`: `id`, `file`, `title`, `artist`, `year`,
+   `credit`, `widthMm` (240 for a portrait of a person, 200 otherwise). The first four entries are
+   the four slots.
+3. Run `npm run precompute`.
 
-## How a blend works
+For a quick demo without touching files, open **Museum setup** (small link under the painting
+list) and upload an image into a slot. Uploads are planned in the browser and last until the page
+is reloaded.
 
-1. **Variables** (`blend/blend/variables.py`): warmth (LAB b* + a*), brightness (L*), saturation
-   (LCh chroma), detail (Canny edge density), 12-bin chroma-weighted hue palette, era.
-2. **Matching** (`matching.py`): `s_k = 1 - |muA - muB| / R_k` per variable (hue by histogram
-   intersection), `score = 100 (0.7 mean(s) + 0.3 min(s))`; CLIP cross-gallery cosine matrix;
-   greedy matched pairs (up to 3); k-means (k=3) groups labelled shared or signature.
-3. **Merge** (`merge.py`): `t_k = 0.5/0.5` when `s_k >= 0.7`, else weighted toward the tighter
-   gallery; nobody leads more than 4 of 6 variables; slerp of the two centroids picks a
-   "bridge" artwork from neither gallery; prompt built from the targets.
-4. **Still** (`still.py`): image model or fallback, then Reinhard LAB color transfer to the
-   targets and re-measure.
-5. **In parallel**: the worker paints the still (brush set from the references' dominant
-   medium) and the agent researches the source artworks. Both phones follow the same event
-   stream; the painting is saved as a gold tile on both spheres.
+## Precompute stroke plans
 
-## Measured against the PRD
+```
+npm run precompute             # every painting in paintings.json
+npm run precompute -- monet    # just one id
+```
 
-| Target | Result |
-|---|---|
-| Score spread across 10 test pairs of 40+ (`python blend/tune.py`) | 65 points, deterministic, nobody dominates more than 4 variables |
-| Still under 20 s, measured variables near targets | 0.8 s (fallback path); warmth/brightness/saturation land within 0.3 of target |
-| Paint + encode under 40 s, 10 to 12 s video | 2 to 4 s at 640 px, 10.8 s video |
-| Blend tap to video | 2.5 to 4 s on a laptop (cached repeat: instant) |
-| Panel dates and mediums traceable | Validator rebuilds them from the catalog and drops any ungrounded year or medium |
-| Catalog 80 to 120 public-domain works | 120, CC0, all fields + variables + CLIP embedding |
+This writes `public/paintings/<id>.plan.json` (the ordered stroke list from `tryimpasto`'s
+`planImpasto`). The app loads that file when it exists, so the first paint starts at once. Without
+it the app plans the painting in a Web Worker, which takes a few seconds, then caches the result.
+Rerun it whenever an image or its `widthMm` changes: a stale plan would paint the old picture.
 
-Not verified here: frame rate on a physical iPhone, the live LLM agent run and the image-model
-path (no keys in this environment), and Supabase mode against a real project.
+## Swap the characters
 
-## Demo fallbacks
+Characters live in one file, [`src/characters.tsx`](src/characters.tsx). The five there now are
+placeholder SVGs. To use real art, put PNG or SVG files in `src/assets/characters/` and replace an
+entry:
 
-* "Blend with a demo teammate" in the lobby skips the second phone.
-* `npm run prerender -w api` caches three blends; the same pair of galleries replays instantly.
-* Set `BLEND_CACHE=off` to force fresh renders.
+```tsx
+import pipUrl from './assets/characters/pip.png';
+
+imageCharacter({ id: 'pip', name: 'Pip', blurb: 'Bold and quick', color: '#A6445D', src: pipUrl, brushTip: [0.07, 0.94] }),
+```
+
+`brushTip` is where the tip of the brush is in the artwork, as fractions of its width and height
+from the top-left corner; the studio pins that point to the stroke being painted. Draw the
+character roughly square, on a transparent background, with the brush on its left (the studio
+mirrors it when it paints rightwards). Up to six characters are shown.
+
+## How it works
+
+- `src/plan/`: loads the precomputed plan or plans in a worker (`tryimpasto`, planning only; its
+  paint simulation is not used).
+- `src/engine/player.ts`: spreads the strokes over 10 s, weighting each by sqrt(length x width) so
+  the picture arrives coarse to fine. Finished strokes are drawn once to an offscreen canvas; each
+  frame copies it and draws the strokes in progress.
+- `src/engine/styles/`: the three renderers. Each draws the same stroke list its own way, and all
+  randomness is seeded by stroke index, so replays are identical.
+- `src/screens/`: the three screens and the Museum setup panel.
+
+## Check it
+
+```
+npm run build
+npm run screenshots            # needs Microsoft Edge or Google Chrome installed
+node scripts/contact-sheet.mjs # optional: tiles the screenshots into sheets
+```
+
+`npm run screenshots` drives the built app in a headless browser at phone and kiosk sizes, saves
+every screen and every style at 50% and 100% for each painting to `screenshots/`, and checks the
+acceptance criteria it can measure (three taps, start latency, 10 s duration, frame rate, the
+character staying on the brush, clean style switches, the missing-image and missing-plan
+fallbacks).

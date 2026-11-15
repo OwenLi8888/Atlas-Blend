@@ -12,3 +12,10 @@ catalog/data/cache/
 .DS_Store
 catalog/data/images/
 blendlab/runs/
+
+# Restyle
+screenshots/
+# Original uploads; web-sized copies live in public/paintings/
+/*.jpg
+/*.jpeg
+/*.png

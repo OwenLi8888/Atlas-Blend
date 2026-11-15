@@ -1,0 +1,38 @@
+[
+  {
+    "id": "vermeer",
+    "file": "vermeer.jpg",
+    "title": "Girl with a Pearl Earring",
+    "artist": "Johannes Vermeer",
+    "year": "c. 1665",
+    "credit": "Mauritshuis, The Hague. Public domain.",
+    "widthMm": 240
+  },
+  {
+    "id": "hokusai",
+    "file": "hokusai.jpg",
+    "title": "The Great Wave off Kanagawa",
+    "artist": "Katsushika Hokusai",
+    "year": "c. 1831",
+    "credit": "Woodblock print. Public domain.",
+    "widthMm": 200
+  },
+  {
+    "id": "monet",
+    "file": "monet.jpg",
+    "title": "Bridge over a Pond of Water Lilies",
+    "artist": "Claude Monet",
+    "year": "1899",
+    "credit": "The Metropolitan Museum of Art, New York. Public domain.",
+    "widthMm": 200
+  },
+  {
+    "id": "friedrich",
+    "file": "friedrich.jpg",
+    "title": "Wanderer above the Sea of Fog",
+    "artist": "Caspar David Friedrich",
+    "year": "c. 1818",
+    "credit": "Hamburger Kunsthalle. Public domain.",
+    "widthMm": 200
+  }
+]
