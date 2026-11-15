@@ -102,6 +102,7 @@ function Room({ painting, character, onBack }: Props) {
             },
             onDone: () => {
               player.destroy(); // the finished picture stays on its canvas
+              players.splice(players.indexOf(player), 1);
               if (i === current) scene?.workDone();
             },
           });
