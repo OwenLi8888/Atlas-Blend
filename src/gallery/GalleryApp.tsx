@@ -121,7 +121,7 @@ export function GalleryApp() {
     <>
       <header className="bar">
         <a className="wordmark" href="#/">
-          Gallery Blend
+          Atlas Blend
         </a>
         {hasGallery && (
           <nav aria-label="Sections">

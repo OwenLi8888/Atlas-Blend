@@ -1,4 +1,4 @@
-# Gallery Blend
+# Atlas Blend
 
 Spotify Blend for art. Heart the works you like, get a wall hung for you, then blend with a friend:
 a match score, a shared wall, and one new artwork made for the two of you, painted stroke by stroke.
