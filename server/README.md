@@ -121,3 +121,15 @@ Runs the whole flow against live Typesense and the real Supabase project. It cre
 ## Security
 
 This is a trusted hackathon demo with no authentication. A profile UUID is an identifier, not a credential: anyone who can reach the API and knows a UUID can change that profile's hearts. Keep it local or private. The server uses the Supabase secret key and bypasses RLS on purpose (the schema has no policies), so never put that key in a `VITE_*` variable or send it to the browser. Typesense is plain HTTP and is only ever called from this server.
+
+## Performance audit (15 November 2026)
+
+Measured results and limits are in `../docs/performance-audit.json`. The audit uses the real cached catalog and isolated in-memory profiles; it does not change Supabase data. To repeat endpoint measurements, run `npx tsx performance.ts` from this directory. Add `--serve` to keep the isolated API on port 43872, then run `node scripts/audit-ui.mjs` and `node scripts/audit-failures.mjs` from the repo root, one at a time. They use headless Chrome and their own Vite server on port 5178. The UI measurements are development-server measurements, not production Lighthouse scores.
+
+Grid images now use `/api/image?id=…&width=480`; reveal images use `width=1280`. These WebP variants retain the original proportions and are cached in `.cache/images/`. Install server dependencies on the demo host (`npm ci`) for the Sharp image decoder. Conversion concurrency is limited to four, duplicate work is shared, and image downloads have size and time limits. Visiting the onboarding grid before the demo warms its variants. Metadata currently has no image dimensions, so first-visit image layout shifts remain a limitation.
+
+The collection match now starts painting while the commissioned piece is pending. The image and story arrive independently through non-overlapping polls. A coarse 60 mm preview reduces planning latency; the finished painting still settles into the larger image after decoding. Existing deep-agent subagents, filesystem, model choices and timeouts are retained. Reopening a saved blend skips animation.
+
+Reads share in-flight requests. Onboarding is cached for five minutes and recommendations for thirty seconds; mutations invalidate reads before and after saving. Hearts update optimistically and roll back on failure. The explicit “Rehang the wall” action is retained. Saved blend names use one batched database read.
+
+Use `npm run dev:local` deliberately if Supabase is unavailable. There is no automatic switch between databases: switching silently would split profiles and saved blends. Keep the catalog and image cache on the demo host. A failed catalog refresh now retains the previous valid cache.

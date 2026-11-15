@@ -1,0 +1,310 @@
+{
+  "date": "2026-11-15",
+  "branch": "recs",
+  "baseline_commit": "09dce9cfa640753aacb3ce813094e7c657fed658",
+  "method": {
+    "catalog": "6674 real cached works, curated to 5631; 1152 dimensions",
+    "api": "Loopback HTTP, isolated in-memory DB, first request and median subsequent requests (6 runs; 18 heart calls). Endpoint table excludes Supabase network and paid generation. Baseline reconstructed with pre-audit source plus pre-existing uncommitted work; before and after run sequentially.",
+    "ui": "Headless Chrome, 1365x900, Vite development server, unthrottled laptop. Cold = fresh browser cache; warm = second navigation in same context. Final thumbnail server cache is warm. Initial cold-thumbnail run separately included. First paint depends on Vite optimization and is not attributable solely to code changes.",
+    "units": "milliseconds except FPS and bytes",
+    "heart_to_recs": "Includes clicking the existing explicit Rehang button; does not change wall automatically.",
+    "grid_loaded": "Images in the initial viewport; offscreen images remain lazy.",
+    "limitations": [
+      "Single cold/warm browser run per version, not p95 population data.",
+      "Cross-origin resource timing hides original-image transfer sizes; image comparison uses Content-Length for the same 24 originals and actual resized bytes.",
+      "Live Supabase checked read-only; write endpoints measured with isolated memory DB.",
+      "Agent code unchanged: one live commission measured, no claim of before/after generation speedup."
+    ]
+  },
+  "api_before": {
+    "create profile": {
+      "cold": 106.01058299999931,
+      "warm": 1.1180420000000595
+    },
+    "onboarding": {
+      "cold": 3.455124999999498,
+      "warm": 1.1184169999996811
+    },
+    "heart": {
+      "cold": 1.6260830000001079,
+      "warm": 0.7144590000007156
+    },
+    "profile": {
+      "cold": 22.1782919999996,
+      "warm": 0.49754199999915727
+    },
+    "recs": {
+      "cold": 311.97454199999993,
+      "warm": 259.48975000000064
+    },
+    "blend": {
+      "cold": 117.40937499999927,
+      "warm": 102.45550000000003
+    },
+    "saved reveal": {
+      "cold": 1.409750000000713,
+      "warm": 1.2519169999995938
+    },
+    "blends list": {
+      "cold": 2.410707999999431,
+      "warm": 0.7416670000002341
+    },
+    "discover": {
+      "cold": 864.805875,
+      "warm": 741.6076670000002
+    },
+    "similar": {
+      "cold": 37.13508300000012,
+      "warm": 32.86858300000131
+    },
+    "unheart": {
+      "cold": 1.1719589999993332,
+      "warm": 0.6930410000004485
+    }
+  },
+  "api_after": {
+    "create profile": {
+      "cold": 106.76545800000031,
+      "warm": 0.8970840000001772
+    },
+    "onboarding": {
+      "cold": 4.488207999999759,
+      "warm": 0.7688749999997526
+    },
+    "heart": {
+      "cold": 2.831083999999919,
+      "warm": 0.8311249999997017
+    },
+    "profile": {
+      "cold": 28.80020800000011,
+      "warm": 0.5192909999996118
+    },
+    "recs": {
+      "cold": 139.20062499999995,
+      "warm": 90.87870799999928
+    },
+    "blend": {
+      "cold": 125.87270800000033,
+      "warm": 100.26400000000012
+    },
+    "saved reveal": {
+      "cold": 2.0432499999997162,
+      "warm": 1.091084000000592
+    },
+    "blends list": {
+      "cold": 1.5209999999997308,
+      "warm": 0.554667000000336
+    },
+    "discover": {
+      "cold": 216.0050000000001,
+      "warm": 131.56275000000005
+    },
+    "similar": {
+      "cold": 25.56116699999984,
+      "warm": 24.890124999999898
+    },
+    "unheart": {
+      "cold": 1.7623340000000098,
+      "warm": 1.2627080000002024
+    }
+  },
+  "ui_before": [
+    {
+      "mode": "cold",
+      "gridDOM": 3070,
+      "gridVisible": 4134,
+      "firstPaint": 2548,
+      "enterGallery": 1388,
+      "heartFeedback": 159,
+      "heartToRecs": 1596,
+      "blendVisible": 888,
+      "animationStart": 8554,
+      "revealFinish": 18783,
+      "fps": 60.002926972047426,
+      "frameP95": 16.700000000000728,
+      "longTasks": 2,
+      "imageBytes": 202696,
+      "onboardingRequests": 2,
+      "recsRequests": 3
+    },
+    {
+      "mode": "warm",
+      "gridDOM": 562,
+      "gridVisible": 604,
+      "firstPaint": 256,
+      "enterGallery": 930,
+      "heartFeedback": 128,
+      "heartToRecs": 1049,
+      "blendVisible": 259,
+      "animationStart": 4999,
+      "revealFinish": 14697,
+      "fps": 60.00248714972641,
+      "frameP95": 16.700000000000728,
+      "longTasks": 0,
+      "imageBytes": 0,
+      "onboardingRequests": 2,
+      "recsRequests": 3
+    }
+  ],
+  "ui_after": [
+    {
+      "mode": "cold",
+      "gridDOM": 556,
+      "gridVisible": 693,
+      "firstPaint": 460,
+      "enterGallery": 338,
+      "heartFeedback": 160,
+      "heartToRecs": 335,
+      "blendVisible": 259,
+      "animationStart": 1617,
+      "revealFinish": 11619,
+      "fps": 60.00240009600384,
+      "frameP95": 16.700000000000728,
+      "longTasks": 1,
+      "imageBytes": 1519208,
+      "onboardingRequests": 1,
+      "recsRequests": 2
+    },
+    {
+      "mode": "warm",
+      "gridDOM": 207,
+      "gridVisible": 264,
+      "firstPaint": 116,
+      "enterGallery": 256,
+      "heartFeedback": 82,
+      "heartToRecs": 402,
+      "blendVisible": 275,
+      "animationStart": 1162,
+      "revealFinish": 11161,
+      "fps": 60.00219641983567,
+      "frameP95": 16.700000000000728,
+      "longTasks": 0,
+      "imageBytes": 0,
+      "onboardingRequests": 1,
+      "recsRequests": 2
+    }
+  ],
+  "ui_after_cold_thumbnail_cache": {
+    "mode": "cold",
+    "gridDOM": 1016,
+    "gridVisible": 1724,
+    "firstPaint": 852,
+    "enterGallery": 284,
+    "heartFeedback": 69,
+    "heartToRecs": 971,
+    "blendVisible": 237,
+    "animationStart": 2619,
+    "revealFinish": 13120,
+    "fps": 60.00228580136387,
+    "frameP95": 16.700000000000728,
+    "longTasks": 2,
+    "imageBytes": 1549132,
+    "onboardingRequests": 1,
+    "recsRequests": 2
+  },
+  "onboarding_image_bytes": {
+    "works": 24,
+    "original": 4744365,
+    "thumbnail": 590826,
+    "reduction_percent": 87.5,
+    "largest_sample_original": 640565
+  },
+  "live_catalog_and_supabase": [
+    {
+      "state": "uncached",
+      "ms": 14576.145084,
+      "works": 5631,
+      "dim": 1152
+    },
+    {
+      "state": "cached",
+      "ms": 1179.2087499999998,
+      "works": 5631,
+      "dim": 1152
+    },
+    {
+      "state": "offline-cache",
+      "ms": 1196.0252499999988
+    },
+    {
+      "supabase": "read profile",
+      "state": "cold",
+      "ms": 1233.192500000001,
+      "found": true
+    },
+    {
+      "supabase": "read hearts",
+      "state": "cold",
+      "ms": 382.44608399999925
+    },
+    {
+      "supabase": "read profile",
+      "state": "warm",
+      "ms": 325.22112500000003,
+      "found": true
+    },
+    {
+      "supabase": "read hearts",
+      "state": "warm",
+      "ms": 365.7392499999987
+    }
+  ],
+  "live_agent": [
+    {
+      "blendResponseMs": 262.5100000000002,
+      "status": "pending"
+    },
+    {
+      "state": "pending:pending",
+      "elapsedMs": 268.59408299999996,
+      "pollMs": 5.990834000000177
+    },
+    {
+      "warmPollMs": 6.497499999999491
+    },
+    {
+      "state": "ready:pending",
+      "elapsedMs": 11913.341667,
+      "pollMs": 10.579709000001458
+    },
+    {
+      "state": "ready:ready",
+      "elapsedMs": 24331.12575,
+      "pollMs": 1.2380420000008598
+    },
+    {
+      "image": "cold",
+      "ms": 6.300749999998516,
+      "bytes": 803207
+    },
+    {
+      "image": "warm",
+      "ms": 3.0594579999997222,
+      "bytes": 803207
+    },
+    {
+      "reopenFromDiskMs": 1.0155830000003334,
+      "status": "ready"
+    }
+  ],
+  "verification": [
+    "89 server tests pass; server and frontend typecheck pass after each change.",
+    "Ranking matches original on real catalog for 3, 22, 100, 300 hearts.",
+    "Slow failed heart visibly updates in 81 ms, then rolls back with error.",
+    "Painting finishes while simulated agent remains pending forever.",
+    "Real commission remains cached after reconstructing commission manager from disk.",
+    "Cached catalog starts with Typesense unreachable; changed fingerprint plus failed download also covered by regression test.",
+    "Production build and git diff --check pass on the combined branch, including concurrent curator commits."
+  ],
+  "remaining": [
+    "First cold animation start 1.62 s; warm 1.16 s. Precompute demo plans to guarantee under 1 s.",
+    "Catalog lacks image dimensions: layout shift remains; ingest dimensions before changing the wall geometry.",
+    "Detailed subagent progress is not token-streamed: existing image/story stage polling retained.",
+    "Atelier writer and critic depend on previous output, so parallelizing them would change the workflow; curator room subagents already run in parallel.",
+    "Memory DB synchronously persists the full snapshot; suitable for small demo, not a large write-heavy deployment.",
+    "No automatic Supabase-to-memory failover (would split identities/data); use explicit local mode.",
+    "Thumbnail disk cache has no eviction policy. Pre-generate and host variants on R2 for scale.",
+    "Full production/mobile/slow-network and multi-user load tests remain."
+  ],
+  "concurrent_changes": "Another process committed the pre-existing curator work during this audit (c37183b, 0983993); those changes were preserved. No checkout or modification of main was performed."
+}
