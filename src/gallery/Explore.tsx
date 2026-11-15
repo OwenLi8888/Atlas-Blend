@@ -3,6 +3,7 @@ import type { Artwork, HeartedWork, Profile } from '../rec/api';
 import { api, ApiFailure } from './api';
 import { HeartableDetail } from './Detail';
 import { Hung } from './Hung';
+import { Salon } from './Salon';
 import { useHearts } from './useHearts';
 
 interface Props {
@@ -65,7 +66,7 @@ export function Explore({ profile, hearts, onHearts }: Props) {
         <p>The whole collection, in no particular order, with a few we think you will love along the way. Open a work to see others like it.</p>
       </header>
 
-      <div className="salon">
+      <Salon>
         {works.map(work => (
           <Hung
             key={work.id}
@@ -75,7 +76,7 @@ export function Explore({ profile, hearts, onHearts }: Props) {
             onOpen={() => setOpen(work)}
           />
         ))}
-      </div>
+      </Salon>
 
       {error && (
         <p className="quiet" role="alert">

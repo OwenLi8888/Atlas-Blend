@@ -5,6 +5,7 @@ import { CuratorNote } from './CuratorNote';
 import { HeartableDetail } from './Detail';
 import { possessive } from './format';
 import { Hung } from './Hung';
+import { Salon } from './Salon';
 import { useCurator } from './useCurator';
 import { useHearts } from './useHearts';
 import { WhyField } from './WhyField';
@@ -89,7 +90,7 @@ export function Gallery({ profile, hearts, onHearts, tab }: Props) {
 
       {tab === 'for-you' && wall === null && !error && <p className="quiet">Hanging your wall…</p>}
       {tab === 'for-you' && wall && (
-        <div className="salon">
+        <Salon>
           {wall.map(({ work, because }) => {
             const heart = actions.of(work);
             return (
@@ -105,17 +106,17 @@ export function Gallery({ profile, hearts, onHearts, tab }: Props) {
               </Hung>
             );
           })}
-        </div>
+        </Salon>
       )}
 
       {tab === 'saved' && (
-        <div className="salon">
+        <Salon>
           {hearts.map(({ work, why }) => (
             <Hung key={work.id} work={work} kept onToggleKeep={() => void actions.toggle(work)} onOpen={() => setOpen(work)}>
               <WhyField key={work.id} saved={why} onSave={reason => actions.saveWhy(work, reason)} />
             </Hung>
           ))}
-        </div>
+        </Salon>
       )}
 
       {tab === 'rooms' &&
@@ -125,7 +126,7 @@ export function Gallery({ profile, hearts, onHearts, tab }: Props) {
               <h2>{room.title}</h2>
               <p>{room.text}</p>
             </header>
-            <div className="salon">
+            <Salon>
               {room.works.map(work => (
                 <Hung
                   key={work.id}
@@ -135,7 +136,7 @@ export function Gallery({ profile, hearts, onHearts, tab }: Props) {
                   onOpen={() => setOpen(work)}
                 />
               ))}
-            </div>
+            </Salon>
           </section>
         ))}
 

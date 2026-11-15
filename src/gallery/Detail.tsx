@@ -17,22 +17,9 @@ interface Props {
 
 /** A closer look at one work: the image large, everything the label has room for, and works like it. */
 export function Detail({ work, onClose, onNavigate, children }: Props) {
-  const closeRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useOverlay(onClose);
   const scrollRef = useRef<HTMLDivElement>(null);
   const similar = useSimilar(onNavigate ? work.id : null);
-
-  useEffect(() => {
-    const previous = document.activeElement;
-    closeRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
-    document.addEventListener('keydown', onKey);
-    document.body.classList.add('no-scroll');
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.classList.remove('no-scroll');
-      if (previous instanceof HTMLElement) previous.focus();
-    };
-  }, [onClose]);
 
   // Moving to a similar work starts again from the top.
   useEffect(() => {
@@ -84,6 +71,28 @@ export function Detail({ work, onClose, onNavigate, children }: Props) {
       </div>
     </div>
   );
+}
+
+/**
+ * What every closer look does while it is open: takes focus, closes on Escape,
+ * stops the page behind it scrolling, and gives focus back afterwards. Returns
+ * the ref for its Close button.
+ */
+export function useOverlay(onClose: () => void) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement;
+    closeRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
+    document.addEventListener('keydown', onKey);
+    document.body.classList.add('no-scroll');
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.classList.remove('no-scroll');
+      if (previous instanceof HTMLElement) previous.focus();
+    };
+  }, [onClose]);
+  return closeRef;
 }
 
 /** A closer look with the heart and its reason, for screens where works can be hearted. */

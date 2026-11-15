@@ -5,6 +5,7 @@ import { BlendPage, Blends } from './Blends';
 import { Explore } from './Explore';
 import { Gallery } from './Gallery';
 import { Onboarding } from './Onboarding';
+import { Settings } from './Settings';
 import { forgetUserId, rememberedUserId, rememberUserId } from './session';
 
 type Route =
@@ -13,6 +14,7 @@ type Route =
   | { page: 'rooms' }
   | { page: 'explore' }
   | { page: 'blends' }
+  | { page: 'settings' }
   | { page: 'blend'; blendId: string };
 
 const BLEND_ROUTE = /^#\/blends\/([0-9a-f-]{36})$/i;
@@ -25,6 +27,7 @@ function routeFromHash(): Route {
   if (hash === '#/rooms') return { page: 'rooms' };
   if (hash === '#/explore') return { page: 'explore' };
   if (hash === '#/blends') return { page: 'blends' };
+  if (hash === '#/settings') return { page: 'settings' };
   return { page: 'for-you' };
 }
 
@@ -117,6 +120,9 @@ export function GalleryApp() {
             <a href="#/blends" aria-current={inBlends ? 'page' : undefined}>
               Blends
             </a>
+            <a href="#/settings" aria-current={route.page === 'settings' ? 'page' : undefined}>
+              Settings
+            </a>
           </nav>
         )}
       </header>
@@ -159,6 +165,7 @@ export function GalleryApp() {
               }}
             />
           )}
+          {route.page === 'settings' && <Settings profile={profile} />}
           {route.page === 'blend' && <BlendPage profile={profile} blendId={route.blendId} fresh={freshBlend} />}
         </>
       )}

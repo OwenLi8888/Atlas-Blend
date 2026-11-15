@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Artwork, Profile } from '../rec/api';
 import { api, ApiFailure } from './api';
 import { Hung } from './Hung';
+import { Salon } from './Salon';
 
 interface Props {
   /** Set when someone with a profile has no hearts left and is choosing again. */
@@ -68,7 +69,7 @@ export function Onboarding({ profile, onDone }: Props) {
       {works === null && !error && <p className="quiet">Hanging the room…</p>}
 
       {works && (
-        <div className="salon salon-entrance">
+        <Salon className="salon-entrance" minColumnWidth={180} maxColumns={5}>
           {works.map(work => (
             <div
               key={work.id}
@@ -88,7 +89,7 @@ export function Onboarding({ profile, onDone }: Props) {
               <Hung work={work} kept={chosen.has(work.id)} />
             </div>
           ))}
-        </div>
+        </Salon>
       )}
 
       <form

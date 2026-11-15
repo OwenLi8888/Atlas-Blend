@@ -1,5 +1,5 @@
 /* Gallery Blend. A white-walled room: works at their own proportions, labels like a museum's,
-   and nothing else on the wall. The reveal dims the room by swapping the colour tokens. */
+   and nothing else on the wall. A blend opens in its own round room (see "The blend room"). */
 
 :root {
   --wall: #f7f5f0;
@@ -13,15 +13,6 @@
   --pad: clamp(20px, 4.5vw, 64px);
   --serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
   --sans: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-}
-
-body.room {
-  --wall: #141311;
-  --ink: #efeae0;
-  --muted: #918b7f;
-  --line: rgba(239, 234, 224, 0.16);
-  --ground: #1f1d1a;
-  --shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.9);
 }
 
 *,
@@ -385,18 +376,23 @@ a {
 
 /* --- A hung work ---------------------------------------------------------- */
 
+/* Columns are dealt by Salon.tsx; the gap here also sets how many fit. */
 .salon {
-  columns: 4 230px;
+  display: flex;
+  align-items: flex-start;
   column-gap: clamp(28px, 4.5vw, 72px);
 }
 
 .salon-entrance {
-  columns: 5 180px;
   column-gap: clamp(22px, 3vw, 44px);
 }
 
+.salon-column {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .hung {
-  break-inside: avoid;
   margin-bottom: clamp(40px, 5vw, 76px);
 }
 
@@ -805,49 +801,65 @@ button.heart:hover svg {
   color: var(--muted);
 }
 
-/* --- The reveal ----------------------------------------------------------- */
+/* --- The blend room ------------------------------------------------------- */
+/* The room itself is AtlasRoom.css, carried over from the painting flow. */
 
-.reveal-head {
-  margin: clamp(8px, 2vw, 24px) 0 clamp(28px, 4vw, 52px);
-  text-align: center;
+/* The canvas being painted, filling its frame. */
+.painting {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--mat, var(--ground));
 }
 
-.reveal-match {
-  margin-top: 10px;
+.painting canvas,
+.painting img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.painting-original {
+  opacity: 0;
+  transition: opacity 2.6s ease 0.6s;
+}
+
+.painting-original.shown {
+  opacity: 1;
+}
+
+/* --- The piece's closer look ---------------------------------------------- */
+
+.piece-story {
+  margin-top: 22px;
   font-family: var(--serif);
-  font-size: clamp(1.5rem, 2.6vw, 2rem);
-  line-height: 1.1;
-  color: var(--muted);
+  font-size: 1.2rem;
+  line-height: 1.4;
 }
 
-.reveal-match strong {
-  font-weight: 400;
-  color: var(--ink);
-}
-
-.reveal-stage {
+.piece-leanings {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2.4fr) minmax(0, 1fr);
-  gap: clamp(22px, 4.5vw, 84px);
-  align-items: center;
-}
-
-.leanings {
-  animation: rise 1.2s ease both;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
 }
 
 .leanings ul {
   display: grid;
-  gap: 16px;
-  margin: 18px 0 0;
+  gap: 12px;
+  margin: 14px 0 0;
   padding: 0;
   list-style: none;
 }
 
 .leaning {
   display: grid;
-  grid-template-columns: minmax(56px, 38%) minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
   width: 100%;
   border: 0;
@@ -860,140 +872,81 @@ button.heart:hover svg {
 .leaning img {
   display: block;
   width: 100%;
-  max-height: 104px;
+  max-height: 70px;
   object-fit: cover;
   background: var(--ground);
 }
 
 .leaning span {
   font-family: var(--serif);
-  font-size: 1.05rem;
+  font-size: 1rem;
   line-height: 1.2;
 }
 
-.painting {
-  position: relative;
-  width: 100%;
-  max-width: calc(68dvh * var(--ratio, 1));
-  margin: 0 auto;
-  aspect-ratio: 4 / 5;
-  background: var(--ground);
-  box-shadow: var(--shadow);
+/* --- Settings ------------------------------------------------------------- */
+
+.settings-painter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: clamp(24px, 5vw, 64px);
 }
 
-.painting.still {
-  max-width: none;
-  aspect-ratio: auto;
+.settings-preview .painter {
+  width: 132px;
+}
+
+.settings-fields {
+  display: grid;
+  gap: 18px;
+}
+
+.settings-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-option {
+  width: 60px;
+  height: 60px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  padding: 5px;
   background: none;
-  box-shadow: none;
+  transition: border-color 0.2s ease;
 }
 
-.painting.still img {
-  position: static;
+.settings-option:hover,
+.settings-option[aria-checked='true'] {
+  border-color: var(--ink);
+}
+
+.settings-option img {
   display: block;
-  width: auto;
-  max-width: 100%;
-  height: auto;
-  max-height: 68dvh;
-  margin: 0 auto;
-  box-shadow: var(--shadow);
-}
-
-.painting canvas,
-.painting img {
-  position: absolute;
-  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
 
-.interlude {
-  display: block;
-  width: 100%;
-  max-width: 420px;
-  margin: 0 auto;
-  border: 0;
-  padding: 0;
-  background: var(--ground);
-  box-shadow: var(--shadow);
-  cursor: zoom-in;
-  animation: rise 1.2s ease both;
-}
-
-.interlude img {
-  display: block;
-  width: 100%;
-  max-height: 52dvh;
-  object-fit: contain;
-}
-
-.making {
-  margin-bottom: 8px;
-  color: var(--ink);
-  animation: breathe 2.4s ease-in-out infinite;
-}
-
-.reveal-plate em {
-  font-family: var(--serif);
-  font-size: 1.08rem;
-}
-
-@keyframes breathe {
-  50% {
-    opacity: 0.45;
-  }
-}
-
-.painting-original {
-  opacity: 0;
-  transition: opacity 2.6s ease 0.6s;
-}
-
-.painting-original.shown {
-  opacity: 1;
-}
-
-.reveal-plate {
-  min-height: 7.5rem;
-  margin-top: 26px;
-  text-align: center;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.reveal-plate h1 {
-  font-style: italic;
-  font-size: clamp(1.7rem, 3vw, 2.5rem);
-  line-height: 1.1;
-  color: var(--ink);
-  margin-bottom: 8px;
-  animation: rise 0.9s ease both;
-}
-
-.reveal-after {
+.settings-name {
   display: grid;
-  gap: clamp(56px, 8vw, 120px);
-  margin-top: clamp(40px, 6vw, 88px);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 1.4s ease 0.3s, visibility 0s linear 1.7s;
+  gap: 6px;
 }
 
-.reveal.painted .reveal-after {
-  opacity: 1;
-  visibility: visible;
-  transition: opacity 1.4s ease 0.3s;
+.settings-name input {
+  width: 14rem;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 8px 0;
+  background: none;
+  font-size: 16px;
 }
 
-.reveal-story {
-  max-width: 38rem;
-  margin: 18px auto 0;
-  font-family: var(--serif);
-  font-size: clamp(1.15rem, 1.7vw, 1.4rem);
-  line-height: 1.4;
-  color: var(--ink);
-  animation: rise 0.9s ease 0.2s both;
+.settings-name input:focus {
+  outline: none;
+  border-bottom-color: var(--ink);
 }
 
 @keyframes fade {
@@ -1012,23 +965,13 @@ button.heart:hover svg {
 /* --- Small screens -------------------------------------------------------- */
 
 @media (max-width: 720px) {
-  .salon,
-  .salon-entrance {
-    columns: 2;
-  }
-
   .detail-inner,
   .blend-columns {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .reveal-stage {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .reveal-centre {
-    grid-column: 1 / -1;
-    grid-row: 1;
+  .piece-leanings {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .entry-bar {
