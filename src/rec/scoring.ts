@@ -1,94 +1,398 @@
-export interface Work {
-  id: string; title: string; artist: string; image_vec: number[];
-  image_url?: string; medium?: string; cluster?: string; cluster_id?: number;
-  [key: string]: unknown;
+/**
+ * Taste and blend scoring. Pure functions over an in-memory corpus of image
+ * vectors; no I/O. Works are referred to by their row number in the corpus.
+ *
+ * All similarities are cosine between SigLIP 2 image vectors. Measured on the
+ * 6,674-work collection: two unrelated works sit around 0.55, only 1% of
+ * random pairs exceed 0.77, and a work's nearest neighbour is around 0.85.
+ */
+
+/** Unit-length vectors for every work, stored row after row. */
+export interface Corpus {
+  readonly count: number;
+  readonly dim: number;
+  readonly vectors: Float32Array;
 }
-export interface Taste { vector: number[]; weight: number }
-export function normalize(v: number[]): number[] {
-  if (!v.length || v.some(x => !Number.isFinite(x))) throw new Error('Invalid vector');
-  const n = Math.hypot(...v);
-  if (!n) throw new Error('Zero vector');
-  return v.map(x => x / n);
+
+/** One of a person's interests: a group of similar hearts. */
+export interface Taste {
+  /**
+   * The heart at the centre of the group. A real work stands in for the group
+   * instead of an average: averaged vectors drift toward the middle of the
+   * whole collection, which made any two people look about 93% alike.
+   */
+  readonly medoid: number;
+  readonly members: readonly number[];
+  /** Share of the person's hearts in this group; shares sum to 1. */
+  readonly weight: number;
 }
-export function cosine(a: number[], b: number[]): number {
-  if (a.length !== b.length) throw new Error('Vector dimensions differ');
-  const x = normalize(a), y = normalize(b);
-  return Math.max(-1, Math.min(1, x.reduce((s, v, i) => s + v * y[i], 0)));
+
+/** Anchors for turning a raw similarity into a 0 to 100 overlap score. */
+export interface Calibration {
+  /** Typical similarity between two unrelated works: scores 0. */
+  readonly stranger: number;
+  /** Typical similarity between a work and its nearest neighbour: scores 100. */
+  readonly kindred: number;
 }
-export function taste(vectors: number[][], maxK = 3): Taste[] {
-  if (!vectors.length) return [];
-  const xs = vectors.map(normalize);
-  if (xs.some(x => x.length !== xs[0].length)) throw new Error('Vector dimensions differ');
-  // Farthest-first seeds preserve separate interests; don't force extra clusters on near duplicates.
-  let centers = [xs[0]];
-  while (centers.length < Math.min(maxK, xs.length)) {
-    const far = xs.reduce((a, b) => affinity(a, centers) < affinity(b, centers) ? a : b);
-    if (affinity(far, centers) > 0.88) break;
-    centers.push(far);
+
+export interface Pick {
+  readonly index: number;
+  /** Position in the tastes array this pick was chosen for. */
+  readonly taste: number;
+}
+
+/** Two hearts at least this similar count as the same taste. */
+export const SAME_TASTE_SIMILARITY = 0.77;
+export const MAX_TASTES = 3;
+
+const CANDIDATES_PER_TASTE = 200;
+/**
+ * Closeness to a heart stops counting above this, the level of a typical
+ * nearest neighbour. Past it a work is close to a copy (the next print in the
+ * same series), and a wall of those teaches the person nothing new.
+ */
+const NEAR_COPY_SIMILARITY = 0.85;
+/** Balance between closeness to the taste (1) and variety on the wall (0). */
+const RELEVANCE_WEIGHT = 0.7;
+const MAX_PER_ARTIST = 2;
+const MEDOID_ROUNDS = 8;
+
+export function similarity(corpus: Corpus, a: number, b: number): number {
+  const { dim, vectors } = corpus;
+  const rowA = a * dim;
+  const rowB = b * dim;
+  let sum = 0;
+  for (let d = 0; d < dim; d++) sum += vectors[rowA + d] * vectors[rowB + d];
+  return sum;
+}
+
+/** Similarity of every work in the corpus to one work. */
+export function similaritiesTo(corpus: Corpus, target: number): Float32Array {
+  const { count, dim, vectors } = corpus;
+  const query = vectors.subarray(target * dim, (target + 1) * dim);
+  const result = new Float32Array(count);
+  for (let i = 0, row = 0; i < count; i++, row += dim) {
+    let sum = 0;
+    for (let d = 0; d < dim; d++) sum += vectors[row + d] * query[d];
+    result[i] = sum;
   }
-  let groups: number[][][] = [];
-  for (let step = 0; step < 12; step++) {
-    groups = centers.map(() => []);
-    for (const x of xs) {
-      const sims = centers.map(c => cosine(x, c));
-      groups[sims.indexOf(Math.max(...sims))].push(x);
+  return result;
+}
+
+/**
+ * Groups hearts into at most `maxTastes` interests.
+ *
+ * Centres are added one at a time, each chosen to bring the most hearts closer
+ * to a centre, so a single stray heart does not claim a group ahead of a real
+ * second interest. No centre is added once every heart is already close to one.
+ */
+export function findTastes(corpus: Corpus, hearts: readonly number[], maxTastes = MAX_TASTES): Taste[] {
+  const items = [...new Set(hearts)];
+  const n = items.length;
+  if (n === 0) return [];
+
+  const sims = pairwiseSimilarities(corpus, items);
+  const sim = (a: number, b: number) => sims[a * n + b];
+
+  const totalSimilarity = (a: number) => {
+    let sum = 0;
+    for (let b = 0; b < n; b++) sum += sim(a, b);
+    return sum;
+  };
+  let centres = [argMax(n, totalSimilarity)];
+  const closest = Float32Array.from({ length: n }, (_, b) => sim(centres[0], b));
+
+  while (centres.length < Math.min(maxTastes, n) && closest.some(s => s < SAME_TASTE_SIMILARITY)) {
+    const gain = (candidate: number) => {
+      let sum = 0;
+      for (let b = 0; b < n; b++) sum += Math.max(0, sim(candidate, b) - closest[b]);
+      return sum;
+    };
+    const next = argMax(n, gain);
+    centres.push(next);
+    for (let b = 0; b < n; b++) closest[b] = Math.max(closest[b], sim(next, b));
+  }
+
+  let groups = assignToCentres(n, centres, sim);
+  for (let round = 0; round < MEDOID_ROUNDS; round++) {
+    const moved = groups.map(group => group[argMax(group.length, a => {
+      let sum = 0;
+      for (const b of group) sum += sim(group[a], b);
+      return sum;
+    })]);
+    if (moved.every((centre, i) => centre === centres[i])) break;
+    centres = moved;
+    groups = assignToCentres(n, centres, sim);
+  }
+
+  return groups
+    .map((group, i): Taste => ({
+      medoid: items[centres[i]],
+      members: group.map(member => items[member]),
+      weight: group.length / n,
+    }))
+    .sort((a, b) => b.weight - a.weight);
+}
+
+/**
+ * Splits `total` slots between tastes in proportion to their weights. When
+ * there are enough slots, every taste keeps at least one, taken from whichever
+ * taste holds the most.
+ */
+export function allocateSlots(weights: readonly number[], total: number): number[] {
+  const k = weights.length;
+  if (k === 0 || total <= 0) return weights.map(() => 0);
+
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const exact = weights.map(w => (sum > 0 ? (w / sum) * total : total / k));
+  const slots = exact.map(Math.floor);
+  const byRemainder = exact
+    .map((x, i) => ({ i, remainder: x - Math.floor(x) }))
+    .sort((a, b) => b.remainder - a.remainder || a.i - b.i);
+  let left = total - slots.reduce((a, b) => a + b, 0);
+  for (const { i } of byRemainder) {
+    if (left === 0) break;
+    slots[i]++;
+    left--;
+  }
+
+  if (total >= k) {
+    for (let i = 0; i < k; i++) {
+      if (slots[i] > 0) continue;
+      slots[slots.indexOf(Math.max(...slots))]--;
+      slots[i] = 1;
     }
-    centers = groups.map((g, i) => {
-      if (!g.length) return centers[i];
-      const sum = xs[0].map((_, d) => g.reduce((s, x) => s + x[d], 0));
-      return Math.hypot(...sum) < 1e-10 ? g[0] : normalize(sum);
-    });
   }
-  return centers.map((vector, i) => ({ vector, weight: groups[i].length / xs.length }))
-    .filter(c => c.weight > 0);
+  return slots;
 }
-export function affinity(v: number[], centers: number[][]): number {
-  return centers.length ? Math.max(...centers.map(c => cosine(v, c))) : -1;
-}
-export function blendScore(v: number[], a: Taste[], b: Taste[]): number {
-  return Math.min(affinity(v, a.map(c => c.vector)), affinity(v, b.map(c => c.vector)));
-}
-export function overlap(a: Taste[], b: Taste[]): number {
-  if (!a.length || !b.length) return 0;
-  const side = (x: Taste[], y: Taste[]) => x.reduce((s, c) =>
-    s + c.weight * affinity(c.vector, y.map(t => t.vector)), 0);
-  return Math.round(Math.max(0, Math.min(1, (side(a, b) + side(b, a)) / 2)) * 100);
-}
-export function diversify(pool: Work[], score: (w: Work) => number, n: number, initial: Work[] = []): Work[] {
-  const selected = [...initial], remaining = [...new Map(pool.map(w => [w.id, w])).values()]
-    .filter(w => !initial.some(s => s.id === w.id));
-  while (selected.length < n + initial.length && remaining.length) {
-    let best = -1, value = -Infinity;
-    remaining.forEach((w, i) => {
-      if (w.artist && selected.filter(s => s.artist === w.artist).length >= 2) return;
-      const novelty = selected.length ? affinity(w.image_vec, selected.map(s => s.image_vec)) : 0;
-      const rank = 0.85 * score(w) - 0.15 * novelty;
-      if (rank > value) { best = i; value = rank; }
-    });
-    if (best < 0) break;
-    selected.push(remaining.splice(best, 1)[0]);
+
+/**
+ * Builds a wall of recommendations: slots are shared between tastes by weight,
+ * tastes take turns picking, and each pick trades closeness to its taste
+ * against sameness with what is already on the wall.
+ */
+export function recommend(
+  corpus: Corpus,
+  tastes: readonly Taste[],
+  options: {
+    count: number;
+    exclude: ReadonlySet<number>;
+    /** Artist key for the per-artist cap; null for works with no known artist. */
+    artistOf: (index: number) => string | null;
+  },
+): Pick[] {
+  const { count, exclude, artistOf } = options;
+  const sources = tastes.map(taste => {
+    const scores = similaritiesTo(corpus, taste.medoid);
+    return { scores, candidates: topIndices(scores, CANDIDATES_PER_TASTE, exclude) };
+  });
+  // Square roots soften the split, so a small taste still gets room to grow:
+  // hearts split 90/10 share the wall about 75/25 instead of 11 slots to 1.
+  const remaining = allocateSlots(tastes.map(t => Math.sqrt(t.weight)), count);
+
+  const picks: Pick[] = [];
+  // The hearts at the centre of each taste count as already on the wall, so
+  // picks are pushed away from them as well as from each other.
+  const shown: number[] = tastes.map(taste => taste.medoid);
+  let progressed = true;
+  while (picks.length < count && progressed) {
+    progressed = false;
+    for (let t = 0; t < tastes.length && picks.length < count; t++) {
+      if (remaining[t] === 0) continue;
+      const { scores, candidates } = sources[t];
+      const relevance = (i: number) => Math.min(scores[i], NEAR_COPY_SIMILARITY);
+      const index = nextDiversePick(corpus, candidates, relevance, shown, artistOf);
+      if (index === null) {
+        remaining[t] = 0;
+        continue;
+      }
+      remaining[t]--;
+      shown.push(index);
+      picks.push({ index, taste: t });
+      progressed = true;
+    }
   }
-  return selected.slice(initial.length);
+  return picks;
 }
-export function recommend(pools: Work[][], centers: Taste[], excluded: Set<string>, n = 12): Work[] {
-  const chosen: Work[] = [];
-  // One slot per interest per round, then MMR within that interest.
-  for (let round = 0; chosen.length < n; round++) {
-    const before = chosen.length;
-    pools.forEach((pool, i) => {
-      if (chosen.length >= n) return;
-      const candidates = pool.filter(w => !excluded.has(w.id) && !chosen.some(s => s.id === w.id));
-      const pick = diversify(candidates, w => cosine(w.image_vec, centers[i].vector), 1, chosen)[0];
-      if (pick) chosen.push(pick);
-    });
-    if (chosen.length === before) break;
+
+/**
+ * How well every work suits both people: the lower of its closeness to A and
+ * its closeness to B, so a work one person loves and the other does not scores low.
+ */
+export function blendScores(corpus: Corpus, a: readonly Taste[], b: readonly Taste[]): Float32Array {
+  const closeness = (tastes: readonly Taste[]) => {
+    const best = new Float32Array(corpus.count).fill(-1);
+    for (const taste of tastes) {
+      const scores = similaritiesTo(corpus, taste.medoid);
+      for (let i = 0; i < best.length; i++) if (scores[i] > best[i]) best[i] = scores[i];
+    }
+    return best;
+  };
+  const toA = closeness(a);
+  const toB = closeness(b);
+  return toA.map((score, i) => Math.min(score, toB[i]));
+}
+
+/** How close one work is to a person: its similarity to their nearest taste. */
+export function closeness(corpus: Corpus, index: number, tastes: readonly Taste[]): number {
+  let best = -1;
+  for (const taste of tastes) best = Math.max(best, similarity(corpus, index, taste.medoid));
+  return best;
+}
+
+/** Picks `count` varied works from `candidates`, best first, never repeating `shown`. */
+export function selectDiverse(
+  corpus: Corpus,
+  candidates: readonly number[],
+  options: {
+    count: number;
+    relevance: (index: number) => number;
+    shown?: readonly number[];
+    artistOf: (index: number) => string | null;
+  },
+): number[] {
+  const shown = [...(options.shown ?? [])];
+  const picked: number[] = [];
+  while (picked.length < options.count) {
+    const index = nextDiversePick(corpus, candidates, options.relevance, shown, options.artistOf);
+    if (index === null) break;
+    shown.push(index);
+    picked.push(index);
   }
-  return chosen;
+  return picked;
 }
-export function bridge(top: Work, hearts: Work[]): Work | null {
-  return [...hearts].sort((a, b) => cosine(top.image_vec, b.image_vec) - cosine(top.image_vec, a.image_vec))[0] ?? null;
+
+/** Indices of the `k` highest scores, best first, skipping `exclude`. */
+export function topIndices(scores: Float32Array, k: number, exclude: ReadonlySet<number> = new Set()): number[] {
+  const indices: number[] = [];
+  for (let i = 0; i < scores.length; i++) if (!exclude.has(i)) indices.push(i);
+  indices.sort((a, b) => scores[b] - scores[a] || a - b);
+  return indices.slice(0, k);
 }
-export function publicWork(w: Work) {
-  const { image_vec: _, ...rest } = w;
-  return rest;
+
+/** The work among `among` most similar to `target`, or null when `among` is empty. */
+export function nearest(corpus: Corpus, target: number, among: readonly number[]): number | null {
+  if (among.length === 0) return null;
+  return among[argMax(among.length, i => similarity(corpus, target, among[i]))];
+}
+
+/**
+ * Taste overlap from 0 to 100. Each taste is matched to the other person's
+ * closest taste, weighted by how much of that person's hearts it holds, and
+ * the result is averaged over both directions so the score is symmetric.
+ */
+export function overlapPercent(
+  corpus: Corpus,
+  a: readonly Taste[],
+  b: readonly Taste[],
+  calibration: Calibration,
+): number {
+  if (a.length === 0 || b.length === 0) return 0;
+  const matched = (from: readonly Taste[], to: readonly Taste[]) =>
+    from.reduce((sum, taste) => {
+      const best = Math.max(...to.map(other => similarity(corpus, taste.medoid, other.medoid)));
+      return sum + taste.weight * best;
+    }, 0);
+  const raw = (matched(a, b) + matched(b, a)) / 2;
+  const range = calibration.kindred - calibration.stranger;
+  if (range <= 0) return 0;
+  const scaled = (raw - calibration.stranger) / range;
+  return Math.round(Math.min(1, Math.max(0, scaled)) * 100);
+}
+
+/**
+ * Measures the two anchors `overlapPercent` rescales between, from an evenly
+ * spaced sample of the corpus.
+ */
+export function calibrate(corpus: Corpus, sampleSize = 64): Calibration {
+  const size = Math.min(sampleSize, corpus.count);
+  if (size < 2) return { stranger: 0, kindred: 1 };
+
+  const sample = Array.from({ length: size }, (_, i) => Math.floor((i * corpus.count) / size));
+  const between: number[] = [];
+  const nearestNeighbour: number[] = [];
+  sample.forEach((work, position) => {
+    const scores = similaritiesTo(corpus, work);
+    let best = -1;
+    for (let i = 0; i < scores.length; i++) if (i !== work && scores[i] > best) best = scores[i];
+    nearestNeighbour.push(best);
+    for (const other of sample.slice(position + 1)) between.push(scores[other]);
+  });
+  return { stranger: median(between), kindred: median(nearestNeighbour) };
+}
+
+function nextDiversePick(
+  corpus: Corpus,
+  candidates: readonly number[],
+  relevance: (index: number) => number,
+  shown: readonly number[],
+  artistOf: (index: number) => string | null,
+): number | null {
+  const shownSet = new Set(shown);
+  const perArtist = new Map<string, number>();
+  for (const index of shown) {
+    const artist = artistOf(index);
+    if (artist !== null) perArtist.set(artist, (perArtist.get(artist) ?? 0) + 1);
+  }
+
+  let best: number | null = null;
+  let bestValue = -Infinity;
+  for (const candidate of candidates) {
+    if (shownSet.has(candidate)) continue;
+    const artist = artistOf(candidate);
+    if (artist !== null && (perArtist.get(artist) ?? 0) >= MAX_PER_ARTIST) continue;
+
+    let sameness = 0;
+    for (const index of shown) sameness = Math.max(sameness, similarity(corpus, candidate, index));
+    const value = RELEVANCE_WEIGHT * relevance(candidate) - (1 - RELEVANCE_WEIGHT) * sameness;
+    if (value > bestValue) {
+      best = candidate;
+      bestValue = value;
+    }
+  }
+  return best;
+}
+
+function pairwiseSimilarities(corpus: Corpus, items: readonly number[]): Float32Array {
+  const n = items.length;
+  const sims = new Float32Array(n * n);
+  for (let a = 0; a < n; a++) {
+    sims[a * n + a] = 1;
+    for (let b = a + 1; b < n; b++) {
+      const value = similarity(corpus, items[a], items[b]);
+      sims[a * n + b] = value;
+      sims[b * n + a] = value;
+    }
+  }
+  return sims;
+}
+
+function assignToCentres(n: number, centres: readonly number[], sim: (a: number, b: number) => number): number[][] {
+  const groups: number[][] = centres.map(() => []);
+  for (let item = 0; item < n; item++) {
+    const own = centres.indexOf(item);
+    const group = own >= 0 ? own : argMax(centres.length, c => sim(centres[c], item));
+    groups[group].push(item);
+  }
+  return groups;
+}
+
+/** Index in [0, length) with the highest value; the earliest wins ties. */
+function argMax(length: number, value: (index: number) => number): number {
+  let best = 0;
+  let bestValue = -Infinity;
+  for (let i = 0; i < length; i++) {
+    const v = value(i);
+    if (v > bestValue) {
+      best = i;
+      bestValue = v;
+    }
+  }
+  return best;
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }

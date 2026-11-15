@@ -1,38 +1,222 @@
-import { describe, it, expect } from 'vitest';
-import { normalize, cosine, taste, blendScore, recommend, diversify, bridge, overlap, publicWork, type Work } from '../src/rec/scoring';
-const w = (id: string, v: number[], artist = id): Work => ({ id, title: id, artist, image_vec: v });
-describe('taste and scoring', () => {
-  it('normalizes and rejects invalid vectors', () => {
-    expect(normalize([3, 4])).toEqual([0.6, 0.8]);
-    expect(() => normalize([0, 0])).toThrow();
-    expect(() => normalize([NaN])).toThrow();
-    expect(() => cosine([1], [1, 2])).toThrow();
+import { describe, expect, it } from 'vitest';
+import {
+  allocateSlots,
+  blendScores,
+  calibrate,
+  findTastes,
+  nearest,
+  overlapPercent,
+  recommend,
+  selectDiverse,
+  similaritiesTo,
+  similarity,
+  topIndices,
+  type Corpus,
+  type Taste,
+} from '../src/rec/scoring';
+
+function corpusOf(rows: number[][]): Corpus {
+  const dim = rows[0].length;
+  const vectors = new Float32Array(rows.length * dim);
+  rows.forEach((row, index) => {
+    const length = Math.hypot(...row);
+    vectors.set(row.map(x => x / length), index * dim);
   });
-  it('keeps distinct interests instead of averaging them away', () => {
-    const t = taste([[1, 0, 0], [.99, .01, 0], [0, 1, 0], [0, 0, 1]]);
-    expect(t).toHaveLength(3);
-    expect(t.reduce((s, c) => s + c.weight, 0)).toBeCloseTo(1);
-    expect(taste([])).toEqual([]);
-    expect(taste([[1, 0], [1, 0]])).toHaveLength(1);
+  return { count: rows.length, dim, vectors };
+}
+
+const noArtist = () => null;
+const single = (medoid: number): Taste => ({ medoid, members: [medoid], weight: 1 });
+
+describe('similarity', () => {
+  const corpus = corpusOf([[1, 0], [0, 1], [1, 1]]);
+
+  it('is the cosine between two works', () => {
+    expect(similarity(corpus, 0, 0)).toBeCloseTo(1);
+    expect(similarity(corpus, 0, 1)).toBeCloseTo(0);
+    expect(similarity(corpus, 0, 2)).toBeCloseTo(Math.SQRT1_2);
   });
-  it('rewards mutual matches, not one-sided ones; symmetric', () => {
-    const a = taste([[1, 0]]), b = taste([[0, 1]]);
-    expect(blendScore([1, 1], a, b)).toBeGreaterThan(blendScore([1, 0], a, b));
-    expect(blendScore([1, 1], a, b)).toEqual(blendScore([1, 1], b, a));
-    expect(overlap(a, a)).toBe(100);
-    expect(overlap(a, [])).toBe(0);
+
+  it('scores the whole corpus against one work', () => {
+    expect([...similaritiesTo(corpus, 0)].map(x => +x.toFixed(3))).toEqual([1, 0, 0.707]);
   });
-  it('round robins interests and excludes hearts and duplicates', () => {
-    const a = w('a', [1, 0]), b = w('b', [.99, .01]), c = w('c', [0, 1]);
-    const result = recommend([[a, b], [a, c]], taste([[1, 0], [0, 1]]), new Set(['a']));
-    expect(result.map(x => x.id)).toEqual(['b', 'c']);
+});
+
+describe('findTastes', () => {
+  it('returns nothing for no hearts', () => {
+    expect(findTastes(corpusOf([[1, 0]]), [])).toEqual([]);
   });
-  it('caps artists, excludes initial selection, strips vectors, selects bridge', () => {
-    const pool = [w('1', [1, 0], 'same'), w('2', [1, .1], 'same'), w('3', [1, .2], 'same'), w('4', [0, 1])];
-    const result = diversify(pool, () => 1, 9);
-    expect(result.filter(x => x.artist === 'same')).toHaveLength(2);
-    expect(diversify(pool, () => 1, 2, [pool[0]]).map(x => x.id)).not.toContain('1');
-    expect(bridge(pool[0], [pool[3], pool[1]])?.id).toBe('2');
-    expect(publicWork(pool[0])).not.toHaveProperty('image_vec');
+
+  it('keeps near-identical hearts as one taste', () => {
+    const corpus = corpusOf([[1, 0, 0], [0.99, 0.05, 0], [0.98, 0, 0.05]]);
+    const tastes = findTastes(corpus, [0, 1, 2]);
+    expect(tastes).toHaveLength(1);
+    expect(tastes[0].weight).toBe(1);
+    expect(tastes[0].members).toHaveLength(3);
+  });
+
+  it('keeps different interests apart and weights them by share of hearts', () => {
+    const corpus = corpusOf([[1, 0, 0], [0.99, 0.05, 0], [0.98, 0, 0.05], [0, 1, 0], [0, 0, 1]]);
+    const tastes = findTastes(corpus, [0, 1, 2, 3, 4]);
+    expect(tastes).toHaveLength(3);
+    expect(tastes[0].weight).toBeCloseTo(0.6);
+    expect([...tastes[0].members].sort()).toEqual([0, 1, 2]);
+    expect(tastes.reduce((sum, taste) => sum + taste.weight, 0)).toBeCloseTo(1);
+  });
+
+  it('represents each taste by one of the hearts, never an average', () => {
+    const corpus = corpusOf([[1, 0], [0, 1], [1, 0.1], [0.1, 1]]);
+    for (const taste of findTastes(corpus, [0, 1, 2, 3])) expect(taste.members).toContain(taste.medoid);
+  });
+
+  it('gives a real second interest a group before a lone stray heart', () => {
+    // Two interests of three hearts each, plus one stray, with room for only two tastes.
+    const corpus = corpusOf([
+      [1, 0, 0], [0.99, 0.1, 0], [0.99, 0, 0.1],
+      [0, 1, 0], [0.1, 0.99, 0], [0, 0.99, 0.1],
+      [0, 0, 1],
+    ]);
+    const tastes = findTastes(corpus, [0, 1, 2, 3, 4, 5, 6], 2);
+    expect(tastes).toHaveLength(2);
+    expect(tastes.map(taste => taste.medoid)).not.toContain(6);
+  });
+
+  it('ignores duplicate hearts and never exceeds the maximum', () => {
+    const corpus = corpusOf([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]);
+    expect(findTastes(corpus, [0, 0, 0])).toHaveLength(1);
+    expect(findTastes(corpus, [0, 1, 2, 3])).toHaveLength(3);
+  });
+});
+
+describe('allocateSlots', () => {
+  it('shares slots by weight and gives every taste at least one', () => {
+    expect(allocateSlots([0.9, 0.05, 0.05], 12)).toEqual([10, 1, 1]);
+    expect(allocateSlots([0.5, 0.3, 0.2], 12)).toEqual([6, 4, 2]);
+    expect(allocateSlots([1], 12)).toEqual([12]);
+  });
+
+  it('always hands out exactly the total', () => {
+    for (const weights of [[1 / 3, 1 / 3, 1 / 3], [0.7, 0.3], [0.34, 0.33, 0.33]]) {
+      expect(allocateSlots(weights, 12).reduce((a, b) => a + b, 0)).toBe(12);
+    }
+  });
+
+  it('handles fewer slots than tastes and empty input', () => {
+    expect(allocateSlots([0.5, 0.3, 0.2], 2)).toEqual([1, 1, 0]);
+    expect(allocateSlots([], 12)).toEqual([]);
+    expect(allocateSlots([1], 0)).toEqual([0]);
+  });
+});
+
+describe('recommend', () => {
+  // Works 0 and 4 are the hearts; 1-3 sit near heart 0, 5-6 near heart 4.
+  const corpus = corpusOf([
+    [1, 0], [0.99, 0.1], [0.98, 0.15], [0.97, 0.2],
+    [0, 1], [0.1, 0.99], [0.15, 0.98],
+  ]);
+  const tastes = findTastes(corpus, [0, 4]);
+
+  it('never recommends a hearted work or repeats one', () => {
+    const picks = recommend(corpus, tastes, { count: 5, exclude: new Set([0, 4]), artistOf: noArtist });
+    const indices = picks.map(pick => pick.index);
+    expect(indices).not.toContain(0);
+    expect(indices).not.toContain(4);
+    expect(new Set(indices).size).toBe(indices.length);
+    expect(indices).toHaveLength(5);
+  });
+
+  it('takes turns between tastes', () => {
+    const picks = recommend(corpus, tastes, { count: 4, exclude: new Set([0, 4]), artistOf: noArtist });
+    expect(picks.map(pick => pick.taste)).toEqual([0, 1, 0, 1]);
+  });
+
+  it('gives the bigger taste more of the wall', () => {
+    const uneven: Taste[] = [
+      { medoid: 0, members: [0], weight: 0.75 },
+      { medoid: 4, members: [4], weight: 0.25 },
+    ];
+    const picks = recommend(corpus, uneven, { count: 4, exclude: new Set([0, 4]), artistOf: noArtist });
+    expect(picks.filter(pick => pick.taste === 0)).toHaveLength(3);
+  });
+
+  it('returns nothing for a person with no tastes', () => {
+    expect(recommend(corpus, [], { count: 12, exclude: new Set(), artistOf: noArtist })).toEqual([]);
+  });
+});
+
+describe('selectDiverse', () => {
+  const corpus = corpusOf([[1, 0], [1, 0.01], [1, 0.02], [0.6, 0.8], [0, 1]]);
+
+  it('caps works per artist but not works with no known artist', () => {
+    const sameArtist = (index: number) => (index < 3 ? 'same' : null);
+    const options = { count: 5, relevance: () => 1 };
+    expect(selectDiverse(corpus, [0, 1, 2, 3, 4], { ...options, artistOf: sameArtist }).filter(i => i < 3)).toHaveLength(2);
+    expect(selectDiverse(corpus, [0, 1, 2, 3, 4], { ...options, artistOf: noArtist })).toHaveLength(5);
+  });
+
+  it('prefers variety between equally relevant works', () => {
+    const picked = selectDiverse(corpus, [1, 2, 4], { count: 1, relevance: () => 1, shown: [0], artistOf: noArtist });
+    expect(picked).toEqual([4]);
+  });
+
+  it('never returns a work that is already shown', () => {
+    const picked = selectDiverse(corpus, [0, 1], { count: 2, relevance: () => 1, shown: [0], artistOf: noArtist });
+    expect(picked).toEqual([1]);
+  });
+});
+
+describe('blend', () => {
+  // A likes work 0, B likes work 1; work 2 sits between them, work 3 is A's alone.
+  const corpus = corpusOf([[1, 0], [0, 1], [1, 1], [0.99, 0.05]]);
+  const a = [single(0)];
+  const b = [single(1)];
+
+  it('scores a shared match above a one-sided one', () => {
+    const scores = blendScores(corpus, a, b);
+    expect(scores[2]).toBeGreaterThan(scores[3]);
+    expect(topIndices(scores, 1, new Set([0, 1]))).toEqual([2]);
+  });
+
+  it('is the same whichever person asks', () => {
+    expect([...blendScores(corpus, a, b)]).toEqual([...blendScores(corpus, b, a)]);
+  });
+
+  it('finds the heart closest to the reveal', () => {
+    expect(nearest(corpus, 3, [1, 0, 2])).toBe(0);
+    expect(nearest(corpus, 3, [])).toBeNull();
+  });
+});
+
+describe('overlapPercent', () => {
+  const corpus = corpusOf([[1, 0], [0, 1], [1, 1], [1, 0.2]]);
+  const calibration = { stranger: 0.2, kindred: 0.9 };
+
+  it('is 100 for identical tastes and 0 for unrelated or missing ones', () => {
+    expect(overlapPercent(corpus, [single(0)], [single(0)], calibration)).toBe(100);
+    expect(overlapPercent(corpus, [single(0)], [single(1)], calibration)).toBe(0);
+    expect(overlapPercent(corpus, [single(0)], [], calibration)).toBe(0);
+  });
+
+  it('rescales between the two anchors and is symmetric', () => {
+    const score = overlapPercent(corpus, [single(0)], [single(2)], calibration);
+    expect(score).toBe(Math.round(((Math.SQRT1_2 - 0.2) / 0.7) * 100));
+    expect(overlapPercent(corpus, [single(2)], [single(0)], calibration)).toBe(score);
+  });
+
+  it('does not divide by zero on a degenerate calibration', () => {
+    expect(overlapPercent(corpus, [single(0)], [single(3)], { stranger: 0.5, kindred: 0.5 })).toBe(0);
+  });
+});
+
+describe('calibrate', () => {
+  it('measures unrelated and nearest-neighbour similarity', () => {
+    const corpus = corpusOf([[1, 0], [1, 0.1], [0, 1], [0.1, 1]]);
+    const { stranger, kindred } = calibrate(corpus);
+    expect(kindred).toBeGreaterThan(0.99);
+    expect(stranger).toBeLessThan(kindred);
+  });
+
+  it('falls back safely on a corpus too small to measure', () => {
+    expect(calibrate(corpusOf([[1, 0]]))).toEqual({ stranger: 0, kindred: 1 });
   });
 });

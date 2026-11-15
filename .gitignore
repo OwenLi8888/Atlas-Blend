@@ -19,3 +19,6 @@ screenshots/
 /*.jpg
 /*.jpeg
 /*.png
+
+# Gallery API: local copy of the art catalog (rebuilt from Typesense)
+server/.cache/
