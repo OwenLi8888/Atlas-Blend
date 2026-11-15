@@ -24,6 +24,33 @@ npm run preview    # serves dist/
 
 `dist/` can be hosted from any folder on any static host (`base` is `./`).
 
+## Photo picks (two people, two devices)
+
+After choosing a painter, each person picks the 5 pictures that speak to them out of 25. Both
+devices open the same link with a different `user`:
+
+```
+http://<your-laptop-ip>:5173/?session=abc123&user=1
+http://<your-laptop-ip>:5173/?session=abc123&user=2
+```
+
+Opening the app without `session` makes a new one and puts it in the address bar. The session id
+seeds a shuffle of the 100 pool photos: user 1 gets the first 25 and user 2 the next 25, so the two
+never see the same picture, and a refresh shows the same 25 with the picks made so far.
+
+- Photos: `public/pool/photos/p001.jpg` to `p100.jpg`, thumbnails in `public/pool/thumbs/`, the index
+  in `public/pool/pool.json`, original file names in `public/pool/pool-map.json`. After changing the
+  photos run `npm run build-pool`.
+- Saved picks: `data/runtime/picks.json`, written by the `/api/picks` endpoint that `npm run dev` and
+  `npm run preview` serve (`server/picksApi.mjs`). A plain static host has no endpoint, so there the
+  picks stay on each device.
+- In code, everything goes through `src/picks/picksStore.ts`: `savePicks`, `getPicks(sessionId, user)`
+  and `getSessionPicks(sessionId)`, which returns both records:
+
+```json
+{ "sessionId": "abc123", "user": 1, "characterId": "ember", "shown": ["p017", "…25 ids"], "picks": ["p042", "p003", "p091", "p066", "p010"], "pickedAt": "2026-11-15T05:48:19.456Z" }
+```
+
 ## Swap a painting
 
 1. Put the image in `public/paintings/`. To shrink a large file to a web-sized JPEG:
