@@ -2,14 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { Artwork } from '../src/rec/api';
 import { buildCatalog } from './catalog';
 import { DEMO_BLEND_CODE, DEMO_NAME, seedDemoProfile } from './demo';
-import { FAMILY_NAMES } from './families';
 import { createMemoryDb } from './memory-db';
 
 /** A catalog holding the three seed artworks, each with a few close neighbours, plus unrelated works. */
 function demoCatalog() {
-  const seeds = ['Japanese folding screens', 'Hard-edge abstraction', 'Indian miniature paintings'].map(
-    name => FAMILY_NAMES.find(family => family.name === name)!.anchor,
-  );
+  const seeds = ['colbase:48465', 'moma:35047', 'cleveland:136959'];
   const works: Artwork[] = [];
   const rows: number[][] = [];
   const add = (id: string, vector: number[]) => {

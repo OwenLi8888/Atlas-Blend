@@ -4,20 +4,20 @@
  * and topped up if any of its hearts are missing.
  *
  * Its taste is three clear leanings, each grown from one artwork by hearting
- * that work's nearest neighbours. Nothing here depends on cluster numbers.
+ * that work's nearest neighbours. Nothing here depends on the visual families,
+ * so reclustering the collection never changes the demo's hearts.
  */
 import { similaritiesTo, topIndices } from '../src/rec/scoring';
 import type { Catalog } from './catalog';
 import type { Db } from './db';
-import { FAMILY_NAMES } from './families';
 
 export const DEMO_NAME = 'Juno';
 /** Enter this on the blend screen. */
 export const DEMO_BLEND_CODE = 'CANVAS';
 
 interface Leaning {
-  /** The family whose typical artwork the leaning grows from. */
-  family: string;
+  /** ID of the artwork the leaning grows from. */
+  seed: string;
   /** How many works to heart: the seed and its nearest neighbours. */
   hearts: number;
   /** The reason given for the seed work, quoted in the blend. */
@@ -25,9 +25,12 @@ interface Leaning {
 }
 
 const LEANINGS: readonly Leaning[] = [
-  { family: 'Japanese folding screens', hearts: 10, why: 'gold that still feels quiet' },
-  { family: 'Hard-edge abstraction', hearts: 7, why: 'nothing wasted' },
-  { family: 'Indian miniature paintings', hearts: 5, why: 'a whole story in one small page' },
+  // Flowers, Birds and Insects of the Four Seasons: a gold folding screen.
+  { seed: 'colbase:48465', hearts: 10, why: 'gold that still feels quiet' },
+  // Hélio Oiticica, Metaesquema No. 179: hard-edge abstraction.
+  { seed: 'moma:35047', hearts: 7, why: 'nothing wasted' },
+  // Pancham Raga: an Indian miniature.
+  { seed: 'cleveland:136959', hearts: 5, why: 'a whole story in one small page' },
 ];
 
 const MAX_HEARTS = 300;
@@ -35,10 +38,9 @@ const MAX_HEARTS = 300;
 export async function seedDemoProfile(db: Db, catalog: Catalog): Promise<void> {
   const wanted = new Map<string, string | undefined>();
   for (const leaning of LEANINGS) {
-    const anchor = FAMILY_NAMES.find(family => family.name === leaning.family)?.anchor;
-    const seed = anchor === undefined ? undefined : catalog.indexOf(anchor);
+    const seed = catalog.indexOf(leaning.seed);
     if (seed === undefined) {
-      console.warn('Demo profile: no artwork found for "' + leaning.family + '", skipping that leaning.');
+      console.warn('Demo profile: artwork ' + leaning.seed + ' is not in the catalog, skipping that leaning.');
       continue;
     }
     // The seed is its own nearest neighbour, so it comes first and carries the reason.

@@ -2,6 +2,7 @@
 import { readFile } from 'node:fs/promises';
 import { createApp } from './app';
 import { buildCatalog, curate } from './catalog';
+import { readFamilies } from './families';
 import { createMemoryDb } from './memory-db';
 import { seedDemoProfile } from './demo';
 
@@ -10,7 +11,7 @@ const manifest = JSON.parse(await readFile(new URL('./.cache/art_v1.json', impor
 const bytes = await readFile(new URL('./.cache/art_v1.f32', import.meta.url));
 const vectors = new Float32Array(bytes.byteLength / 4);
 new Uint8Array(vectors.buffer).set(bytes);
-const catalog = buildCatalog(curate({ works: manifest.works, dim: manifest.dim, vectors }));
+const catalog = buildCatalog(curate({ works: manifest.works, dim: manifest.dim, vectors }, await readFamilies()));
 console.log(JSON.stringify({ catalogMs: performance.now() - start, works: catalog.works.length, dim: catalog.corpus.dim }));
 const db = createMemoryDb();
 await seedDemoProfile(db, catalog);

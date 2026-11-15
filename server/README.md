@@ -18,7 +18,7 @@ With Supabase, run `supabase/migrations/001_blend_result.sql` once in the SQL ed
 
 The API listens on `127.0.0.1:43871`. The screens are at `/gallery.html` on the Vite dev server. Run the normal Vite dev server from the repo root; its `/api` proxy forwards here. For deployment, put a same-origin `/api` reverse proxy in front of it (the Vite proxy only exists in development).
 
-**Startup.** The server loads the whole art catalog into memory before it accepts requests. The first start reads it from Typesense (about 15 seconds) and saves a copy in `server/.cache/` (git-ignored, about 36 MB). Every later start reads that copy in under 2 seconds, and still works if Typesense is unreachable. The copy is rebuilt automatically when works are added or removed, or when works move between visual families (a recluster); delete `server/.cache/` to force a rebuild.
+**Startup.** The server loads the whole art catalog into memory before it accepts requests. The first start reads it from Typesense (about 15 seconds) and saves a copy in `server/.cache/` (git-ignored, about 36 MB). Every later start reads that copy in under 2 seconds, and still works if Typesense is unreachable. The copy is rebuilt automatically when works are added or removed, or when the families stored in Typesense change; delete `server/.cache/` to force a rebuild.
 
 ## How it works
 
@@ -27,7 +27,9 @@ The API listens on `127.0.0.1:43871`. The screens are at `/gallery.html` on the 
 | `../src/rec/api.ts` | Request and response types, shared with the frontend |
 | `../src/rec/scoring.ts` | Taste, recommendation and blend maths (pure functions, no I/O) |
 | `catalog.ts` | Loads the catalog from Typesense or the local cache; trims and names it; picks the onboarding tiles |
-| `families.ts` | Display names for the 30 visual families |
+| `families.ts` | The visual families: assigning works to them and their display names |
+| `families.json` | Which works make up each family (written by `npm run recluster`) |
+| `recluster.ts` | Regroups the works into families |
 | `db.ts` | Profiles, hearts and blends in Supabase |
 | `memory-db.ts` | The same contract in memory, for tests and `dev:local` |
 | `commission.ts` | Makes the new piece for each blend in the background |
@@ -38,9 +40,11 @@ The API listens on `127.0.0.1:43871`. The screens are at `/gallery.html` on the 
 | `demo.ts` | The ready-made demo profile |
 | `app.ts` | The routes |
 
-At 6,674 works the collection is about 30 MB of vectors, so every request is scored exactly against all of it in memory. A recommendation wall takes about 0.1 s and a blend about 0.2 s. Typesense is only used to fill the cache.
+At 6,757 works the collection is about 30 MB of vectors, so every request is scored exactly against all of it in memory. A recommendation wall takes about 0.1 s and a blend about 0.2 s. Typesense is only used to fill the cache.
 
-**Curation.** Monochrome works on paper (pencil, ink, etching and the like, about one work in six) are left out when the catalog loads, because they read as pale sketches on a wall of paintings. The cache keeps the full collection, so the rule in `catalog.ts` can change without refetching. Each visual family gets its display name from `families.ts`, where every name is tied to one typical artwork, not to a cluster number, so a recluster cannot attach a name to the wrong family.
+**Curation.** Monochrome works on paper (pencil, ink, etching and the like, about one work in six) are left out when the catalog loads, because they read as pale sketches on a wall of paintings. So are all but two of the 45 carriage design drawings: alike as they are, together they formed a family of their own and took an onboarding tile. The cache keeps the full collection, so the rule in `catalog.ts` can change without refetching.
+
+**Visual families.** The works on the walls are grouped into 31 families. They drive the onboarding tiles (one typical work per family), the order of Explore (families take turns) and the family names in leanings and the closer look; recommendations, blends and the curator do not use them. The groups are made by `npm run recluster` and saved in `families.json`, so they are reviewed and committed like code. The script runs k-means on the image vectors after subtracting the collection average (without that, every family average looks about 95% alike, and large groups swallow small ones). It then merges families whose averages are at least 0.78 alike, unless the merged family would hold more than 7% of the collection. Works added since the last recluster join the family they are most like when the server starts. Each name in `families.ts` is tied to one typical artwork, not to a family number, so a recluster cannot attach a name to the wrong family; the script lists any family left without a name. A work that hardly resembles its family (under 0.25 likeness to the family's average, about 1% of works, such as a Belle Époque poster among prints) stays in the family but is shown without its name.
 
 **Taste.** A person's newest 300 hearts are grouped into at most three tastes. Each taste is represented by the heart at its centre (its medoid), not by an average: averaged vectors drift toward the middle of the whole collection, which made any two people look about 93% alike. Hearts with similarity of 0.77 or more count as the same taste.
 

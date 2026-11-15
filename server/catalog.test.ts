@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { Artwork } from '../src/rec/api';
 import { curate, loadCatalog } from './catalog';
-import { FAMILY_NAMES } from './families';
+import { assignFamilies, FAMILY_NAMES, parseFamilies, readFamilies, type Families } from './families';
 
 function work(id: string, cluster_id: number, medium: string | null): Artwork {
   return {
@@ -21,9 +21,9 @@ function work(id: string, cluster_id: number, medium: string | null): Artwork {
   };
 }
 
-function curated(works: Artwork[]) {
+function curated(works: Artwork[], families: Families = []) {
   const vectors = Float32Array.from(works.flatMap((_, index) => [index, 1]));
-  return curate({ works, dim: 2, vectors });
+  return curate({ works, dim: 2, vectors }, families);
 }
 
 describe('curate', () => {
@@ -39,21 +39,87 @@ describe('curate', () => {
     expect(result.works.map(w => w.id)).toEqual(['oil', 'tinted', 'print', 'unknown']);
   });
 
+  it('keeps two of the carriage design drawings and leaves out the rest', () => {
+    const carriage = (id: string) => ({ ...work(id, 0, 'Pen and black ink, watercolor and gouache'), artist: 'Brewster & Co.' });
+    const result = curated([carriage('met:378555'), carriage('met:378295'), carriage('met:378491'), work('oil', 0, 'Oil on canvas')]);
+    expect(result.works.map(w => w.id)).toEqual(['met:378555', 'met:378491', 'oil']);
+  });
+
   it('keeps each kept work paired with its own vector', () => {
     const result = curated([work('a', 0, 'chalk'), work('b', 0, 'Oil on canvas'), work('c', 0, 'ink on paper'), work('d', 0, null)]);
     expect([...result.vectors]).toEqual([1, 1, 3, 1]);
   });
 
-  it('names a family after its anchor artwork, whatever number the family has', () => {
-    const { anchor, name } = FAMILY_NAMES[0];
-    const result = curated([work(anchor, 41, 'Oil on canvas'), work('sibling', 41, null), work('other', 7, null)]);
-    expect(result.works.find(w => w.id === 'sibling')?.cluster).toBe(name);
-    expect(result.works.find(w => w.id === 'other')?.cluster).toBe('stored name 7');
+  it('keeps the stored families when none of the listed works is in the collection', () => {
+    const result = curated([work('a', 4, null)], [['elsewhere']]);
+    expect(result.works[0]).toMatchObject({ cluster: 'stored name 4', cluster_id: 4 });
+  });
+});
+
+describe('assignFamilies', () => {
+  /** Two tight groups along two axes. Vectors are centred before comparing, so each group sits on its own side. */
+  function grouped(extra: { id: string; vector: [number, number] }[] = []) {
+    const entries: { id: string; vector: [number, number] }[] = [
+      { id: 'red-1', vector: [1, 0.05] },
+      { id: 'red-2', vector: [1, -0.05] },
+      { id: 'blue-1', vector: [0.05, 1] },
+      { id: 'blue-2', vector: [-0.05, 1] },
+      ...extra,
+    ];
+    const works = entries.map(entry => work(entry.id, 99, null));
+    const vectors = Float32Array.from(entries.flatMap(entry => {
+      const length = Math.hypot(...entry.vector);
+      return entry.vector.map(x => x / length);
+    }));
+    return { works, dim: 2, vectors };
+  }
+  const families: Families = [['blue-1', 'blue-2'], ['red-1', 'red-2']];
+  const names = [
+    { anchor: 'red-2', name: 'Reds' },
+    { anchor: 'blue-1', name: 'Blues' },
+  ];
+
+  it('puts each listed work in its family and names the family after its anchor, whatever its position', () => {
+    const result = assignFamilies(grouped(), families, names);
+    expect(result.works.map(w => [w.id, w.cluster_id, w.cluster])).toEqual([
+      ['red-1', 1, 'Reds'],
+      ['red-2', 1, 'Reds'],
+      ['blue-1', 0, 'Blues'],
+      ['blue-2', 0, 'Blues'],
+    ]);
   });
 
-  it('gives every family a different name', () => {
+  it('puts a work added since the last recluster in the family it is most like', () => {
+    const result = assignFamilies(grouped([{ id: 'new-red', vector: [0.9, 0.1] }]), families, names);
+    expect(result.works.find(w => w.id === 'new-red')).toMatchObject({ cluster_id: 1, cluster: 'Reds' });
+  });
+
+  it('keeps a work that hardly resembles its family in it, but without the name', () => {
+    // Halfway between the groups: closer to neither average than the threshold allows.
+    const result = assignFamilies(grouped([{ id: 'between', vector: [1, 1] }]), [['blue-1', 'blue-2'], ['red-1', 'red-2', 'between']], names);
+    expect(result.works.find(w => w.id === 'between')).toMatchObject({ cluster_id: 1, cluster: '' });
+    expect(result.works.find(w => w.id === 'red-1')?.cluster).toBe('Reds');
+  });
+
+  it('leaves the vectors untouched', () => {
+    const data = grouped();
+    expect(assignFamilies(data, families, names).vectors).toBe(data.vectors);
+  });
+});
+
+describe('families.json', () => {
+  it('rejects a work listed in two families', () => {
+    expect(() => parseFamilies({ families: [['a', 'b'], ['b']] })).toThrow('more than one family');
+    expect(() => parseFamilies({ families: [] })).toThrow('no families');
+  });
+
+  it('gives every family exactly one name, and every name a different family', async () => {
+    const families = await readFamilies();
+    const familyOf = new Map(families.flatMap((members, family) => members.map(id => [id, family] as const)));
+    const named = FAMILY_NAMES.map(({ anchor }) => familyOf.get(anchor));
+    expect(named.every(family => family !== undefined)).toBe(true);
+    expect(new Set(named).size).toBe(families.length);
     expect(new Set(FAMILY_NAMES.map(family => family.name)).size).toBe(FAMILY_NAMES.length);
-    expect(new Set(FAMILY_NAMES.map(family => family.anchor)).size).toBe(FAMILY_NAMES.length);
   });
 });
 

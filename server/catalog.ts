@@ -1,7 +1,7 @@
 /**
  * The art catalog, held in memory.
  *
- * At 6,674 works the whole collection is about 30 MB of vectors, so every
+ * At 6,727 works the whole collection is about 31 MB of vectors, so every
  * recommendation and blend is scored exactly against all of it in well under
  * 100 ms. Typesense is only read once, to fill a local cache file; after that
  * the server starts from disk and keeps working if Typesense is unreachable.
@@ -9,7 +9,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Artwork } from '../src/rec/api';
-import { FAMILY_NAMES } from './families';
+import { assignFamilies, readFamilies, type Families } from './families';
 import {
   calibrate,
   similarity,
@@ -57,6 +57,15 @@ const MAX_ONBOARDING_TILES = 24;
 const MIN_FAMILY_SHARE = 0.015;
 
 export async function loadCatalog(source: CatalogSource): Promise<Catalog> {
+  const [data, families] = await Promise.all([loadCatalogData(source), readFamilies()]);
+  return buildCatalog(curate(data, families));
+}
+
+/**
+ * The whole collection as stored, before curation: from the local cache while
+ * the collection is unchanged, otherwise freshly from Typesense.
+ */
+export async function loadCatalogData(source: CatalogSource): Promise<CatalogData> {
   const cached = await readCache(source);
   let live: Fingerprint | null = null;
   try {
@@ -67,18 +76,18 @@ export async function loadCatalog(source: CatalogSource): Promise<Catalog> {
   }
 
   // The cache is reused only while the collection is unchanged. Works being
-  // added or the families being reassigned both change the fingerprint.
-  if (cached && (live === null || live === cached.fingerprint)) return buildCatalog(curate(cached.data));
+  // added or the stored families being reassigned both change the fingerprint.
+  if (cached && (live === null || live === cached.fingerprint)) return cached.data;
 
   try {
     const fresh = await fetchAll(source);
     await writeCache(source, fresh, live ?? fingerprintOf(fresh.works));
-    return buildCatalog(curate(fresh));
+    return fresh;
   } catch (error) {
     if (!cached) throw error;
     // A changed fingerprint is not proof that every export page is reachable.
     console.warn('Catalog refresh failed, using cached catalog: ' + describe(error));
-    return buildCatalog(curate(cached.data));
+    return cached.data;
   }
 }
 
@@ -90,32 +99,44 @@ const COLOUR_MEDIUM =
   /\b(oil|watercolou?r|gouache|tempera|acrylic|pastel|colou?r|gold|polychrome|nishiki|enamel|fresco|encaustic|synthetic polymer|screenprint|silkscreen|pigment)|錦絵/i;
 
 /**
- * Shapes the raw collection for the gallery: leaves out monochrome works on
- * paper (about one in six), which read as pale sketches on a wall of paintings,
- * and gives each visual family its display name. The cache keeps everything, so
- * this can change without refetching.
+ * The carriage maker Brewster & Co.'s design drawings, plus one periodical
+ * engraving of a cart. There are 45, all alike: together they form a visual
+ * family of their own and take an onboarding tile from real painting. These
+ * two stay, as a curiosity among the watercolours.
  */
-export function curate(data: CatalogData): CatalogData {
+const CARRIAGE_DESIGNS_KEPT: ReadonlySet<string> = new Set([
+  'met:378555', // Roof Seat Break #4147: red and black
+  'met:378491', // Victoria #4032: green on mint paper
+]);
+const isCarriageDesign = (work: Artwork) => work.artist.startsWith('Brewster & Co.') || work.id === 'met:379998';
+
+/**
+ * Whether a work belongs on the walls. Monochrome works on paper read as pale
+ * sketches among paintings, and only two of the carriage designs are kept.
+ */
+export function isShown(work: Artwork): boolean {
+  if (isCarriageDesign(work) && !CARRIAGE_DESIGNS_KEPT.has(work.id)) return false;
+  return work.medium === null || !MONOCHROME_MEDIUM.test(work.medium) || COLOUR_MEDIUM.test(work.medium);
+}
+
+/**
+ * Shapes the raw collection for the gallery: leaves out monochrome works on
+ * paper (about one in six) and most carriage designs, and puts every work in
+ * its visual family. The cache
+ * keeps everything, so this can change without refetching.
+ */
+export function curate(data: CatalogData, families: Families): CatalogData {
   const kept: number[] = [];
   data.works.forEach((work, index) => {
-    const monochrome = work.medium !== null && MONOCHROME_MEDIUM.test(work.medium) && !COLOUR_MEDIUM.test(work.medium);
-    if (!monochrome) kept.push(index);
+    if (isShown(work)) kept.push(index);
   });
-
-  const familyOf = new Map(data.works.map(work => [work.id, work.cluster_id]));
-  const names = new Map<number, string>();
-  for (const { anchor, name } of FAMILY_NAMES) {
-    const family = familyOf.get(anchor);
-    if (family !== undefined && !names.has(family)) names.set(family, name);
-  }
 
   const vectors = new Float32Array(kept.length * data.dim);
   const works = kept.map((index, row) => {
     vectors.set(data.vectors.subarray(index * data.dim, (index + 1) * data.dim), row * data.dim);
-    const work = data.works[index];
-    return { ...work, cluster: names.get(work.cluster_id) ?? work.cluster };
+    return data.works[index];
   });
-  return { works, dim: data.dim, vectors };
+  return assignFamilies({ works, dim: data.dim, vectors }, families);
 }
 
 export function buildCatalog(data: CatalogData): Catalog {

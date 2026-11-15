@@ -101,6 +101,10 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
   const artistKeys = works.map(artistKey);
   const artistOf = (index: number) => artistKeys[index];
   const onboardingWorks = catalog.onboarding.map(index => works[index]);
+  // A family's name, from any member that carries it: a work that hardly
+  // resembles its family is shown without the name but still counts as a member.
+  const familyNames = new Map<number, string>();
+  for (const work of works) if (work.cluster && !familyNames.has(work.cluster_id)) familyNames.set(work.cluster_id, work.cluster);
 
   async function requireProfile(id: string): Promise<Profile> {
     const profile = await db.findProfile(id);
@@ -129,7 +133,7 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
         .sort((a, b) => b.score - a.score || a.member - b.member)
         .map(entry => entry.member);
       return {
-        family: commonFamily(taste.members.map(member => works[member].cluster), works[taste.medoid].cluster),
+        family: familyNames.get(commonFamily(taste.members.map(member => works[member].cluster_id), works[taste.medoid].cluster_id)) ?? '',
         share: taste.weight,
         why: taste.members.map(member => reasons.get(member)).find(why => why) ?? null,
         workIds: [taste.medoid, ...others].slice(0, TREND_EXAMPLES).map(index => works[index].id),
@@ -591,10 +595,10 @@ export function blendStory(reveal: Artwork, mine: readonly Trend[], theirs: read
 }
 
 /** Family names that start with a proper adjective keep their capital mid-sentence. */
-const PROPER_START = /^(Japanese|Indian|Barbizon|Italianate|Cubist|Romantic|Impressionist|Baroque)\b/;
+const PROPER_START = /^(Japanese|Indian|Barbizon|Italianate|Cubism|Fauve|Romantic|Impressionist|Baroque)\b/;
 
 function listFamilies(trends: readonly Trend[]): string {
-  const names = [...new Set(trends.map(trend => trend.family))].map(name =>
+  const names = [...new Set(trends.map(trend => trend.family).filter(Boolean))].map(name =>
     PROPER_START.test(name) ? name : name.charAt(0).toLowerCase() + name.slice(1),
   );
   if (names.length <= 1) return names[0] ?? 'a little of everything';
@@ -602,8 +606,8 @@ function listFamilies(trends: readonly Trend[]): string {
 }
 
 /** The family most of a group belongs to; on a tie, the family of its central work. */
-function commonFamily(families: readonly string[], central: string): string {
-  const counts = new Map<string, number>();
+function commonFamily(families: readonly number[], central: number): number {
+  const counts = new Map<number, number>();
   for (const family of families) counts.set(family, (counts.get(family) ?? 0) + 1);
   const most = Math.max(...counts.values());
   return counts.get(central) === most ? central : [...counts].find(([, count]) => count === most)![0];

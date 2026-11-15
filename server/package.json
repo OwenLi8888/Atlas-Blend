@@ -9,7 +9,8 @@
     "dev:local": "GALLERY_DB=memory tsx watch --env-file=.env index.ts",
     "start": "tsx --env-file=.env index.ts",
     "typecheck": "tsc --noEmit",
-    "smoke": "tsx --env-file=.env smoke.ts"
+    "smoke": "tsx --env-file=.env smoke.ts",
+    "recluster": "tsx --env-file=.env recluster.ts"
   },
   "keywords": [],
   "author": "",
