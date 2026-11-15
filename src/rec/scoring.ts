@@ -203,6 +203,7 @@ export function recommend(
   // The hearts at the centre of each taste count as already on the wall, so
   // picks are pushed away from them as well as from each other.
   const shown: number[] = tastes.map(taste => taste.medoid);
+  const diversity = new Map<number, { seen: number; max: number }>();
   let progressed = true;
   while (picks.length < count && progressed) {
     progressed = false;
@@ -210,7 +211,7 @@ export function recommend(
       if (remaining[t] === 0) continue;
       const { scores, candidates } = sources[t];
       const relevance = (i: number) => Math.min(scores[i], NEAR_COPY_SIMILARITY);
-      const index = nextDiversePick(corpus, candidates, relevance, shown, artistOf);
+      const index = nextDiversePick(corpus, candidates, relevance, shown, artistOf, diversity);
       if (index === null) {
         remaining[t] = 0;
         continue;
@@ -271,8 +272,9 @@ export function selectDiverse(
 ): number[] {
   const shown = [...(options.shown ?? [])];
   const picked: number[] = [];
+  const diversity = new Map<number, { seen: number; max: number }>();
   while (picked.length < options.count) {
-    const index = nextDiversePick(corpus, candidates, options.relevance, shown, options.artistOf);
+    const index = nextDiversePick(corpus, candidates, options.relevance, shown, options.artistOf, diversity);
     if (index === null) break;
     shown.push(index);
     picked.push(index);
@@ -282,10 +284,34 @@ export function selectDiverse(
 
 /** Indices of the `k` highest scores, best first, skipping `exclude`. */
 export function topIndices(scores: Float32Array, k: number, exclude: ReadonlySet<number> = new Set()): number[] {
-  const indices: number[] = [];
-  for (let i = 0; i < scores.length; i++) if (!exclude.has(i)) indices.push(i);
-  indices.sort((a, b) => scores[b] - scores[a] || a - b);
-  return indices.slice(0, k);
+  if (k <= 0) return [];
+  // Keep only k entries. The root is the worst retained score (later ID loses ties).
+  const heap: number[] = [];
+  const worse = (a: number, b: number) => scores[a] < scores[b] || (scores[a] === scores[b] && a > b);
+  for (let i = 0; i < scores.length; i++) {
+    if (exclude.has(i)) continue;
+    if (heap.length < k) {
+      heap.push(i);
+      let child = heap.length - 1;
+      while (child > 0) {
+        const parent = (child - 1) >> 1;
+        if (!worse(heap[child], heap[parent])) break;
+        [heap[child], heap[parent]] = [heap[parent], heap[child]];
+        child = parent;
+      }
+    } else if (worse(heap[0], i)) {
+      heap[0] = i;
+      let parent = 0;
+      while (parent * 2 + 1 < heap.length) {
+        let child = parent * 2 + 1;
+        if (child + 1 < heap.length && worse(heap[child + 1], heap[child])) child++;
+        if (!worse(heap[child], heap[parent])) break;
+        [heap[child], heap[parent]] = [heap[parent], heap[child]];
+        parent = child;
+      }
+    }
+  }
+  return heap.sort((a, b) => scores[b] - scores[a] || a - b);
 }
 
 /** The work among `among` most similar to `target`, or null when `among` is empty. */
@@ -345,6 +371,7 @@ function nextDiversePick(
   relevance: (index: number) => number,
   shown: readonly number[],
   artistOf: (index: number) => string | null,
+  diversity: Map<number, { seen: number; max: number }>,
 ): number | null {
   const shownSet = new Set(shown);
   const perArtist = new Map<string, number>();
@@ -360,8 +387,13 @@ function nextDiversePick(
     const artist = artistOf(candidate);
     if (artist !== null && (perArtist.get(artist) ?? 0) >= MAX_PER_ARTIST) continue;
 
-    let sameness = 0;
-    for (const index of shown) sameness = Math.max(sameness, similarity(corpus, candidate, index));
+    // shown only grows during a selection; each candidate/pick pair is evaluated once.
+    const state = diversity.get(candidate) ?? { seen: 0, max: 0 };
+    for (; state.seen < shown.length; state.seen++) {
+      state.max = Math.max(state.max, similarity(corpus, candidate, shown[state.seen]));
+    }
+    diversity.set(candidate, state);
+    const sameness = state.max;
     const value = RELEVANCE_WEIGHT * relevance(candidate) - (1 - RELEVANCE_WEIGHT) * sameness;
     if (value > bestValue) {
       best = candidate;

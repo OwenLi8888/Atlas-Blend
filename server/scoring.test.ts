@@ -249,3 +249,13 @@ describe('calibrate', () => {
     expect(calibrate(corpusOf([[1, 0]]))).toEqual({ stranger: 0, kindred: 1 });
   });
 });
+
+// Ranking ties and exclusions must be identical to the former full-sort selection.
+describe('bounded top-k', () => {
+  it('matches a full sort across ties, exclusions and boundary sizes', () => {
+    const scores = Float32Array.from({ length: 6674 }, (_, i) => Math.sin(i * 17) > 0 ? i % 13 : -i % 19);
+    const exclude = new Set([0, 7, 44, 100]);
+    const sorted = [...scores.keys()].filter(i => !exclude.has(i)).sort((a,b) => scores[b] - scores[a] || a-b);
+    for (const k of [0, 1, 20, 200, 7000]) expect(topIndices(scores, k, exclude)).toEqual(sorted.slice(0,k));
+  });
+});
