@@ -109,7 +109,7 @@
   position: relative;
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 30rem;
+  max-width: 24.5rem; /* two even lines for the question, and the bubble hugs them */
   display: grid;
   gap: 4px;
   padding: clamp(12px, 2.6vw, 18px) clamp(14px, 3vw, 22px);
@@ -140,6 +140,7 @@
 .speech h1 {
   font-size: clamp(1.3rem, 4.6vw, 1.9rem);
   line-height: 1.12;
+  text-wrap: balance;
 }
 
 @keyframes speech-in {
