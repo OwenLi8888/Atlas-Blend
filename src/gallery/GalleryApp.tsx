@@ -8,7 +8,9 @@ import { Onboarding } from './Onboarding';
 import { painterOf } from './painter';
 import { ProfileMenu } from './ProfileMenu';
 import { Settings } from './Settings';
-import { forgetUserId, rememberedUserId, rememberUserId } from './session';
+import { forgetUserId, newUserId, rememberedUserId, rememberUserId } from './session';
+import { canOpenStudio } from './PaintStudio';
+import { StudioEntrance, type StudioChoice } from './StudioEntrance';
 
 type Route =
   | { page: 'for-you' }
@@ -43,6 +45,18 @@ export function GalleryApp() {
   const [route, setRoute] = useState<Route>(routeFromHash);
   /** The blend made a moment ago, kept so it can be revealed without asking the server again. */
   const [freshBlend, setFreshBlend] = useState<BlendResponse | null>(null);
+  /**
+   * A first visit, when the browser can draw the studio: the works first, then the painted studio,
+   * where the painter and name are chosen and the visitor is signed up. Null: no studio (WebGL2
+   * missing), so the works screen asks for everything itself, as before.
+   */
+  const [firstVisit, setFirstVisit] = useState<{ step: 'works' | 'studio'; picks: string[]; choice: StudioChoice | null } | null>(() =>
+    canOpenStudio() ? { step: 'works', picks: [], choice: null } : null,
+  );
+  /** The ID a first visit signs up with, kept across attempts so trying again never makes a second profile. */
+  const [signUpId] = useState(newUserId);
+  const [signingUp, setSigningUp] = useState(false);
+  const [signUpError, setSignUpError] = useState<string | null>(null);
   /** Shows a new choice of painter at once, in the bar and everywhere else; Settings saves it to the profile. */
   const showPainter = useCallback((painter: ChosenPainter) => {
     setSession(current =>
@@ -159,7 +173,46 @@ export function GalleryApp() {
         </main>
       )}
 
-      {session.state === 'ready' && !hasGallery && <Onboarding profile={profile} onDone={enter} />}
+      {/* A first visit: the works, then the painted studio, where the painter and name are chosen and the profile is made. */}
+      {session.state === 'ready' && !hasGallery && !profile && firstVisit?.step === 'studio' && (
+        <StudioEntrance
+          initial={firstVisit.choice}
+          busy={signingUp}
+          error={signUpError}
+          onBack={sofar => {
+            setSignUpError(null);
+            setFirstVisit(visit => visit && { ...visit, step: 'works', choice: sofar ?? visit.choice });
+          }}
+          onEnter={async choice => {
+            const picks = firstVisit.picks;
+            setFirstVisit(visit => visit && { ...visit, choice });
+            setSigningUp(true);
+            setSignUpError(null);
+            try {
+              enter(await api.createProfile(signUpId, choice.name || 'Guest', picks, choice.painter.id));
+            } catch (failure) {
+              setSignUpError(failure instanceof ApiFailure ? failure.message : 'Something went wrong.');
+            } finally {
+              setSigningUp(false);
+            }
+          }}
+        />
+      )}
+      {session.state === 'ready' && !hasGallery && (profile || firstVisit?.step !== 'studio') && (
+        <Onboarding
+          profile={profile}
+          onDone={enter}
+          initialPicks={profile ? undefined : firstVisit?.picks}
+          onChosen={
+            !profile && firstVisit
+              ? picks => {
+                  setFirstVisit(visit => visit && { ...visit, step: 'studio', picks });
+                  window.scrollTo({ top: 0 });
+                }
+              : undefined
+          }
+        />
+      )}
 
       {session.state === 'ready' && hasGallery && profile && (
         <>
