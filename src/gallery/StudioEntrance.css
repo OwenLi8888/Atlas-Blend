@@ -73,9 +73,9 @@
 .studio-entrance-painter {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 36px;
-  padding: 0 13px 0 9px;
+  gap: 8px;
+  min-height: 42px;
+  padding: 3px 13px 3px 4px;
   border: 1px solid var(--line);
   border-radius: 2px;
   background: transparent;
@@ -90,12 +90,13 @@
   box-shadow: inset 0 0 0 1px var(--ink);
 }
 
-.studio-entrance-dot {
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  background: var(--paint);
-  box-shadow: inset 0 0 0 1px rgba(31, 26, 20, 0.25);
+.studio-entrance-back {
+  justify-self: start;
+  margin-bottom: 6px;
+}
+
+.studio-entrance-error {
+  color: var(--heart);
 }
 
 .studio-entrance-note {

@@ -1,7 +1,8 @@
 import './StudioEntrance.css';
 import { useEffect, useRef, useState } from 'react';
 import type { StudioScene } from '../scene/studioScene';
-import { MAX_PAINTER_NAME_LENGTH, PAINTERS, type Painter } from './painter';
+import { PainterFace } from './PainterFace';
+import { PAINTERS, type Painter } from './painter';
 
 /** What the visitor brings from the studio into the entrance: their painter and their own name. */
 export interface StudioChoice {
@@ -10,9 +11,16 @@ export interface StudioChoice {
 }
 
 interface Props {
-  /** Chosen before (coming back from the entrance), so the studio opens with it selected. */
+  /** Chosen before, so the studio opens with it selected. */
   initial: StudioChoice | null;
+  /** Signs the visitor up with this painter and name (and the works they chose before). */
   onEnter: (choice: StudioChoice) => void;
+  /** Back to the works, to change what was chosen. Keeps the painter and name chosen so far. */
+  onBack: (sofar: StudioChoice | null) => void;
+  /** The sign-up is under way. */
+  busy: boolean;
+  /** Why the last sign-up failed, if it did. */
+  error: string | null;
 }
 
 /** How much each painter waves its little hands, and a line about it. */
@@ -39,11 +47,11 @@ const cast = PAINTERS.map(({ id, color, art = id }) => ({
 const WIDE = '(min-width: 900px) and (min-aspect-ratio: 1/1)';
 
 /**
- * The way in, before the works: the painted studio builds itself around the visitor, the six
- * painters sit on the palette, and the visitor picks one (in the scene or by name) and says who
- * they are. That painter is theirs from then on: it paints their blends.
+ * The second step of a first visit, after the works: the painted studio builds itself around the
+ * visitor, the six painters sit on the palette, and the visitor picks one (in the scene or by
+ * name) and says who they are. That painter is theirs from then on: it paints their blends.
  */
-export function StudioEntrance({ initial, onEnter }: Props) {
+export function StudioEntrance({ initial, onEnter, onBack, busy, error }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<StudioScene | null>(null);
@@ -90,7 +98,7 @@ export function StudioEntrance({ initial, onEnter }: Props) {
   }, [painterId]);
 
   const enter = () => {
-    if (painter) onEnter({ painter, name: name.trim() });
+    if (painter && !busy) onEnter({ painter, name: name.trim() });
   };
 
   return (
@@ -98,7 +106,9 @@ export function StudioEntrance({ initial, onEnter }: Props) {
       <canvas ref={canvasRef} className="studio-entrance-scene" aria-hidden="true" />
       <div ref={panelRef} className="studio-entrance-panel">
         <header className="studio-entrance-head">
-          <p className="eyebrow">Atlas Blend</p>
+          <button type="button" className="text-link studio-entrance-back" onClick={() => onBack(painter && { painter, name: name.trim() })}>
+            ← Back to the works
+          </button>
           <h1>Choose your painter</h1>
           <p className="studio-entrance-lede">Tap one on the palette. It will paint what you and a friend love.</p>
         </header>
@@ -121,13 +131,15 @@ export function StudioEntrance({ initial, onEnter }: Props) {
                 style={{ ['--paint' as string]: p.color }}
                 onClick={() => setPainterId(p.id)}
               >
-                <span className="studio-entrance-dot" aria-hidden="true" />
+                <PainterFace painter={p} size={34} />
                 {p.name}
               </button>
             ))}
           </div>
           <p className="studio-entrance-note" aria-live="polite">
-            {painter ? (
+            {error ? (
+              <span className="studio-entrance-error">{error}</span>
+            ) : painter ? (
               <>
                 <em>{painter.name}</em> · {CHARACTER[painter.id]?.blurb}
               </>
@@ -141,15 +153,15 @@ export function StudioEntrance({ initial, onEnter }: Props) {
               <input
                 type="text"
                 value={name}
-                maxLength={Math.max(MAX_NAME_LENGTH, MAX_PAINTER_NAME_LENGTH)}
+                maxLength={MAX_NAME_LENGTH}
                 placeholder="Your name"
                 autoComplete="given-name"
                 enterKeyHint="go"
                 onChange={event => setName(event.target.value)}
               />
             </label>
-            <button type="submit" className="button" disabled={!painter}>
-              Into the gallery
+            <button type="submit" className="button" disabled={!painter || busy}>
+              {busy ? 'Opening…' : 'Open my gallery'}
             </button>
           </div>
         </form>

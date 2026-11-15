@@ -64,7 +64,7 @@ export function ProfileMenu({ name, painter, onSettings }: Props) {
         aria-current={onSettings ? 'page' : undefined}
         onClick={() => setOpen(was => !was)}
       >
-        <PainterFace painter={painter} size={28} />
+        <PainterFace painter={painter} size={38} />
       </button>
       {open && (
         <div className="profile-dropdown" id={menuId} role="menu" aria-label="Your profile">

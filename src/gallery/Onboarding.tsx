@@ -6,36 +6,38 @@ import { defaultPainter, type Painter } from './painter';
 import { PainterPicker } from './PainterPicker';
 import { Salon } from './Salon';
 import { newUserId } from './session';
-import type { StudioChoice } from './StudioEntrance';
 
 interface Props {
   /** Set when someone with a profile has no hearts left and is choosing again. */
   profile: Profile | null;
   /** Called with the profile and the hearts just saved for it. */
   onDone: (entered: ProfileResponse) => void;
-  /** The painter and name chosen in the studio, when the visitor came through it. */
-  chosen?: StudioChoice | null;
-  /** Back to the studio, to choose another painter. */
-  onBack?: () => void;
+  /**
+   * A first visit that goes on to the studio: the works chosen here are handed on, and the painter
+   * and name are asked for there, so this screen asks for neither and signs nobody up.
+   */
+  onChosen?: (picks: string[]) => void;
+  /** The works chosen before (coming back from the studio). */
+  initialPicks?: readonly string[];
 }
 
 const MAX_NAME_LENGTH = 80;
 
 /** The entrance: a spread of very different works. Choosing a few is the whole sign-up. */
-export function Onboarding({ profile, onDone, chosen: fromStudio = null, onBack }: Props) {
+export function Onboarding({ profile, onDone, onChosen, initialPicks = [] }: Props) {
   const [works, setWorks] = useState<Artwork[] | null>(null);
   /** Why the works could not be fetched; null while they are on their way and once they are here. */
   const [unreachable, setUnreachable] = useState<string | null>(null);
   /** How many times the works have been asked for again. */
   const [retries, setRetries] = useState(0);
   const [minPicks, setMinPicks] = useState(3);
-  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
-  const [name, setName] = useState(fromStudio?.name ?? '');
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set(initialPicks));
+  const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** The ID this visit signs up with, kept across attempts so trying again never makes a second profile. */
   const [signUpId] = useState(newUserId);
-  const [chosenPainter, setChosenPainter] = useState<Painter | null>(fromStudio?.painter ?? null);
+  const [chosenPainter, setChosenPainter] = useState<Painter | null>(null);
   /** Until one is chosen, the painter this ID would be given anyway. Either way it is saved with the profile. */
   const painter = chosenPainter ?? defaultPainter(signUpId);
 
@@ -70,6 +72,7 @@ export function Onboarding({ profile, onDone, chosen: fromStudio = null, onBack 
 
   const enter = async () => {
     if (missing > 0 || busy) return;
+    if (onChosen) return onChosen([...chosen]);
     setBusy(true);
     setError(null);
     try {
@@ -88,11 +91,6 @@ export function Onboarding({ profile, onDone, chosen: fromStudio = null, onBack 
   return (
     <main className="page entrance">
       <header className="page-head">
-        {onBack && (
-          <button type="button" className="text-link entrance-back" onClick={onBack}>
-            ← {painter.name}, back to the studio
-          </button>
-        )}
         <h1>Which of these would you stop for?</h1>
         <p>Choose {minPicks} or more. There are no right answers.</p>
       </header>
@@ -143,10 +141,10 @@ export function Onboarding({ profile, onDone, chosen: fromStudio = null, onBack 
           <p className="entry-count" role="status">
             {error ?? (missing > 0 ? (chosen.size === 0 ? 'Nothing chosen yet' : 'Choose ' + missing + ' more') : chosen.size + ' chosen')}
           </p>
-          {!profile && (
+          {!profile && !onChosen && (
             <PainterPicker painter={painter} onChoose={setChosenPainter} />
           )}
-          {!profile && !fromStudio && (
+          {!profile && !onChosen && (
             <label className="entry-name">
               <span className="visually-hidden">Your name</span>
               <input
@@ -160,7 +158,7 @@ export function Onboarding({ profile, onDone, chosen: fromStudio = null, onBack 
             </label>
           )}
           <button type="submit" className="button" disabled={missing > 0 || busy}>
-            {busy ? 'Opening…' : 'Open my gallery'}
+            {onChosen ? 'Choose your painter →' : busy ? 'Opening…' : 'Open my gallery'}
           </button>
         </form>
       )}
