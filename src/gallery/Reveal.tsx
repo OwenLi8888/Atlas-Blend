@@ -18,10 +18,10 @@ interface Props {
 
 /**
  * Physical width the stroke planner works at. Wider means finer strokes and a
- * slower plan. Use a coarse 90 mm plan for prompt playback. The painted
+ * slower plan. Use a coarse 60 mm plan for prompt playback. The painted
  * version settles into the real image at the end, so fine strokes are not needed.
  */
-const PAINTING_WIDTH_MM = 90;
+const PAINTING_WIDTH_MM = 60;
 /** How often to ask whether the piece being made is ready. */
 const COMMISSION_POLL_MS = 1000;
 
