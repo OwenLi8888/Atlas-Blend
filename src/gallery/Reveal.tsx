@@ -11,7 +11,8 @@ import { Hung } from './Hung';
 interface Props {
   me: Profile;
   blend: BlendResponse;
-  onAgain: () => void;
+  /** True when reopening a saved blend: the finished piece is shown at once, without painting it again. */
+  revisit: boolean;
 }
 
 /**
@@ -41,9 +42,9 @@ interface Subject {
  * collection they would both stop for. Without an image model, that work is
  * painted as the centrepiece instead.
  */
-export function Reveal({ me, blend, onAgain }: Props) {
+export function Reveal({ me, blend, revisit }: Props) {
   const commission = useCommission(blend);
-  const [painted, setPainted] = useState(false);
+  const [painted, setPainted] = useState(revisit);
   const [open, setOpen] = useState<Artwork | null>(null);
   const friend = blend.friend.name.trim() || 'your friend';
   const meeting = blend.top_artwork;
@@ -60,8 +61,8 @@ export function Reveal({ me, blend, onAgain }: Props) {
   const made = commission.status === 'ready' && commission.image_url !== null;
   const making = commission.status === 'pending';
   const subject = subjectOf(blend, commission);
-  const { plan, unplannable } = usePlan(subject);
-  const ready = subject !== null && (plan !== null || unplannable);
+  const { plan, unplannable } = usePlan(revisit ? null : subject);
+  const ready = subject !== null && (revisit || plan !== null || unplannable);
 
   const tagFor: Record<WallSource, string> = {
     you: 'Yours',
@@ -91,8 +92,13 @@ export function Reveal({ me, blend, onAgain }: Props) {
               <img src={meeting.image_url} alt={meeting.title} draggable={false} />
             </button>
           )}
-          {ready && subject && (
+          {ready && subject && !revisit && (
             <Painting key={subject.planId} plan={plan} settled={subject.settled} label={subject.label} onDone={finish} />
+          )}
+          {ready && subject && revisit && (
+            <div className="painting still">
+              <img src={subject.settled} alt={subject.label} draggable={false} />
+            </div>
           )}
 
           <div className="reveal-plate" aria-live="polite">
@@ -139,9 +145,9 @@ export function Reveal({ me, blend, onAgain }: Props) {
           </div>
         </section>
 
-        <button type="button" className="text-link" onClick={onAgain}>
-          Blend with someone else
-        </button>
+        <a className="text-link" href="#/blends">
+          All your blends
+        </a>
       </div>
 
       {open && <Detail work={open} onClose={closeDetail} />}

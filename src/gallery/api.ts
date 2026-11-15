@@ -2,8 +2,10 @@
 import type {
   BlendRequest,
   BlendResponse,
+  BlendsResponse,
   Commission,
   CreateProfileRequest,
+  DiscoverResponse,
   ErrorResponse,
   HeartRequest,
   HeartResponse,
@@ -11,6 +13,7 @@ import type {
   Profile,
   ProfileResponse,
   RecsResponse,
+  SimilarResponse,
 } from '../rec/api';
 
 /** A request the server answered with an error, or that never reached it. */
@@ -24,6 +27,9 @@ export class ApiFailure extends Error {
     this.name = 'ApiFailure';
   }
 }
+
+/** Fired on `window` when the server answers that the visitor's profile does not exist. */
+export const SESSION_LOST = 'gallery-blend:session-lost';
 
 async function request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
   let response: Response;
@@ -46,6 +52,8 @@ async function request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?
   }
   if (!response.ok) {
     const message = (payload as Partial<ErrorResponse> | null)?.error;
+    // The server no longer has this visitor's profile: whatever screen is open, start again.
+    if (response.status === 404 && message === 'Profile not found') window.dispatchEvent(new Event(SESSION_LOST));
     throw new ApiFailure(response.status, typeof message === 'string' ? message : 'Something went wrong.');
   }
   return payload as T;
@@ -60,6 +68,10 @@ export const api = {
   unheart: (userId: string, artId: string) =>
     request<void>('DELETE', '/api/heart?user_id=' + userId + '&art_id=' + encodeURIComponent(artId)),
   recs: (userId: string) => request<RecsResponse>('GET', '/api/recs/' + userId),
+  discover: (seed: number, offset: number) => request<DiscoverResponse>('GET', '/api/discover?seed=' + seed + '&offset=' + offset),
+  similar: (artId: string) => request<SimilarResponse>('GET', '/api/similar?id=' + encodeURIComponent(artId)),
+  blends: (userId: string) => request<BlendsResponse>('GET', '/api/blends/' + userId),
+  savedBlend: (blendId: string, userId: string) => request<BlendResponse>('GET', '/api/blend/' + blendId + '?user_id=' + userId),
   blend: (userId: string, code: string) =>
     request<BlendResponse>('POST', '/api/blend', { user_id: userId, code } satisfies BlendRequest),
   commission: (blendId: string) => request<Commission>('GET', '/api/blend/' + blendId + '/commission'),

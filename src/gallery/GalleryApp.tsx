@@ -1,15 +1,29 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { HeartedWork, Profile } from '../rec/api';
-import { api, ApiFailure } from './api';
-import { Blend } from './Blend';
+import type { BlendResponse, HeartedWork, Profile } from '../rec/api';
+import { api, ApiFailure, SESSION_LOST } from './api';
+import { BlendPage, Blends } from './Blends';
+import { Explore } from './Explore';
+import { Gallery } from './Gallery';
 import { Onboarding } from './Onboarding';
 import { forgetUserId, rememberedUserId, rememberUserId } from './session';
-import { Wall } from './Wall';
 
-type Route = 'wall' | 'blend';
+type Route =
+  | { page: 'for-you' }
+  | { page: 'saved' }
+  | { page: 'explore' }
+  | { page: 'blends' }
+  | { page: 'blend'; blendId: string };
+
+const BLEND_ROUTE = /^#\/blends\/([0-9a-f-]{36})$/i;
 
 function routeFromHash(): Route {
-  return window.location.hash === '#/blend' ? 'blend' : 'wall';
+  const hash = window.location.hash;
+  const blend = BLEND_ROUTE.exec(hash);
+  if (blend) return { page: 'blend', blendId: blend[1] };
+  if (hash === '#/saved') return { page: 'saved' };
+  if (hash === '#/explore') return { page: 'explore' };
+  if (hash === '#/blends') return { page: 'blends' };
+  return { page: 'for-you' };
 }
 
 type Session =
@@ -20,9 +34,17 @@ type Session =
 export function GalleryApp() {
   const [session, setSession] = useState<Session>({ state: 'loading' });
   const [route, setRoute] = useState<Route>(routeFromHash);
+  /** The blend made a moment ago, kept so it can be revealed without asking the server again. */
+  const [freshBlend, setFreshBlend] = useState<BlendResponse | null>(null);
 
   useEffect(() => {
-    const onHash = () => setRoute(routeFromHash());
+    const onHash = () => {
+      const next = routeFromHash();
+      setRoute(next);
+      // A blend is only "fresh" while its reveal is on screen; leaving it makes it a saved blend like any other.
+      setFreshBlend(fresh => (fresh && next.page === 'blend' && next.blendId === fresh.id ? fresh : null));
+      window.scrollTo({ top: 0 });
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -50,6 +72,17 @@ export function GalleryApp() {
     void load(rememberedUserId());
   }, [load]);
 
+  // Any request can find the profile gone; whichever screen is open, go back to the start.
+  useEffect(() => {
+    const onLost = () => {
+      forgetUserId();
+      window.location.hash = '#/';
+      void load(null);
+    };
+    window.addEventListener(SESSION_LOST, onLost);
+    return () => window.removeEventListener(SESSION_LOST, onLost);
+  }, [load]);
+
   const enter = useCallback(
     (profile: Profile) => {
       rememberUserId(profile.id);
@@ -62,6 +95,8 @@ export function GalleryApp() {
 
   const profile = session.state === 'ready' ? session.profile : null;
   const hasGallery = session.state === 'ready' && profile !== null && session.hearts.length > 0;
+  const inGallery = route.page === 'for-you' || route.page === 'saved';
+  const inBlends = route.page === 'blends' || route.page === 'blend';
 
   return (
     <>
@@ -71,11 +106,14 @@ export function GalleryApp() {
         </a>
         {hasGallery && (
           <nav aria-label="Sections">
-            <a href="#/" aria-current={route === 'wall' ? 'page' : undefined}>
+            <a href="#/" aria-current={inGallery ? 'page' : undefined}>
               Gallery
             </a>
-            <a href="#/blend" aria-current={route === 'blend' ? 'page' : undefined}>
-              Blend
+            <a href="#/explore" aria-current={route.page === 'explore' ? 'page' : undefined}>
+              Explore
+            </a>
+            <a href="#/blends" aria-current={inBlends ? 'page' : undefined}>
+              Blends
             </a>
           </nav>
         )}
@@ -97,19 +135,31 @@ export function GalleryApp() {
 
       {session.state === 'ready' && !hasGallery && <Onboarding profile={profile} onDone={enter} />}
 
-      {session.state === 'ready' && hasGallery && profile && route === 'wall' && (
-        <Wall
-          profile={profile}
-          hearts={session.hearts}
-          onHearts={hearts => setSession({ state: 'ready', profile, hearts })}
-          onSessionLost={() => {
-            forgetUserId();
-            void load(null);
-          }}
-        />
+      {session.state === 'ready' && hasGallery && profile && (
+        <>
+          {inGallery && (
+            <Gallery
+              profile={profile}
+              hearts={session.hearts}
+              onHearts={hearts => setSession({ state: 'ready', profile, hearts })}
+              tab={route.page === 'saved' ? 'saved' : 'for-you'}
+            />
+          )}
+          {route.page === 'explore' && (
+            <Explore profile={profile} hearts={session.hearts} onHearts={hearts => setSession({ state: 'ready', profile, hearts })} />
+          )}
+          {route.page === 'blends' && (
+            <Blends
+              profile={profile}
+              onMade={blend => {
+                setFreshBlend(blend);
+                window.location.hash = '#/blends/' + blend.id;
+              }}
+            />
+          )}
+          {route.page === 'blend' && <BlendPage profile={profile} blendId={route.blendId} fresh={freshBlend} />}
+        </>
       )}
-
-      {session.state === 'ready' && hasGallery && profile && route === 'blend' && <Blend profile={profile} />}
     </>
   );
 }

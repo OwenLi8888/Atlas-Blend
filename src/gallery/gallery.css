@@ -152,6 +152,42 @@ a {
   color: var(--muted);
 }
 
+.tabs {
+  display: flex;
+  gap: 28px;
+  margin-top: 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs a {
+  padding-bottom: 12px;
+  margin-bottom: -1px;
+  border-bottom: 1px solid transparent;
+  font-size: 14px;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.tabs a:hover,
+.tabs a[aria-current='page'] {
+  color: var(--ink);
+}
+
+.tabs a[aria-current='page'] {
+  border-bottom-color: var(--ink);
+}
+
+.tab-count {
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.more {
+  height: 1px;
+}
+
 .quiet {
   color: var(--muted);
   font-size: 13.5px;
@@ -413,36 +449,6 @@ button.heart:hover svg {
 
 /* --- Your gallery --------------------------------------------------------- */
 
-.hearted {
-  margin-top: clamp(40px, 6vw, 88px);
-  padding-top: 32px;
-  border-top: 1px solid var(--line);
-}
-
-.hearted h2 {
-  font-size: 1.5rem;
-  margin-bottom: 22px;
-}
-
-.hearted-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-}
-
-.hearted-work {
-  border: 0;
-  padding: 0;
-  background: var(--ground);
-  cursor: zoom-in;
-}
-
-.hearted-work img {
-  display: block;
-  height: 92px;
-  width: auto;
-}
-
 .rehang {
   position: fixed;
   inset: auto 0 calc(26px + env(safe-area-inset-bottom));
@@ -542,6 +548,34 @@ button.heart:hover svg {
   margin: 0 0 0 -6px;
 }
 
+.detail-similar {
+  grid-column: 1 / -1;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+
+.similar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.similar-work {
+  border: 0;
+  padding: 0;
+  background: var(--ground);
+  cursor: zoom-in;
+}
+
+.similar-work img {
+  display: block;
+  height: 132px;
+  width: auto;
+  max-width: 240px;
+  object-fit: cover;
+}
+
 /* --- Blend ---------------------------------------------------------------- */
 
 .blend-columns {
@@ -579,6 +613,56 @@ button.heart:hover svg {
   align-items: center;
   gap: 18px;
   margin-top: 26px;
+}
+
+.saved-blends {
+  margin-top: clamp(56px, 8vw, 110px);
+}
+
+.blend-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: clamp(28px, 4vw, 56px);
+  align-items: start;
+}
+
+.blend-card {
+  display: flex;
+  flex-direction: column;
+  color: inherit;
+  text-decoration: none;
+}
+
+.blend-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 5 / 4;
+  object-fit: cover;
+  background: var(--ground);
+  box-shadow: var(--shadow);
+}
+
+.blend-card-with {
+  margin-top: 16px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.blend-card-title {
+  margin-top: 5px;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.blend-card-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 /* --- The reveal ----------------------------------------------------------- */
@@ -654,6 +738,24 @@ button.heart:hover svg {
   margin: 0 auto;
   aspect-ratio: 4 / 5;
   background: var(--ground);
+  box-shadow: var(--shadow);
+}
+
+.painting.still {
+  max-width: none;
+  aspect-ratio: auto;
+  background: none;
+  box-shadow: none;
+}
+
+.painting.still img {
+  position: static;
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 68dvh;
+  margin: 0 auto;
   box-shadow: var(--shadow);
 }
 
