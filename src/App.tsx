@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { joinGallery, type GalleryPlayer } from './blend/gallery';
 import { characters } from './characters';
-import type { PicksRecord } from './picks/picksStore';
+import { savePicks, type PicksRecord } from './picks/picksStore';
 import { deviceStore, getSession, recallCharacter, rememberCharacter, setPicking, wasPicking } from './picks/session';
 import { Gallery, type GalleryItem } from './screens/Gallery';
 import { Home } from './screens/Home';
@@ -67,6 +67,14 @@ export function App() {
       cancelled = true;
     };
   }, [past, named, player]);
+
+  // The profile can arrive after the picks were saved (slow Wi-Fi). Then the saved record is topped
+  // up with it, so the other device can still blend through the Gallery API.
+  useEffect(() => {
+    // (the record in state is left as it is: replacing it would restart the studio mid-painting)
+    if (!record || !player || record.blendCode) return;
+    void savePicks({ ...record, profileId: player.profileId, blendCode: player.blendCode });
+  }, [record, player]);
 
   const character = characters.find((c) => c.id === characterId) ?? characters[0];
 

@@ -148,7 +148,8 @@ function Room({ character, session, record, player, onBack, onGallery, pool }: P
       return hearted.then(() => blendSlot({ mine: mine[0], theirs, friendName: f.name || 'your friend', player: me, friend: f }));
     };
     (async () => {
-      while (!cancelled && !friend) {
+      const until = Date.now() + 180000;   // then stop asking: this is a one-player visit
+      while (!cancelled && !friend && Date.now() < until) {
         const all = await getSessionPicks(session.sessionId);
         friend = all.find((r) => r.user !== session.user) ?? null;
         if (!friend) await sleep(1500);
