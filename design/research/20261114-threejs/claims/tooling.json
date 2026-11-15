@@ -1,0 +1,198 @@
+{
+  "lane": "tooling",
+  "question": "How does an AI coding agent (Claude Code) produce the best three.js work: three.js-specific MCP servers/skills, LLM-oriented docs, version pitfalls per the official Migration Guide, and visual verification loops for rendered WebGL output?",
+  "claims": [
+    {
+      "claim": "threejs.org publishes an llms.txt at the site root that points to a fuller LLM doc index (docs/llms.txt) and a full inline dump including TSL (docs/llms-full.txt).",
+      "quote": "See the full documentation for LLMs at: https://threejs.org/docs/llms.txt",
+      "url": "https://threejs.org/llms.txt",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "The official docs/llms.txt contains an explicit 'Instructions for Large Language Models' section; it labels an outdated import pattern WRONG and an import-map pattern CORRECT (import map observed pinning three@0.187.0 with 'three' -> build/three.module.js and 'three/addons/' -> examples/jsm/).",
+      "quote": "CORRECT - modern pattern (always use latest version):",
+      "url": "https://threejs.org/docs/llms.txt",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "The official LLM guidance names WebGLRenderer as the default, mature choice; WebGPURenderer is recommended only when TSL custom shaders, compute shaders or advanced node materials are needed.",
+      "quote": "**Use WebGLRenderer** (default, mature):",
+      "url": "https://threejs.org/docs/llms.txt",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "The official LLM guidance says custom materials under WebGPURenderer should be written in TSL, not raw GLSL.",
+      "quote": "When using WebGPURenderer, use TSL instead of raw GLSL for custom materials:",
+      "url": "https://threejs.org/docs/llms.txt",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Context7 indexes three.js (mrdoob/three.js): 32,929 snippets and 2,999,570 tokens shown on the page, last update shown as '4 hours ago'; no version list was visible.",
+      "quote": "Three.js (mrdoob/three.js) | Context7",
+      "url": "https://context7.com/mrdoob/three.js",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "threejs-devtools-mcp (DmitriyGolub) is an MCP server that inspects and edits a live three.js scene; README states 69 tools; it works through a WebSocket bridge injected into a browser tab it opens; Claude Code install: `claude mcp add threejs-devtools-mcp -- npx threejs-devtools-mcp`. 130 GitHub stars on the page.",
+      "quote": "Three.js MCP server — inspect and edit scenes, materials, shaders, lights in real time from any AI agent",
+      "url": "https://github.com/DmitriyGolub/threejs-devtools-mcp",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "cloudai-x/threejs-skills is a set of 13 Claude Code skill files (fundamentals, geometry, materials, lighting, textures, animation, loaders, shaders, postprocessing, interaction, performance, react-three-fiber, asset-pipeline); install with `npx skills add cloudai-x/threejs-skills` or copy into ~/.claude/skills/ or .claude/skills/; 4.2k stars shown.",
+      "quote": "Skill files that give Claude Code current, verified knowledge of three.js",
+      "url": "https://github.com/cloudai-x/threejs-skills",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "The cloudai-x skills are pinned to three.js r186, so they are one or two releases behind the Migration Guide's newest heading (187 -> 188) and the docs/llms.txt import map (0.187.0).",
+      "quote": "The skills target three.js r186 (`three@0.186`)",
+      "url": "https://github.com/cloudai-x/threejs-skills",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Color-space pitfall (r152): renderer.outputEncoding no longer exists; the property is outputColorSpace. LLM code using outputEncoding / sRGBEncoding is pre-r152.",
+      "quote": "`WebGLRenderer.outputEncoding` has been replaced with `WebGLRenderer.outputColorSpace`",
+      "url": "https://github.com/mrdoob/three.js/wiki/Migration-Guide",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Color-space pitfall (r152): texture.encoding became texture.colorSpace and the constant sRGBEncoding became SRGBColorSpace; ColorManagement is enabled by default from the same release.",
+      "quote": "`THREE.sRGBEncoding` is now `THREE.SRGBColorSpace`.",
+      "url": "https://github.com/mrdoob/three.js/wiki/Migration-Guide",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Color management default (r152), under heading '151 -> 152'.",
+      "quote": "`THREE.ColorManagement.enabled` is now `true` by default.",
+      "url": "https://github.com/mrdoob/three.js/wiki/Migration-Guide",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Lighting pitfall (r155): physically based light units are the default; light intensities copied from pre-r155 tutorials render differently (too dark/bright). Heading '154 -> 155'.",
+      "quote": "`WebGLRenderer.useLegacyLights` is now set to `false` by default and deprecated.",
+      "url": "https://github.com/mrdoob/three.js/wiki/Migration-Guide",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Lighting pitfall (r150): the old flag physicallyCorrectLights was renamed, so code setting renderer.physicallyCorrectLights is stale. Heading '149 -> 150'.",
+      "quote": "`WebGLRenderer.physicallyCorrectLights = true` is now `WebGLRenderer.useLegacyLights = false`.",
+      "url": "https://github.com/mrdoob/three.js/wiki/Migration-Guide",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Entry-point pitfall (r171): WebGPURenderer and NodeMaterial classes import from 'three/webgpu', TSL functions from 'three/tsl', not from 'three'. Heading '170 -> 171'.",
+      "quote": "Use `three/webgpu` to import modules related to `WebGPURenderer` and `NodeMaterial`.",
+      "url": "https://github.com/mrdoob/three.js/wiki/Migration-Guide",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "The r171 release notes record the WebGL/WebGPU entry-point code split (PRs #29404, #29644) and the new three.tsl.js build (PR #29948).",
+      "quote": "Codesplit WebGL/WebGPU entrypoints.",
+      "url": "https://github.com/mrdoob/three.js/releases/tag/r171",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Addons pitfall (r148): loaders and controls exist only as ES modules under examples/jsm (examples/js script-tag builds are gone). Heading '147 -> 148'.",
+      "quote": "Addons like `GLTFLoader` or `OrbitControls` are now only available as ES6 modules in the `examples/jsm` directory.",
+      "url": "https://github.com/mrdoob/three.js/wiki/Migration-Guide",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Build pitfall (r161): the non-module builds were removed, so `<script src=.../build/three.min.js>` with a global THREE fails on current releases. Heading '160 -> 161'.",
+      "quote": "The build files `build/three.js` and `build/three.min.js` have been removed.",
+      "url": "https://github.com/mrdoob/three.js/wiki/Migration-Guide",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "WebGL 1 pitfall (r163): WebGLRenderer is WebGL 2 only. Heading '162 -> r163'.",
+      "quote": "`WebGLRenderer` no longer supports WebGL 1.",
+      "url": "https://github.com/mrdoob/three.js/wiki/Migration-Guide",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "WebGPU/TSL churn examples: TSL varying() renamed in r173 (heading '172 -> 173'); PostProcessing class renamed RenderPipeline in r183 (heading '182 -> 183'). TSL/WebGPU API names change release to release, raising LLM error risk.",
+      "quote": "`PostProcessing` has been renamed to `RenderPipeline`.",
+      "url": "https://github.com/mrdoob/three.js/wiki/Migration-Guide",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "TSL rename in r173, heading '172 -> 173'.",
+      "quote": "The TSL function `varying()` has been renamed to `toVarying()`.",
+      "url": "https://github.com/mrdoob/three.js/wiki/Migration-Guide",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "renderer.info is the official source for per-frame draw calls and triangle counts plus live geometry/texture counts; an agent can read it via page.evaluate. Fields quoted on the page: render.calls 'The number of draw calls per frame.', render.triangles, memory.geometries, memory.textures. With multi-pass rendering set renderer.info.autoReset = false and call renderer.info.reset() per frame.",
+      "quote": "Holds a series of statistical information about the GPU memory and the rendering process. Useful for debugging and monitoring.",
+      "url": "https://threejs.org/docs/pages/WebGLRenderer.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Headless Chrome on a GPU-less machine no longer falls back to software WebGL automatically; the documented opt-in flag set is `--use-gl=angle --use-angle=swiftshader-webgl --enable-unsafe-swiftshader`.",
+      "quote": "Allowing automatic fallback to WebGL backed by SwiftShader has been deprecated.",
+      "url": "https://chromium.googlesource.com/chromium/src/+/main/docs/gpu/swiftshader.md",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Playwright MCP defaults to accessibility snapshots, which carry no information about canvas pixels; for WebGL the agent must call browser_take_screenshot explicitly (coordinate-based vision tools are opt-in via --caps=vision). Claude Code install: `claude mcp add playwright npx @playwright/mcp@latest`.",
+      "quote": "Take a screenshot of the current page. Use browser_snapshot for actions by default.",
+      "url": "https://github.com/microsoft/playwright-mcp",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "chrome-devtools-mcp is an alternative verification channel: screenshots via take_screenshot (CLI example `chrome-devtools take_screenshot 1 --filePath screenshot.png`) and performance traces; installed in Claude Code as a plugin (`/plugin marketplace add ChromeDevTools/chrome-devtools-mcp`, `/plugin install chrome-devtools-mcp@chrome-devtools-plugins`).",
+      "quote": "Your MCP client should open the browser and record a performance trace.",
+      "url": "https://github.com/ChromeDevTools/chrome-devtools-mcp",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    }
+  ],
+  "not_found": [
+    "three.core.js in the Migration Guide: the string 'three.core' does not occur in the first 100,000 of 114,200 characters of github.com/mrdoob/three.js/wiki/Migration-Guide (the unread tail is the oldest releases, ~r49 and earlier), nor in the r171 release notes, which say only 'Codesplit WebGL/WebGPU entrypoints.' The release that introduced build/three.core.js (believed r172) was not confirmed on a page.",
+    "A Migration Guide bullet telling how to rescale light intensities when leaving legacy lights (e.g. multiply by PI): no occurrence of 'legacy lighting', 'candela', or a lowercase 'intensity' bullet on this topic in the read portion; the r155 bullet links to a forum thread that was not opened.",
+    "Removal release of WebGLRenderer.useLegacyLights (as opposed to its r155 deprecation): no bullet found in the Migration Guide.",
+    "A Migration Guide bullet introducing the 'three/addons/' alias as the replacement for 'three/examples/jsm/': not present as such; the guide only uses 'three/addons/...' paths in r151 bullets (MapControls, Tween). The alias itself is confirmed only by the import map in threejs.org/docs/llms.txt.",
+    "Full verbatim text of the r181 WebGPURenderer bullet (renderAsync deprecated; init via setAnimationLoop or await renderer.init()): only the fragment 'the instance of WebGPURenderer must be initialized.' was returned verbatim under heading '180 -> 181', so it is not listed as a claim.",
+    "An official (mrdoob / three.js org) MCP server or Claude Code skill: none found; all tools located are third-party. Other skills seen only as search leads and NOT opened: mindrally/skills three-js, mrgoonie/claudekit-skills threejs, majidmanzarpour/threejs-game-skills, freshtechbro/claudedesignskills threejs-webgl, deya-0x/ThreeJSMCP, evozim/threejs-weaver.",
+    "Whether threejs-devtools-mcp exposes renderer.info or a dedicated screenshot tool: the README mentions 'screenshots' only in a table cell and a web_audit check for 'too many draw calls'; renderer.info is not named. Last commit date not visible.",
+    "Sentences on the page for the three.js-specific screenshot-timing advice (wait for first render before screenshot) and the Mesa llvmpipe vs SwiftShader timing (6 s vs 24 s): seen only in search snippets (agent-browser.dev/webgpu, microlink.io/blog/webgl-without-a-gpu), pages not opened.",
+    "Calendar date of Context7's last three.js index refresh and which three.js release it reflects: page shows only '4 hours ago' and no version list."
+  ],
+  "contradictions": [
+    {
+      "claim": "Which three.js release the available LLM-facing sources target differs, so mixing them can produce API mismatches.",
+      "a": {
+        "quote": "The skills target three.js r186 (`three@0.186`)",
+        "url": "https://github.com/cloudai-x/threejs-skills"
+      },
+      "b": {
+        "quote": "CORRECT - modern pattern (always use latest version):",
+        "url": "https://threejs.org/docs/llms.txt"
+      }
+    }
+  ]
+}

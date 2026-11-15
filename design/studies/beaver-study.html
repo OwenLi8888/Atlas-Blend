@@ -1,0 +1,538 @@
+<title>Palette Beaver</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@500;700&display=swap">
+<style>
+  /* Layout: one phone screen; the beaver owns the upper stage, controls dock at the thumb zone. */
+  :root {
+    --sky-top: #fde3c8;
+    --sky-low: #fff3e0;
+    --ink: #3b2418;
+    --muted: #8a6a55;
+    --chip: rgba(255, 255, 255, 0.62);
+    --chip-line: rgba(59, 36, 24, 0.12);
+    --chip-on: #3b2418;
+    --chip-on-ink: #fff3e0;
+    --display: "Fredoka", "Avenir Next Rounded", "Nunito", system-ui, sans-serif;
+    --body: "Nunito", "Avenir Next", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --sky-top: #1d1830; --sky-low: #2e2442; --ink: #f6ead9; --muted: #b8a7c9;
+      --chip: rgba(255, 255, 255, 0.08); --chip-line: rgba(255, 255, 255, 0.14);
+      --chip-on: #f6ead9; --chip-on-ink: #1d1830; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --sky-top: #1d1830; --sky-low: #2e2442; --ink: #f6ead9; --muted: #b8a7c9;
+    --chip: rgba(255, 255, 255, 0.08); --chip-line: rgba(255, 255, 255, 0.14);
+    --chip-on: #f6ead9; --chip-on-ink: #1d1830; color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body {
+    background: linear-gradient(180deg, var(--sky-top), var(--sky-low));
+    color: var(--ink);
+    font-family: var(--body);
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .top {
+    position: fixed; top: 0; left: 0; right: 0;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 14px);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+    pointer-events: none;
+  }
+  h1 { margin: 0; font-family: var(--display); font-weight: 600; font-size: 1.5rem; letter-spacing: 0.01em; }
+  .sub { margin: 2px 0 0; color: var(--muted); font-size: 0.8rem; }
+  .mood {
+    flex: none; font-family: var(--display); font-weight: 500; font-size: 0.8rem;
+    padding: 5px 11px; border-radius: 999px; background: var(--chip); border: 1px solid var(--chip-line);
+  }
+  .dock {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; gap: 10px; justify-items: center;
+  }
+  .hint { color: var(--muted); font-size: 0.78rem; text-align: center; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 520px; }
+  .label {
+    width: 100%; text-align: center; font-size: 0.68rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  button.chip {
+    font: 600 0.86rem/1 var(--display); color: var(--ink);
+    background: var(--chip); border: 1px solid var(--chip-line); border-radius: 999px;
+    padding: 9px 14px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  }
+  button.chip[aria-pressed="true"] { background: var(--chip-on); color: var(--chip-on-ink); border-color: transparent; }
+  button.chip:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .dots { display: inline-flex; }
+  .dots i { width: 10px; height: 10px; border-radius: 50%; margin-left: -3px; border: 1.5px solid var(--chip-on-ink); }
+  .dots i:first-child { margin-left: 0; }
+  .note { font-size: 0.72rem; color: var(--muted); text-align: center; max-width: 34ch; }
+  #err { position: fixed; inset: 40% 16px auto; text-align: center; color: var(--muted); }
+</style>
+
+<canvas id="stage" aria-label="A 3D beaver with a painter's palette for a tail"></canvas>
+
+<header class="top">
+  <div>
+    <h1>Palette Beaver</h1>
+    <p class="sub">Study 01 · built from code in three.js, no model file</p>
+  </div>
+  <span class="mood" id="mood">Awake</span>
+</header>
+
+<section class="dock" aria-label="Controls">
+  <div class="hint">Tap to bounce · Drag to turn · Wait 15 s for a nap</div>
+  <div class="row" role="group" aria-label="Material">
+    <span class="label">Material</span>
+    <button class="chip" id="m-vinyl" data-style="vinyl" aria-pressed="true">Vinyl</button>
+    <button class="chip" id="m-clay" data-style="clay" aria-pressed="false">Clay</button>
+    <button class="chip" id="m-jelly" data-style="jelly" aria-pressed="false">Jelly</button>
+  </div>
+  <div class="row" role="group" aria-label="Taste palette" id="tastes">
+    <span class="label">Taste palette</span>
+  </div>
+  <p class="note">The paint dabs on the tail are the five strongest hues in the owner's quiz gallery; the beret takes the leading one.</p>
+</section>
+<p id="err" hidden>The 3D scene could not start in this browser.</p>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from "three";
+
+const TASTES = [
+  { id: "t-lantern", name: "Warm Lantern", beret: "#5fa35a", dabs: ["#ff7a59", "#e8c47a", "#d9534f", "#f2a65a", "#5fa35a"] },
+  { id: "t-tide", name: "Cool Tidewatcher", beret: "#3d6fb6", dabs: ["#4cc9d8", "#3d6fb6", "#9ed8c6", "#f3ede2", "#6b7fd7"] },
+  { id: "t-riot", name: "Vivid Riot", beret: "#7b2cbf", dabs: ["#ff3d7f", "#ffd23f", "#3bceac", "#7b2cbf", "#00a6fb"] },
+];
+const COLORS = { fur: "#e8893a", belly: "#f6d3a0", dark: "#6b3f2a", white: "#fffaf2", pupil: "#2a1a12", wood: "#9a6440", blush: "#ff8f8f", earIn: "#c96a3a" };
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const canvas = document.getElementById("stage");
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+} catch (e) {
+  document.getElementById("err").hidden = false;
+  throw e;
+}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setClearColor(0x000000, 0);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
+const look = new THREE.Vector3(0, 1.0, 0);
+
+// ---------- matcaps: one small canvas per colour and style, lighting baked in ----------
+const matcapCache = new Map();
+function matcap(hex, style) {
+  const key = hex + style;
+  if (matcapCache.has(key)) return matcapCache.get(key);
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d");
+  const hsl = {};
+  new THREE.Color(hex).getHSL(hsl);
+  const L = (d, s = 0) => "hsl(" + (hsl.h * 360).toFixed(1) + "," + Math.min(100, hsl.s * 100 + s).toFixed(1) + "%," + Math.max(2, Math.min(97, hsl.l * 100 + d)).toFixed(1) + "%)";
+  const spread = style === "clay" ? [8, 2, -11] : style === "jelly" ? [22, 8, -6] : [18, 4, -14];
+  const base = g.createRadialGradient(46, 40, 4, 64, 66, 70);
+  base.addColorStop(0, L(spread[0], style === "jelly" ? 8 : 0));
+  base.addColorStop(0.55, L(spread[1]));
+  base.addColorStop(1, L(spread[2], -4));
+  g.fillStyle = base;
+  g.fillRect(0, 0, 128, 128);
+  const bounce = g.createRadialGradient(64, 64, 40, 64, 64, 66);
+  bounce.addColorStop(0, "rgba(255,240,225,0)");
+  bounce.addColorStop(1, style === "clay" ? "rgba(255,240,225,0.10)" : "rgba(255,240,225,0.28)");
+  g.fillStyle = bounce;
+  g.fillRect(0, 0, 128, 128);
+  if (style === "clay") {
+    for (let i = 0; i < 900; i++) {
+      g.fillStyle = Math.random() < 0.5 ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.06)";
+      g.fillRect(Math.random() * 128, Math.random() * 128, 1.6, 1.6);
+    }
+  } else {
+    const r = style === "jelly" ? 22 : 15;
+    const spec = g.createRadialGradient(42, 34, 0, 42, 34, r);
+    spec.addColorStop(0, "rgba(255,255,255,0.95)");
+    spec.addColorStop(0.35, "rgba(255,255,255,0.55)");
+    spec.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = spec;
+    g.fillRect(0, 0, 128, 128);
+    const spec2 = g.createRadialGradient(88, 96, 0, 88, 96, 9);
+    spec2.addColorStop(0, "rgba(255,255,255,0.35)");
+    spec2.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = spec2;
+    g.fillRect(0, 0, 128, 128);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  matcapCache.set(key, t);
+  return t;
+}
+
+// Matcap material with a fresnel rim injected; jelly also fades the centre.
+const materials = [];
+function toyMat(hex, opts = {}) {
+  const m = new THREE.MeshMatcapMaterial({ color: 0xffffff });
+  m.userData = { hex, solid: !!opts.solid, rimColor: new THREE.Color(opts.rim || "#fff1dc") };
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.rimColor = { value: m.userData.rimColor };
+    sh.uniforms.rimStrength = m.userData.rimStrengthU = { value: 0.25 };
+    sh.uniforms.jelly = m.userData.jellyU = { value: 0 };
+    sh.fragmentShader = sh.fragmentShader
+      .replace("uniform float opacity;", "uniform float opacity;\nuniform vec3 rimColor;\nuniform float rimStrength;\nuniform float jelly;")
+      .replace("#include <opaque_fragment>",
+        "float rimF = pow(1.0 - clamp(dot(normal, viewDir), 0.0, 1.0), 2.4);\n" +
+        "outgoingLight += rimColor * rimF * rimStrength;\n" +
+        "diffuseColor.a *= mix(1.0, mix(0.62, 1.0, rimF), jelly);\n" +
+        "#include <opaque_fragment>");
+  };
+  materials.push(m);
+  return m;
+}
+function applyStyle(style) {
+  for (const m of materials) {
+    m.matcap = matcap(m.userData.hex, m.userData.solid ? "vinyl" : style);
+    const jelly = style === "jelly" && !m.userData.solid;
+    m.transparent = jelly;
+    m.opacity = jelly ? 0.9 : 1;
+    m.userData.rim = style === "clay" ? 0.08 : style === "jelly" ? 0.5 : 0.22;
+    if (m.userData.rimStrengthU) m.userData.rimStrengthU.value = m.userData.rim;
+    if (m.userData.jellyU) m.userData.jellyU.value = jelly ? 1 : 0;
+    m.needsUpdate = true;
+  }
+  // uniforms are created on compile; push values again once compiled
+  requestAnimationFrame(() => materials.forEach((m) => {
+    if (m.userData.rimStrengthU) m.userData.rimStrengthU.value = m.userData.rim;
+    if (m.userData.jellyU) m.userData.jellyU.value = m.transparent ? 1 : 0;
+  }));
+}
+
+// ---------- the beaver, built from primitives ----------
+const S = (r, w = 32, h = 24) => new THREE.SphereGeometry(r, w, h);
+function part(geo, mat, pos, scale, rot) {
+  const mesh = new THREE.Mesh(geo, mat);
+  if (pos) mesh.position.set(...pos);
+  if (scale) mesh.scale.set(...scale);
+  if (rot) mesh.rotation.set(...rot);
+  return mesh;
+}
+
+const M = {
+  fur: toyMat(COLORS.fur), belly: toyMat(COLORS.belly), dark: toyMat(COLORS.dark),
+  white: toyMat(COLORS.white, { solid: true }), pupil: toyMat(COLORS.pupil, { solid: true, rim: "#6b4a3a" }),
+  wood: toyMat(COLORS.wood), earIn: toyMat(COLORS.earIn), beret: toyMat(TASTES[0].beret),
+};
+const blushMat = new THREE.MeshBasicMaterial({ color: COLORS.blush, transparent: true, opacity: 0.45, depthWrite: false });
+
+const turntable = new THREE.Group();          // drag rotates this
+const hop = new THREE.Group();                // jump height lives here
+const rig = new THREE.Group();                // squash and stretch around the feet
+scene.add(turntable);
+turntable.add(hop);
+hop.add(rig);
+
+// body: pear profile revolved around Y
+const prof = [[0.001, 0], [0.3, 0.02], [0.48, 0.12], [0.57, 0.3], [0.56, 0.52], [0.48, 0.76], [0.36, 0.95], [0.2, 1.06], [0.001, 1.1]]
+  .map(([x, y]) => new THREE.Vector2(x, y));
+rig.add(part(new THREE.LatheGeometry(prof, 40), M.fur));
+rig.add(part(S(0.36), M.belly, [0, 0.46, 0.33], [1, 1.2, 0.62]));
+for (const sx of [-1, 1]) {
+  rig.add(part(S(0.17, 24, 16), M.dark, [sx * 0.23, 0.06, 0.2], [1.05, 0.5, 1.35]));
+  const arm = part(new THREE.CapsuleGeometry(0.085, 0.2, 6, 12), M.fur, [sx * 0.33, 0.66, 0.36], null, [-0.7, 0, sx * 0.75]);
+  rig.add(arm);
+}
+
+// head
+const head = new THREE.Group();
+head.position.set(0, 1.42, 0);
+rig.add(head);
+head.add(part(S(0.66, 40, 30), M.fur, [0, 0, 0], [1.05, 0.95, 0.95]));
+head.add(part(S(0.27), M.belly, [0, -0.17, 0.49], [1.28, 0.86, 0.8]));
+head.add(part(S(0.09, 20, 14), M.dark, [0, -0.06, 0.71], [1.35, 1, 0.9]));
+for (const sx of [-1, 1]) {
+  head.add(part(new THREE.BoxGeometry(0.085, 0.13, 0.05), M.white, [sx * 0.047, -0.37, 0.62]));
+  head.add(part(S(0.1, 16, 12), blushMat, [sx * 0.43, -0.13, 0.44], [1, 0.62, 0.3], [0, sx * 0.6, 0]));
+  head.add(part(S(0.15, 20, 14), M.fur, [sx * 0.46, 0.46, 0], [1, 1, 0.55]));
+  head.add(part(S(0.085, 16, 12), M.earIn, [sx * 0.46, 0.46, 0.06], [1, 1, 0.4]));
+}
+const eyes = [];
+for (const sx of [-1, 1]) {
+  const eye = new THREE.Group();
+  eye.position.set(sx * 0.24, 0.12, 0.5);
+  eye.add(part(S(0.16), M.white, [0, 0, 0], [1, 1.1, 0.6]));
+  const pupil = new THREE.Group();
+  pupil.add(part(S(0.11), M.pupil, [0, 0, 0.06], [1, 1.1, 0.45]));
+  pupil.add(part(S(0.034, 12, 10), M.white, [-0.035, 0.05, 0.11]));
+  pupil.add(part(S(0.016, 10, 8), M.white, [0.03, -0.035, 0.11]));
+  eye.add(pupil);
+  head.add(eye);
+  eyes.push({ eye, pupil });
+}
+const beret = new THREE.Group();
+beret.position.set(0.08, 0.52, -0.02);
+beret.rotation.set(-0.12, 0, -0.28);
+beret.add(part(S(0.44, 32, 16), M.beret, [0, 0, 0], [1, 0.4, 1]));
+beret.add(part(new THREE.CylinderGeometry(0.03, 0.045, 0.1, 10), M.beret, [0, 0.15, 0]));
+head.add(beret);
+
+// tail: a painter's palette with a thumb hole and five paint dabs
+const pal = new THREE.Shape();
+pal.moveTo(-0.46, 0.0);
+pal.bezierCurveTo(-0.5, 0.32, -0.1, 0.43, 0.13, 0.37);
+pal.bezierCurveTo(0.43, 0.3, 0.56, 0.08, 0.49, -0.13);
+pal.bezierCurveTo(0.43, -0.34, 0.12, -0.41, -0.08, -0.35);
+pal.bezierCurveTo(-0.21, -0.31, -0.13, -0.17, -0.25, -0.15);
+pal.bezierCurveTo(-0.39, -0.13, -0.43, -0.11, -0.46, 0.0);
+const hole = new THREE.Path();
+hole.absarc(-0.25, 0.1, 0.07, 0, Math.PI * 2, true);
+pal.holes.push(hole);
+const palGeo = new THREE.ExtrudeGeometry(pal, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.025, bevelSegments: 4, curveSegments: 28 });
+palGeo.center();
+const tailPivot = new THREE.Group();
+tailPivot.position.set(0.3, 0.3, -0.38);
+rig.add(tailPivot);
+const tail = part(palGeo, M.wood, [0.5, 0.12, -0.08], [1.25, 1.25, 1.25], [-0.55, -0.35, 0.45]);
+tailPivot.add(tail);
+const dabMats = TASTES[0].dabs.map((hx) => toyMat(hx));
+[[0.26, 0.17], [0.33, -0.06], [0.14, -0.21], [-0.04, 0.22], [0.06, 0.01]].forEach(([x, y], i) => {
+  tail.add(part(S(0.07, 16, 12), dabMats[i], [x, y, 0.055], [1, 0.9, 0.38]));
+});
+
+// blob shadow: one blurred radial texture on a plane
+const shCanvas = document.createElement("canvas");
+shCanvas.width = shCanvas.height = 128;
+const sg = shCanvas.getContext("2d");
+const sgr = sg.createRadialGradient(64, 64, 4, 64, 64, 62);
+sgr.addColorStop(0, "rgba(60,30,15,0.42)");
+sgr.addColorStop(1, "rgba(60,30,15,0)");
+sg.fillStyle = sgr;
+sg.fillRect(0, 0, 128, 128);
+const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.9), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(shCanvas), transparent: true, depthWrite: false }));
+shadow.rotation.x = -Math.PI / 2;
+shadow.position.y = 0.002;
+turntable.add(shadow);
+
+// sleeping Zs
+function zTex() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d");
+  g.font = "600 48px Fredoka, Nunito, sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillStyle = "#8a6a55";
+  g.fillText("z", 32, 34);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const zMat = new THREE.SpriteMaterial({ map: zTex(), transparent: true, opacity: 0, depthWrite: false });
+const zs = [0, 1, 2].map((i) => {
+  const s = new THREE.Sprite(zMat.clone());
+  s.scale.setScalar(0.22 + i * 0.06);
+  turntable.add(s);
+  return s;
+});
+
+// ---------- state ----------
+let style = "vinyl";
+applyStyle(style);
+function setTaste(t) {
+  M.beret.userData.hex = t.beret;
+  t.dabs.forEach((hx, i) => { dabMats[i].userData.hex = hx; });
+  applyStyle(style);
+  document.querySelectorAll("#tastes .chip").forEach((b) => b.setAttribute("aria-pressed", String(b.id === t.id)));
+}
+
+const sq = { x: 1, v: 0 };               // squash spring (1 = rest)
+const wag = { x: 0, v: 0 };              // tail kick spring
+const lookS = { x: 0, y: 0, vx: 0, vy: 0 };
+const lookT = { x: 0, y: 0 };
+let jumpV = 0, jumpY = 0, airborne = false, launchAt = 0;
+const REST_SPIN = -0.45;                 // three-quarter view with the palette tail showing
+let spin = REST_SPIN, spinV = 0;
+let blinkT = 0, nextBlink = 2 + Math.random() * 4;
+let lastPoke = performance.now();
+let asleep = false;
+const mood = document.getElementById("mood");
+
+function spring(s, target, k, c, dt) { s.v += (k * (target - s.x) - c * s.v) * dt; s.x += s.v * dt; }
+function wake() {
+  lastPoke = performance.now();
+  if (asleep) { asleep = false; mood.textContent = "Awake"; }
+}
+function bounce() {
+  wake();
+  if (airborne || launchAt) return;
+  sq.v -= 3.2;                            // anticipation: squash down first
+  wag.v += 9;
+  launchAt = performance.now() + 140;
+}
+
+// ---------- input ----------
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let drag = null;
+canvas.addEventListener("pointerdown", (e) => {
+  drag = { x: e.clientX, y: e.clientY, moved: 0, t: performance.now() };
+  canvas.setPointerCapture?.(e.pointerId);
+  wake();
+});
+canvas.addEventListener("pointermove", (e) => {
+  const r = canvas.getBoundingClientRect();
+  lookT.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+  lookT.y = -(((e.clientY - r.top) / r.height) * 2 - 1);
+  lastPoke = asleep ? lastPoke : performance.now();
+  if (!drag) return;
+  const dx = e.clientX - drag.x;
+  drag.moved += Math.abs(dx) + Math.abs(e.clientY - drag.y);
+  drag.x = e.clientX; drag.y = e.clientY;
+  spin += dx * 0.012;
+  spinV = dx * 0.6;
+});
+canvas.addEventListener("pointerup", (e) => {
+  if (drag && drag.moved < 10 && performance.now() - drag.t < 450) {
+    const r = canvas.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1));
+    ray.setFromCamera(ndc, camera);
+    if (ray.intersectObject(turntable, true).length) bounce();
+  }
+  drag = null;
+});
+canvas.addEventListener("pointercancel", () => { drag = null; });
+
+document.querySelectorAll("[data-style]").forEach((b) => b.addEventListener("click", () => {
+  style = b.dataset.style;
+  applyStyle(style);
+  document.querySelectorAll("[data-style]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  bounce();
+}));
+const tasteRow = document.getElementById("tastes");
+TASTES.forEach((t, i) => {
+  const b = document.createElement("button");
+  b.className = "chip";
+  b.id = t.id;
+  b.setAttribute("aria-pressed", String(i === 0));
+  b.innerHTML = '<span class="dots">' + t.dabs.map((c) => '<i style="background:' + c + '"></i>').join("") + "</span>" + t.name;
+  b.addEventListener("click", () => { setTaste(t); bounce(); });
+  tasteRow.appendChild(b);
+});
+
+// ---------- layout ----------
+// Fit the beaver into the free band between the header and the control dock.
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  const topH = document.querySelector(".top").getBoundingClientRect().bottom;
+  const dockH = h - document.querySelector(".dock").getBoundingClientRect().top;
+  const freeH = Math.max(h * 0.35, h - topH - dockH);
+  const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const needW = 3.1, needH = 2.9;                 // world units around the beaver and tail
+  const visH = Math.max(needH * h / freeH, needW / camera.aspect);
+  const dist = visH / (2 * tanH);
+  look.set(0.24, 1.12, 0);                        // centre on body plus tail, not the body alone
+  camera.position.set(0.24, look.y + 0.3, dist);
+  camera.lookAt(look);
+  // shift the projection so the beaver centres in the free band, not the screen
+  const bandCentre = topH + freeH / 2;
+  camera.clearViewOffset();
+  camera.setViewOffset(w, h, 0, (h / 2 - bandCentre), w, h);
+  camera.updateProjectionMatrix();
+}
+window.addEventListener("resize", resize);
+resize();
+
+// ---------- loop ----------
+const clock = new THREE.Clock();
+function frame() {
+  const dt = Math.min(clock.getDelta(), 1 / 30);
+  const t = clock.elapsedTime;
+  const now = performance.now();
+  const calm = reduceMotion ? 0.35 : 1;
+
+  if (!asleep && now - lastPoke > 15000) { asleep = true; mood.textContent = "Napping"; }
+
+  // launch after the anticipation squash
+  if (launchAt && now >= launchAt) { launchAt = 0; airborne = true; jumpV = 4.4 * calm + 1; sq.v += 6; }
+  if (airborne) {
+    jumpV -= 15 * dt;
+    jumpY += jumpV * dt;
+    if (jumpY <= 0) { jumpY = 0; airborne = false; sq.v -= 5.5; wag.v -= 6; }
+  }
+  hop.position.y = jumpY;
+
+  // squash and stretch keeps volume: y = s, x = z = 1 / sqrt(s)
+  spring(sq, 1, 220, 13, dt);
+  const breathe = 1 + Math.sin(t * (asleep ? 1.3 : 2.2)) * (asleep ? 0.03 : 0.018) * calm;
+  const sy = Math.max(0.6, sq.x * breathe + (airborne ? Math.min(0.12, jumpV * 0.03) : 0));
+  rig.scale.set(1 / Math.sqrt(sy), sy, 1 / Math.sqrt(sy));
+
+  // turntable with inertia, drifting back to a three-quarter view
+  if (!drag) {
+    spinV *= Math.pow(0.04, dt);
+    spin += spinV * dt * 0.02;
+    spin += (REST_SPIN - spin) * dt * 0.6;
+  }
+  turntable.rotation.y = spin;
+
+  // head and eyes follow the finger through a spring; asleep, the head droops
+  const tx = asleep ? 0 : lookT.x, ty = asleep ? -0.6 : lookT.y;
+  lookS.vx += (40 * (tx - lookS.x) - 9 * lookS.vx) * dt; lookS.x += lookS.vx * dt;
+  lookS.vy += (40 * (ty - lookS.y) - 9 * lookS.vy) * dt; lookS.y += lookS.vy * dt;
+  head.rotation.y = lookS.x * 0.45 - (spin - REST_SPIN) * 0.3 - REST_SPIN * 0.35;
+  head.rotation.x = -lookS.y * 0.22;
+  head.rotation.z = Math.sin(t * 1.1) * 0.03 * calm;
+  for (const { pupil } of eyes) pupil.position.set(lookS.x * 0.035, lookS.y * 0.03, 0);
+
+  // blink at random 2-6 s; closed while asleep
+  blinkT += dt;
+  let lid = 1;
+  if (asleep) lid = 0.08;
+  else if (blinkT > nextBlink) {
+    const k = (blinkT - nextBlink) / 0.16;
+    lid = k < 1 ? Math.abs(1 - 2 * k) * 0.92 + 0.08 : 1;
+    if (k >= 1) { blinkT = 0; nextBlink = 2 + Math.random() * 4; }
+  }
+  for (const { eye } of eyes) eye.scale.y = lid;
+
+  // tail wags softly and kicks on landing
+  spring(wag, 0, 90, 7, dt);
+  tailPivot.rotation.y = Math.sin(t * (asleep ? 1 : 2.6)) * 0.12 * calm + wag.x * 0.06;
+  tailPivot.rotation.x = Math.sin(t * 1.3) * 0.04 * calm;
+
+  // shadow shrinks while airborne
+  const sh = 1 / (1 + jumpY * 0.9);
+  shadow.scale.set(sh, sh, 1);
+  shadow.material.opacity = sh;
+
+  // Zs drift up while asleep
+  zs.forEach((z, i) => {
+    const p = (t * 0.35 + i / 3) % 1;
+    z.position.set(0.55 + p * 0.5, 2.25 + p * 0.9, 0.2);
+    z.material.opacity = asleep ? Math.sin(p * Math.PI) * 0.9 : 0;
+  });
+
+  renderer.render(scene, camera);
+}
+renderer.setAnimationLoop(frame);
+document.addEventListener("visibilitychange", () => {
+  renderer.setAnimationLoop(document.hidden ? null : frame);
+  if (!document.hidden) clock.getDelta();
+});
+window.__beaver = { renderer, bounce };
+</script>

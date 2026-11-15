@@ -1,0 +1,133 @@
+{
+  "lane": "character",
+  "question": "Proven techniques for building a cute stylized 3D character in three.js from code (no imported model) and making it feel alive, cheaply enough for a phone: stylized materials and cheap shadows, procedural construction and outlines, alive-animation techniques and libraries, image-to-voxel InstancedMesh.",
+  "claims": [
+    {
+      "claim": "MeshMatcapMaterial gets its whole look (color plus shading) from one matcap texture, so a glossy vinyl-toy look can be baked into a single image.",
+      "quote": "This material is defined by a MatCap (or Lit Sphere) texture, which encodes the material color and shading.",
+      "url": "https://threejs.org/docs/pages/MeshMatcapMaterial.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "MeshMatcapMaterial ignores scene lights (no per-light shading cost), because lighting is baked in the matcap image.",
+      "quote": "MeshMatcapMaterial does not respond to lights since the matcap image file encodes baked lighting.",
+      "url": "https://threejs.org/docs/pages/MeshMatcapMaterial.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "A matcap mesh can cast a shadow but never receives one or self-shadows, so grounding a matcap character needs a separate shadow receiver (ground plane or fake blob).",
+      "quote": "It will cast a shadow onto an object that receives shadows (and shadow clipping works), but it will not self-shadow or receive shadows.",
+      "url": "https://threejs.org/docs/pages/MeshMatcapMaterial.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "MeshToonMaterial banding is controlled by gradientMap, and the gradient texture must use NearestFilter for both minFilter and magFilter (otherwise the steps blur).",
+      "quote": "Gradient map for toon shading. It's required to set Texture#minFilter and Texture#magFilter to NearestFilter when using this type of texture.",
+      "url": "https://threejs.org/docs/pages/MeshToonMaterial.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "The official three.js contact-shadow example (webgl_shadow_contact) renders scene depth from below with an upward-looking orthographic camera into a 512 x 512 px render target, using a patched MeshDepthMaterial that outputs black with depth-based alpha. Quote is a code line relayed by the fetch summarizer, not read raw; recheck against the file before relying on exact text.",
+      "quote": "shadowCamera.rotation.x = Math.PI / 2; // get the camera to look up",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/webgl_shadow_contact.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "The same contact-shadow example softens the depth texture with a two-pass (horizontal then vertical) blur ping-ponged between two 512 x 512 px render targets, run twice per frame (once at blur, once at blur * 0.4; default blur 3.5). So its per-frame cost is one extra scene render plus four full-screen-quad blur passes at 512 px. Quote is a code comment relayed by the fetch summarizer.",
+      "quote": "// renderTarget --> blurPlane (horizontalBlur) --> renderTargetBlur --> blurPlane (verticalBlur) --> renderTarget",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/webgl_shadow_contact.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "CapsuleGeometry exists in core for rounded limbs/bodies; signature CapsuleGeometry(radius=1, height=1, capSegments=4, radialSegments=8, heightSegments=1), where height is the middle section only (total length = height + 2*radius). Default 8 radial segments is visibly faceted, so raise it for a smooth toy look.",
+      "quote": "Number of segmented faces around the circumference of the capsule. Must be an integer >= 3.",
+      "url": "https://threejs.org/docs/pages/CapsuleGeometry.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "LatheGeometry revolves a 2D profile around the Y axis (signature LatheGeometry(points, segments=12, phiStart=0, phiLength=Math.PI*2)), suitable for a custom rounded body/head silhouette that a sphere or capsule cannot give.",
+      "quote": "Creates meshes with axial symmetry like vases. The lathe rotates around the Y axis.",
+      "url": "https://threejs.org/docs/pages/LatheGeometry.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "LatheGeometry profile points must have x greater than zero, which constrains how the profile is closed at the poles.",
+      "quote": "An array of points in 2D space. The x-coordinate of each point must be greater than zero.",
+      "url": "https://threejs.org/docs/pages/LatheGeometry.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "OutlinePass is a post-processing pass (needs EffectComposer and extra render targets) for selected objects; it can run at reduced resolution, downSampleRatio default 2.",
+      "quote": "The downsample ratio. The effect can be rendered in a much lower resolution than the beauty pass.",
+      "url": "https://threejs.org/docs/pages/OutlinePass.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "three.js ships OutlineEffect, an outline addon aimed at toon shading (defaultThickness 0.003, defaultColor [0,0,0]); it is WebGLRenderer-only and replaces the normal render call.",
+      "quote": "Note that this class can only be used with WebGLRenderer. When using WebGPURenderer, use ToonOutlinePassNode.",
+      "url": "https://threejs.org/docs/pages/OutlineEffect.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "A rim/fresnel term can be added to a built-in material by string-replacing a shader chunk in onBeforeCompile-style code and passing a view direction and a view-space normal as varyings (forum code by prisoner849; the fragment-side rim math itself was only in linked fiddles, not on the page).",
+      "quote": "vViewDir = normalize(-(modelViewMatrix * vec4(position, 1.0)).xyz);",
+      "url": "https://discourse.threejs.org/t/changing-rimlight-shader-math-to-achieve-a-specific-look/83678",
+      "observed": "2026-11-14",
+      "source_class": "secondary"
+    },
+    {
+      "claim": "maath (pmndrs) main-branch API.md now documents a spring module for secondary motion: spring.update(state, target, smoothTime, dampingRatio, delta) mutates a {value, velocity} state in place; spring.damp(state, target, smoothTime, delta) is the critically damped case; spring.dampAngle takes the shortest angular path; spring2/spring3/spring4 are the vector versions. A dampingRatio below 1 gives overshoot (jiggle).",
+      "quote": "Springs `state.value` toward `target`, mutating `state` in place. Returns it.",
+      "url": "https://raw.githubusercontent.com/pmndrs/maath/main/API.md",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "GSAP's default ease is power1.out; its core ease list on the same page includes back, bounce and elastic, the overshoot eases used for squash-and-stretch and follow-through.",
+      "quote": "GSAP uses a default ease of \"power1.out\".",
+      "url": "https://gsap.com/docs/v3/Eases/",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "InstancedMesh is the documented way to draw many identical boxes (voxels) in few draw calls; per-voxel color is written with setColorAt and requires instanceColor.needsUpdate = true afterwards.",
+      "quote": "Sets the given color to the defined instance. Make sure you set the `needsUpdate` flag of InstancedMesh#instanceColor to `true` after updating all the colors.",
+      "url": "https://threejs.org/docs/pages/InstancedMesh.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "For image-to-voxel, the forum-recommended pattern is: scan the image pixels first, keep only non-transparent ones, then allocate the InstancedMesh with exactly that count (so empty pixels cost nothing).",
+      "quote": "Once known, create instanced mesh with the correct count and set transforms and color.",
+      "url": "https://discourse.threejs.org/t/how-to-extrude-depth-thickness-of-alpha-video-texture/60258",
+      "observed": "2026-11-14",
+      "source_class": "secondary"
+    }
+  ],
+  "not_found": [
+    "three.js manual 'fake shadows' text (blurred grayscale blob plane under the object): https://threejs.org/manual/en/shadows.html and the raw GitHub copy at manual/en/shadows.html both returned HTTP 404; the blob-shadow technique is unquoted.",
+    "Classic maath easing.damp / damp3 / dampE / dampQ / dampLookAt signatures and the 'unity smooth damping, framerate independent' wording: not present in the current pmndrs/maath README or main-branch API.md (read 2026-11-14), which document spring.* instead. Whether the published npm version still exports easing.damp3 was not checked; verify against the installed package version.",
+    "Full untruncated description of maath spring.damp: the fetch returned it cut off at 'moves toward `target` as'.",
+    "Fragment-shader rim/fresnel math (pow(1 - dot(N, V), p)) quoted from a primary page: the forum thread only links it via JSFiddle/CodePen; no three.js docs page with this recipe was opened.",
+    "Translucent 'jelly' look without transmission (e.g. matcap + rim + additive back shell): no source opened.",
+    "Inverted-hull outline technique (BackSide scaled/normal-extruded shell) described on a primary page: the OutlineEffect docs page does not explain its drawing technique; OutlineEffect.js source was not opened.",
+    "Measured OutlinePass cost on mobile (ms or pass count): docs give only downSampleRatio default 2, no numbers.",
+    "Smooth blending of primitive parts (metaballs / MarchingCubes / SDF smooth-min) in three.js: not searched within budget.",
+    "Squash and stretch (volume-preserving scale), idle breathing, procedural blink intervals, pointer-tracking eyes/head, and the 12 principles applied in three.js: Codrops 'Creating 3D Characters in Three.js' (tympanus.net/codrops/2021/10/04/creating-3d-characters-in-three-js/) returned HTTP 403; search snippets mentioning a 4.0-7.0 s blink interval and a 0.92 landing-squash scale were not opened and are not evidence.",
+    "GSAP elastic/back/bounce config parameter descriptions (e.g. elastic.out(1, 0.3)): not on gsap.com/docs/v3/Eases/ as fetched; only the ease names are listed.",
+    "Cost numbers for image-to-voxel InstancedMesh (instance counts vs frame time on a phone): Codrops pixel-to-voxel tutorial (tympanus.net/codrops/2026/01/05/...) returned HTTP 403; no numbers found.",
+    "getImageData pixel-sampling step quoted from a primary page (MDN) was not opened."
+  ],
+  "contradictions": []
+}

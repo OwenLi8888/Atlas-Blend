@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Blend Journal</title>
+<!-- Study 03 (style B, scrapbook): the whole flow as one 3D book.
+     Open the cover, pick a character, tape in prints page by page, the gallery pops up,
+     then two characters swap prints and a new painting lands on the page. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #d8ccb5; overflow: hidden; touch-action: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #ui { position: fixed; left: 0; right: 0; bottom: max(22px, env(safe-area-inset-bottom)); display: grid; justify-items: center; gap: 10px; pointer-events: none; }
+  #hint { font: 20px "Bradley Hand", "Segoe Print", cursive; color: #4a4037; text-align: center; padding: 0 20px; min-height: 26px; }
+  #btn { pointer-events: auto; font: 20px "Bradley Hand", "Segoe Print", cursive; color: #efe7d6; background: #2b2520; border: 0; border-radius: 4px;
+    padding: 13px 30px; box-shadow: 3px 3px 0 #c8553d; transition: opacity .25s, transform .12s; }
+  #btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #c8553d; }
+  #btn[hidden] { display: none; } #btn:disabled { opacity: .35; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui"><div id="hint">tap the journal</div><button id="btn" hidden></button></div>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { PETS, petCanvas, QUIZ_ART, BLEND_ART, artUrl, loadImage } from "./pets.js";
+
+const W = 3.0, H = 2.2, SEG = 18, EPS = 0.006;         // page size, bend segments, gap between stacked leaves
+const INK = "#2b2520", RED = "#c8553d", PAPER = "#fbf6ea";
+const lerp = (a, b, k) => a + (b - a) * k;
+const io = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+const out = (k) => 1 - Math.pow(1 - k, 3);
+const back = (k) => 1 + 2.7 * Math.pow(k - 1, 3) + 1.7 * Math.pow(k - 1, 2);
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ---------- renderer, scene, camera ---------- */
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("c"), antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color("#d8ccb5");
+scene.add(new THREE.AmbientLight(0xfff6e8, 2.0));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(-2.5, 6, 3.5);
+scene.add(sun);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 60);
+const camDir = new THREE.Vector3(0, 0.9, 0.44).normalize();
+const cam = { tz: H / 2, zoom: 0.78 };                  // look-at z and distance factor; closed book first
+function placeCamera() {
+  const aspect = innerWidth / innerHeight;
+  const dist = Math.max(6.4, 1.74 / (Math.tan(THREE.MathUtils.degToRad(25)) * aspect)) * cam.zoom;
+  camera.position.set(0, 0, cam.tz).addScaledVector(camDir, dist);
+  camera.lookAt(0, 0, cam.tz);
+}
+function resize() {
+  renderer.setSize(innerWidth, innerHeight, false);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  placeCamera();
+}
+addEventListener("resize", resize);
+
+/* ---------- tweens ---------- */
+const tweens = new Set();
+function tween(ms, step, ease = io) {
+  return new Promise((done) => tweens.add({ t0: performance.now(), ms, step, ease, done }));
+}
+/** Move an object to a pose: p position, r euler, s uniform scale; hop adds an arc. */
+function fly(obj, to, ms = 500, hop = 0, ease = io) {
+  const p0 = obj.position.clone(), r0 = obj.rotation.clone(), s0 = obj.scale.x;
+  const p1 = to.p ?? p0, r1 = to.r ?? r0, s1 = to.s ?? s0;
+  return tween(ms, (k) => {
+    obj.position.lerpVectors(p0, p1, k);
+    obj.position.y += Math.sin(Math.PI * k) * hop;
+    obj.rotation.set(lerp(r0.x, r1.x, k), lerp(r0.y, r1.y, k), lerp(r0.z, r1.z, k));
+    obj.scale.setScalar(lerp(s0, s1, k));
+  }, ease);
+}
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const E = (x, y, z) => new THREE.Euler(x, y, z);
+
+/* ---------- canvas textures ---------- */
+function tex(cv) {
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+/** A journal page: cream paper with faint ruling, then `draw(g)` on a 900x660 canvas. */
+function page(draw, color = PAPER) {
+  const cv = document.createElement("canvas");
+  cv.width = 900; cv.height = 660;
+  const g = cv.getContext("2d");
+  g.fillStyle = color; g.fillRect(0, 0, 900, 660);
+  if (color === PAPER) {
+    g.strokeStyle = "rgba(43,37,32,.07)"; g.lineWidth = 2;
+    for (let y = 44; y < 660; y += 44) { g.beginPath(); g.moveTo(0, y); g.lineTo(900, y); g.stroke(); }
+  }
+  g.textAlign = "center"; g.fillStyle = INK;
+  draw?.(g);
+  return tex(cv);
+}
+const title = (g, s, y, px = 64) => { g.font = `italic ${px}px "Bodoni 72", Didot, Georgia, serif`; g.fillText(s, 450, y); };
+const hand = (g, s, y, px = 34, x = 450) => { g.font = `${px}px "Bradley Hand", "Segoe Print", cursive`; g.fillText(s, x, y); };
+const kick = (g, s, y) => { g.font = "700 20px -apple-system, Helvetica, sans-serif"; g.fillStyle = RED; g.fillText(s.split("").join(" "), 450, y); g.fillStyle = INK; };
+
+/** An instant print of an artwork: white border, thick at the bottom. */
+function printTexture(img) {
+  const cv = document.createElement("canvas");
+  cv.width = 256; cv.height = 300;
+  const g = cv.getContext("2d");
+  g.fillStyle = "#fffdf6"; g.fillRect(0, 0, 256, 300);
+  const s = Math.max(228 / img.width, 228 / img.height), w = img.width * s, h = img.height * s;
+  g.save(); g.beginPath(); g.rect(14, 14, 228, 228); g.clip();
+  g.drawImage(img, 14 + (228 - w) / 2, 14 + (228 - h) / 2, w, h);
+  g.restore();
+  return tex(cv);
+}
+
+/* ---------- the book ---------- */
+const book = new THREE.Group();
+const topHalf = new THREE.Group();                        // slides out from the spine as the cover opens
+topHalf.scale.z = 0.001;
+scene.add(book);
+book.add(topHalf);
+const boardMat = new THREE.MeshLambertMaterial({ color: "#3a4a5c" });
+const blockMat = new THREE.MeshLambertMaterial({ color: "#efe6d0" });
+for (const side of [1, -1]) {                             // two cover boards and two page blocks
+  const board = new THREE.Mesh(new THREE.BoxGeometry(W + 0.16, 0.05, H + 0.08), boardMat);
+  board.position.set(0, -0.2, side * (H / 2 + 0.02));
+  const block = new THREE.Mesh(new THREE.BoxGeometry(W, 0.17, H), blockMat);
+  block.position.set(0, -0.09, side * H / 2);
+  (side === 1 ? book : topHalf).add(board, block);
+}
+function flatPage(texture, z) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(W, H).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ map: texture }));
+  m.position.set(0, 0, z);
+  (z > 0 ? book : topHalf).add(m);
+  return m;
+}
+const baseBottom = flatPage(page(), H / 2);
+flatPage(page(), -H / 2);
+// soft contact shadow under the book
+{
+  const cv = document.createElement("canvas"); cv.width = cv.height = 128;
+  const g = cv.getContext("2d"), grad = g.createRadialGradient(64, 64, 20, 64, 64, 64);
+  grad.addColorStop(0, "rgba(60,40,20,.45)"); grad.addColorStop(1, "rgba(60,40,20,0)");
+  g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+  const sh = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 7.6).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: tex(cv), transparent: true, depthWrite: false }));
+  sh.position.y = -0.24;
+  book.add(sh);
+}
+
+// the gutter: a soft dark crease along the spine, so the spread reads as two pages
+{
+  const cv = document.createElement("canvas"); cv.width = 8; cv.height = 64;
+  const g = cv.getContext("2d"), grad = g.createLinearGradient(0, 0, 0, 64);
+  grad.addColorStop(0, "rgba(40,28,16,0)"); grad.addColorStop(0.5, "rgba(40,28,16,.38)"); grad.addColorStop(1, "rgba(40,28,16,0)");
+  g.fillStyle = grad; g.fillRect(0, 0, 8, 64);
+  const crease = new THREE.Mesh(new THREE.PlaneGeometry(W, 0.5).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: tex(cv), transparent: true, depthWrite: false }));
+  crease.position.y = 0.045; crease.renderOrder = 2;
+  topHalf.add(crease);
+}
+
+/** A leaf turns about the spine (the X axis at z = 0) and bends while it turns. */
+function makeLeaf(i, n, front, backTex) {
+  const pos = new Float32Array((SEG + 1) * 2 * 3), uvF = [], uvB = [], idx = [];
+  for (let j = 0; j <= SEG; j++) {
+    const f = j / SEG;
+    uvF.push(0, 1 - f, 1, 1 - f);                        // front: top of the canvas at the spine
+    uvB.push(0, f, 1, f);                                // back: top of the canvas at the far edge once turned
+    if (j < SEG) idx.push(2 * j, 2 * j + 2, 2 * j + 1, 2 * j + 1, 2 * j + 2, 2 * j + 3);
+  }
+  const gF = new THREE.BufferGeometry(), gB = new THREE.BufferGeometry();
+  gF.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  gF.setAttribute("uv", new THREE.Float32BufferAttribute(uvF, 2));
+  gF.setIndex(idx);
+  const leaf = { gF, yB: (n - i) * EPS, yT: (i + 1) * EPS, t: 0 };
+  setLeaf(leaf, 0);
+  gB.setAttribute("position", gF.attributes.position);
+  gB.setAttribute("normal", gF.attributes.normal);
+  gB.setAttribute("uv", new THREE.Float32BufferAttribute(uvB, 2));
+  gB.setIndex(idx);
+  leaf.front = new THREE.Mesh(gF, new THREE.MeshLambertMaterial({ map: front }));
+  leaf.back = new THREE.Mesh(gB, new THREE.MeshLambertMaterial({ map: backTex, side: THREE.BackSide }));
+  leaf.front.frustumCulled = leaf.back.frustumCulled = false;
+  book.add(leaf.front, leaf.back);
+  return leaf;
+}
+function setLeaf(leaf, t) {
+  leaf.t = t;
+  const a = leaf.gF.attributes.position, th = t * Math.PI, curl = Math.sin(Math.PI * t) * 1.15, seg = H / SEG;
+  let z = 0, y = lerp(leaf.yB, leaf.yT, t);
+  for (let j = 0; j <= SEG; j++) {
+    if (j > 0) {
+      // the free edge lags behind the spine, so the page peels up and lays down
+      const ang = THREE.MathUtils.clamp(th - curl * (j / SEG), 0, Math.PI);
+      z += Math.cos(ang) * seg; y += Math.sin(ang) * seg;
+    }
+    a.setXYZ(2 * j, -W / 2, y, z);
+    a.setXYZ(2 * j + 1, W / 2, y, z);
+  }
+  a.needsUpdate = true;
+  leaf.gF.computeVertexNormals();
+}
+
+const ROUNDS = 3;
+const coverTex = page((g) => {
+  g.strokeStyle = "#e8c47a"; g.lineWidth = 4; g.strokeRect(34, 34, 832, 592);
+  g.fillStyle = "#f1e9d8"; title(g, "Blend", 300, 190);
+  g.font = '34px "Bradley Hand", "Segoe Print", cursive'; g.fillStyle = "#e8c47a"; g.fillText("an art taste journal", 450, 380);
+  g.font = "700 20px -apple-system, Helvetica, sans-serif"; g.fillText("V O L .  1   ·   2 0 2 6", 450, 560);
+}, "#3a4a5c");
+const roundPage = null;
+const headPage = (n) => page((g) => { kick(g, `PAGE ${n} OF ${ROUNDS}`, 110); title(g, "Tape in the ones you like.", 190, 58); });
+const leaves = [
+  [coverTex, page((g) => { kick(g, "THIS JOURNAL BELONGS TO", 110); title(g, "you and your keeper", 190, 58); })],
+  [page((g) => { kick(g, "FIRST THINGS FIRST", 90); title(g, "Who keeps this journal?", 170, 58); }), headPage(1)],
+  [page(roundPage), headPage(2)],
+  [page(roundPage), headPage(3)],
+  [page(roundPage), page((g) => { kick(g, "YOUR GALLERY", 440); title(g, "Cool Tidewatcher", 530, 76); hand(g, "landscape, water · mostly oil · blue and green tones", 590, 30); })],
+].map(([f, b], i, all) => makeLeaf(i, all.length, f, b));
+// the last spread's lower page: where the blend painting will land
+baseBottom.material.map = page((g) => { kick(g, "NEXT", 270); hand(g, "swap journals with a friend", 340, 38); hand(g, "and a new painting gets taped in here", 395, 30); });
+
+/* ---------- things that live on the pages ---------- */
+const carry = new THREE.Group();                          // the avatar and the prints it has collected; hops over a turning page
+scene.add(carry);
+const picks = [];                                         // { mesh, onTap } currently tappable
+const flatGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+const tapeGeo = new THREE.PlaneGeometry(0.34, 0.1).rotateX(-Math.PI / 2);
+const tapeMat = new THREE.MeshBasicMaterial({ color: RED, transparent: true, opacity: 0.7 });
+
+function sticker(pet) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex(petCanvas(pet, 12, true)), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide }));
+  m.material.map.magFilter = THREE.NearestFilter;
+  return m;
+}
+const STAND = -0.5;                                       // an upright sticker leans back toward the camera
+function makePrint(img, art) {
+  const m = new THREE.Mesh(flatGeo, new THREE.MeshLambertMaterial({ map: printTexture(img) }));
+  const tape = new THREE.Mesh(tapeGeo, tapeMat);
+  tape.position.set(0, 0.004, -0.5); tape.rotation.y = 0.08; tape.visible = false;
+  m.add(tape);
+  m.scale.set(0.86, 1, 1.0);
+  return { mesh: m, tape, art, chosen: false };
+}
+// prints keep their 0.86 : 1 shape while fly() scales uniformly
+const setPrintScale = (p, s) => p.mesh.scale.set(0.86 * s, s, s);
+function flyPrint(p, to, ms, hop = 0, ease = io) {
+  const m = p.mesh, p0 = m.position.clone(), r0 = m.rotation.clone(), s0 = m.scale.z, s1 = to.s ?? s0, p1 = to.p ?? p0, r1 = to.r ?? r0;
+  return tween(ms, (k) => {
+    m.position.lerpVectors(p0, p1, k); m.position.y += Math.sin(Math.PI * k) * hop;
+    m.rotation.set(lerp(r0.x, r1.x, k), lerp(r0.y, r1.y, k), lerp(r0.z, r1.z, k));
+    setPrintScale(p, lerp(s0, s1, k));
+  }, ease);
+}
+
+/* ---------- input and UI ---------- */
+const btn = document.getElementById("btn"), hint = document.getElementById("hint");
+const say = (s) => { hint.textContent = s; };
+function press(label) {
+  btn.textContent = label; btn.hidden = false; btn.disabled = false;
+  return new Promise((r) => { btn.onclick = () => { btn.hidden = true; r(); }; });
+}
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+let down = null;
+addEventListener("pointerdown", (e) => { down = [e.clientX, e.clientY]; });
+addEventListener("pointerup", (e) => {
+  if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 12 || e.target === btn) return;
+  ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(picks.map((p) => p.mesh), false)[0];
+  if (hit) picks.find((p) => p.mesh === hit.object).onTap();
+});
+
+/* ---------- confetti: one InstancedMesh of paper bits ---------- */
+const BITS = 80, bits = [];
+const confetti = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.07, 0.12), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }), BITS);
+confetti.frustumCulled = false; confetti.visible = false;
+scene.add(confetti);
+const dummy = new THREE.Object3D();
+function burst(at) {
+  const cols = ["#c8553d", "#e8c47a", "#4cc9d8", "#fffdf6", "#cdb8f2"].map((c) => new THREE.Color(c));
+  for (let i = 0; i < BITS; i++) {
+    const a = Math.random() * Math.PI * 2, s = 0.6 + Math.random() * 1.6;
+    bits[i] = { p: at.clone(), v: V(Math.cos(a) * s, 2 + Math.random() * 2.4, Math.sin(a) * s), r: Math.random() * 6, w: 2 + Math.random() * 6 };
+    confetti.setColorAt(i, cols[i % cols.length]);
+  }
+  confetti.instanceColor.needsUpdate = true;
+  confetti.visible = true;
+}
+function stepConfetti(dt) {
+  if (!confetti.visible) return;
+  let alive = false;
+  for (let i = 0; i < BITS; i++) {
+    const b = bits[i];
+    b.v.y -= 5.2 * dt; b.v.multiplyScalar(1 - 1.2 * dt); b.p.addScaledVector(b.v, dt); b.r += b.w * dt;
+    if (b.p.y > -0.3) alive = true;
+    dummy.position.copy(b.p); dummy.rotation.set(b.r, b.r * 0.7, b.r * 1.3); dummy.updateMatrix();
+    confetti.setMatrixAt(i, dummy.matrix);
+  }
+  confetti.instanceMatrix.needsUpdate = true;
+  confetti.visible = alive;
+}
+
+/* ---------- the story ---------- */
+const flip = (i, ms = 1150) => tween(ms, (k) => { setLeaf(leaves[i], k); carry.position.y = Math.sin(Math.PI * k) * 1.7; });
+let avatar, pet;
+const HOME = V(-0.95, 0.5, -0.5);
+
+async function story() {
+  const [imgs, blendImg] = await Promise.all([Promise.all(QUIZ_ART.map((id) => loadImage(artUrl(id)))), loadImage(artUrl(BLEND_ART))]);
+
+  // 1. open the cover
+  await new Promise((r) => { picks.push({ mesh: leaves[0].front, onTap: r }); });
+  picks.length = 0; say("");
+  tween(1300, (k) => { cam.tz = lerp(H / 2, 0.05, k); cam.zoom = lerp(0.78, 1, k); placeCamera(); });
+  tween(700, (k) => { topHalf.scale.z = Math.max(0.001, k); }, out);
+  await flip(0, 1400);
+
+  // 2. pick a character: three stickers on the page, the chosen one stands up
+  say("pick your keeper");
+  const options = Object.entries(PETS).map(([id, p], i) => {
+    const m = sticker(p);
+    m.rotation.x = -Math.PI / 2; m.position.set((i - 1) * 0.95, 0.05, 1.25); m.scale.setScalar(0.01);
+    scene.add(m);
+    tween(420, (k) => m.scale.setScalar(0.8 * k), back);
+    return { id, p, m };
+  });
+  const chosen = await new Promise((r) => options.forEach((o) => picks.push({ mesh: o.m, onTap: () => r(o) })));
+  picks.length = 0;
+  pet = chosen.id; avatar = chosen.m;
+  options.filter((o) => o !== chosen).forEach((o) => tween(260, (k) => o.m.scale.setScalar(0.8 * (1 - k))).then(() => scene.remove(o.m)));
+  carry.attach(avatar);
+  await fly(avatar, { p: HOME, r: E(STAND, 0, 0), s: 0.95 }, 700, 1.1);
+  say(`${chosen.p.name} will keep your journal`);
+  await press("Start the quiz");
+
+  // 3. the quiz: one page per round, tapped prints get taped, then go into the keeper's pile
+  const deck = [];
+  for (let r = 0; r < ROUNDS; r++) {
+    say("");
+    await flip(r + 1);
+    say("tape in the ones you like");
+    const prints = imgs.slice(r * 4, r * 4 + 4).map((img, i) => {
+      const p = makePrint(img, QUIZ_ART[r * 4 + i]);
+      p.slot = V((i % 2 ? 1 : -1) * 0.72, 0.03, i < 2 ? 0.6 : 1.64);
+      p.mesh.position.copy(p.slot); p.mesh.rotation.y = (i % 2 ? -1 : 1) * 0.06 + (i < 2 ? 0.03 : -0.03);
+      setPrintScale(p, 0.01);
+      scene.add(p.mesh);
+      wait(i * 90).then(() => tween(380, (k) => setPrintScale(p, k), back));
+      picks.push({ mesh: p.mesh, onTap: () => {
+        p.chosen = !p.chosen; p.tape.visible = p.chosen;
+        flyPrint(p, { p: V(p.slot.x, p.chosen ? 0.1 : 0.03, p.slot.z), s: p.chosen ? 1.05 : 1 }, 220, 0.12);
+        if (p.chosen) fly(avatar, { p: V(0, 0.36, p.slot.z + 0.1), s: 0.62 }, 380, 0.7);   // hops into the gap beside the print
+        btn.disabled = !prints.some((q) => q.chosen);
+      } });
+      return p;
+    });
+    const next = press(r === ROUNDS - 1 ? "See my gallery" : "Next page");
+    btn.disabled = true;
+    await next;
+    picks.length = 0;
+    fly(avatar, { p: HOME, s: 0.95 }, 420, 0.6);
+    for (const p of prints) {
+      if (!p.chosen) { tween(240, (k) => setPrintScale(p, 1 - k)).then(() => scene.remove(p.mesh)); continue; }
+      const n = deck.push(p) - 1;
+      p.tape.visible = false;
+      carry.attach(p.mesh);
+      flyPrint(p, { p: V(-0.2 + (n % 6) * 0.26, 0.05 + n * 0.012, -0.8 - Math.floor(n / 6) * 0.5), r: E(0, (n % 2 ? 1 : -1) * 0.14, 0), s: 0.4 }, 560, 0.9);
+    }
+    await wait(620);
+  }
+
+  // 4. the gallery pops up out of the last spread
+  say("");
+  await flip(ROUNDS + 1);
+  const shown = deck.slice(0, 8), n = shown.length, gap = Math.min(0.58, 2.5 / n);
+  shown.forEach((p, i) => {
+    const u = i - (n - 1) / 2;
+    wait(i * 110).then(() => flyPrint(p, { p: V(u * gap, 0.62 + (i % 2) * 0.16, -1.25 + Math.abs(u) * 0.07), r: E(Math.PI / 2 - 0.42, -u * 0.1, 0), s: 0.72 }, 700, 0.5, back));
+  });
+  deck.slice(8).forEach((p) => tween(300, (k) => setPrintScale(p, 0.4 * (1 - k))));
+  fly(avatar, { p: V(-1.0, 0.5, 0.5) }, 600, 1.0);
+  say(`${deck.length} prints in your gallery`);
+  await wait(n * 110 + 500);
+  await press("Swap with a friend");
+
+  // 5. the swap: a friend's keeper hops in, each gives a print, the two become one new painting
+  say("a friend opens their journal...");
+  const friendPet = Object.entries(PETS).find(([id]) => id !== pet)[1];
+  const friend = sticker(friendPet);
+  friend.rotation.x = STAND; friend.scale.setScalar(0.95); friend.position.set(3.4, 0.5, 0.5);
+  scene.add(friend);
+  const mine = shown[0];
+  const theirs = makePrint(imgs.find((_, i) => !deck.some((d) => d.art === QUIZ_ART[i])) ?? imgs[0], "friend");
+  setPrintScale(theirs, 0.5); theirs.mesh.position.set(3.4, 0.25, 1.5);
+  scene.add(theirs.mesh);
+  fly(avatar, { p: V(-1.05, 0.5, 0.5) }, 700, 1.0);
+  for (const x of [2.2, 1.05]) {                          // two hops in from the right
+    flyPrint(theirs, { p: V(x, 0.25, 1.5) }, 420, 0.7);
+    await fly(friend, { p: V(x, 0.5, 0.5) }, 420, 0.8);
+  }
+  scene.attach(mine.mesh);
+  say("they each give a print");
+  const mid = V(0, 1.7, 0.9);
+  await Promise.all([
+    flyPrint(mine, { p: V(-0.6, 1.7, 0.9), r: E(Math.PI / 2 - 0.5, 0, 0), s: 0.7 }, 700, 0.4),
+    flyPrint(theirs, { p: V(0.6, 1.7, 0.9), r: E(Math.PI / 2 - 0.5, 0, 0), s: 0.7 }, 700, 0.4),
+  ]);
+  await tween(1500, (k) => {                               // they circle each other, faster and closer
+    const a = k * k * 16, rad = 0.6 * (1 - k);
+    mine.mesh.position.set(mid.x - Math.cos(a) * rad, mid.y, mid.z - Math.sin(a) * rad * 0.6);
+    theirs.mesh.position.set(mid.x + Math.cos(a) * rad, mid.y, mid.z + Math.sin(a) * rad * 0.6);
+    mine.mesh.rotation.z = theirs.mesh.rotation.z = a;
+    setPrintScale(mine, 0.7 * (1 - k * 0.5)); setPrintScale(theirs, 0.7 * (1 - k * 0.5));
+  }, (k) => k);
+  scene.remove(mine.mesh, theirs.mesh);
+  burst(mid);
+  const blend = makePrint(blendImg, BLEND_ART);
+  blend.tape.material = new THREE.MeshBasicMaterial({ color: "#e8c47a", transparent: true, opacity: 0.85 });
+  blend.mesh.position.copy(mid); blend.mesh.rotation.set(Math.PI / 2 - 0.5, 0, 0); setPrintScale(blend, 0.01);
+  scene.add(blend.mesh);
+  await tween(520, (k) => setPrintScale(blend, 1.7 * k), back);
+  say("a new painting, made from both galleries");
+  await wait(900);
+  await flyPrint(blend, { p: V(0, 0.04, 1.3), r: E(0, -0.05, 0), s: 1.45 }, 800, 0.3);
+  blend.tape.visible = true;
+  for (let i = 0; i < 3; i++) await Promise.all([fly(avatar, {}, 320, 0.5), fly(friend, {}, 320, 0.5)]);
+  await press("Open again");
+  location.reload();
+}
+
+/* ---------- loop ---------- */
+let last = performance.now();
+renderer.setAnimationLoop((now) => {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  for (const t of tweens) {
+    const k = Math.min(1, (now - t.t0) / t.ms);
+    t.step(t.ease(k));
+    if (k === 1) { tweens.delete(t); t.done(); }
+  }
+  if (avatar) avatar.rotation.z = Math.sin(now / 380) * 0.06;   // the keeper never stands still
+  stepConfetti(dt);
+  renderer.render(scene, camera);
+});
+resize();
+window.__book = { renderer, scene, leaves, flip, picks, press: () => btn.click() };
+story();
+</script>
+</body>
+</html>

@@ -1,0 +1,691 @@
+<meta charset="utf-8">
+<title>Night Gallery</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500&family=Fraunces:opsz,wght@9..144,300;9..144,500&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Layout: one phone screen. The 3D hall fills it; a paper ticket slides up from the thumb zone.
+     Single dark look by choice: the hall is lit only by its picture lights. */
+  :root {
+    color-scheme: dark;
+    --night: #05060c;
+    --mist: #a3abc4;
+    --cream: #efe6d2;
+    --gold: #d8b46a;
+    --paper: #f1e7d3;
+    --paper-edge: #dccdb0;
+    --ink: #2b2118;
+    --ink-soft: #6d5d4b;
+    --stamp: #b5462f;
+    --display: "Fraunces", "Iowan Old Style", "Palatino", Georgia, serif;
+    --body: "Instrument Sans", "Avenir Next", system-ui, sans-serif;
+    --hand: "Caveat", "Bradley Hand", "Segoe Script", cursive;
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--night); color: var(--cream); font-family: var(--body);
+    overflow: hidden; -webkit-user-select: none; user-select: none;
+  }
+  #hall { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .top {
+    position: fixed; top: 0; left: 0; right: 0; pointer-events: none;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 14px);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+    font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--mist);
+  }
+  .top b { font-weight: 500; color: var(--gold); font-variant-numeric: tabular-nums; }
+  .dock {
+    position: fixed; left: 0; right: 0; bottom: 0; pointer-events: none;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; justify-items: center;
+  }
+  .dock > * { grid-area: 1 / 1; align-self: end; }
+  .cta { display: grid; justify-items: center; gap: 10px; transition: opacity 0.5s, transform 0.5s; }
+  .hint { font-size: 0.78rem; color: var(--mist); text-align: center; transition: opacity 0.5s; }
+  .enter {
+    pointer-events: auto; cursor: pointer; font: 300 1.05rem/1 var(--display); letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--cream); background: rgba(5, 6, 12, 0.35);
+    border: 1px solid rgba(239, 230, 210, 0.55); border-radius: 999px; padding: 15px 26px;
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  }
+  .enter:focus-visible, .ticket button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+  .enter-note { font-size: 0.74rem; color: var(--mist); min-height: 1em; text-align: center; }
+  .gone { opacity: 0; transform: translateY(10px); pointer-events: none !important; }
+
+  /* The paper keepsake: an admission ticket for the painting in front of you. */
+  .ticket {
+    pointer-events: auto; width: min(380px, 100%); display: grid; grid-template-columns: 74px 1fr;
+    background: var(--paper); color: var(--ink); border-radius: 6px; transform: rotate(-1.2deg);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), 0 1px 0 var(--paper-edge) inset;
+    transition: opacity 0.45s, transform 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    background-image: radial-gradient(rgba(43, 33, 24, 0.05) 1px, transparent 1px);
+    background-size: 5px 5px;
+  }
+  .ticket.gone { transform: translateY(40px) rotate(2deg); }
+  .stub {
+    border-right: 2px dashed rgba(43, 33, 24, 0.35); padding: 12px 8px;
+    display: grid; align-content: space-between; justify-items: center; text-align: center;
+  }
+  .stub small { font-size: 0.56rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft); }
+  .stub strong { font: 500 1.9rem/1 var(--display); font-variant-numeric: tabular-nums; }
+  .info { padding: 12px 14px 12px 14px; min-width: 0; position: relative; }
+  .info h2 { margin: 0; font: 500 1.08rem/1.15 var(--display); text-wrap: balance; }
+  .info p { margin: 4px 0 0; font-size: 0.78rem; color: var(--ink-soft); }
+  .info .note { font: 500 1.18rem/1.1 var(--hand); color: #3a4a8a; margin-top: 8px; transform: rotate(-1deg); }
+  .info .sample { font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.7; }
+  .stamp {
+    position: absolute; right: 10px; bottom: 8px; width: 46px; height: 46px; border-radius: 50%;
+    border: 2px solid var(--stamp); color: var(--stamp); display: grid; place-items: center;
+    font: 600 0.56rem/1 var(--body); letter-spacing: 0.12em; transform: rotate(14deg); opacity: 0.75;
+  }
+  .ticket button {
+    position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border: 0; border-radius: 50%;
+    background: transparent; color: var(--ink-soft); font-size: 1.1rem; cursor: pointer;
+  }
+  #err { position: fixed; inset: 40% 16px auto; text-align: center; color: var(--mist); }
+</style>
+
+<canvas id="hall" aria-label="A dark museum corridor with paintings in gold frames and a beaver guide"></canvas>
+
+<header class="top">
+  <span>Study 02 · sample gallery</span>
+  <span><b id="count">01</b> / 08</span>
+</header>
+
+<section class="dock">
+  <div class="hint" id="hint">Swipe up to walk · tap a painting · tap the beaver</div>
+  <article class="ticket gone" id="ticket" aria-live="polite">
+    <div class="stub"><small>Kept</small><strong id="t-no">01</strong><small>Gallery</small></div>
+    <div class="info">
+      <button id="t-close" aria-label="Back to the corridor">×</button>
+      <h2 id="t-title">Title</h2>
+      <p id="t-meta">Artist · year</p>
+      <p class="note" id="t-note">note</p>
+      <p class="sample">Sample note</p>
+      <span class="stamp">BLEND</span>
+    </div>
+  </article>
+  <div class="cta gone" id="cta">
+    <button class="enter" id="enter">Blend with a friend</button>
+    <div class="enter-note" id="enter-note"></div>
+  </div>
+</section>
+<p id="err" hidden>The 3D hall could not start in this browser.</p>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from "three";
+
+const ART = /*ART_JSON*/[];
+const NOTES = [
+  "you stopped here first",
+  "water again. you keep choosing it",
+  "soft edges are your thing",
+  "gold in the dark, like this hall",
+  "the busiest one you kept",
+  "cool blues, third time",
+  "the odd one out. I like it",
+  "light and quick",
+];
+const WALL_ART = ART.slice(0, 8), ARCH_ART = ART[8];
+const GALLERY_NAME = ["Cool", "Tidewatcher"];
+const NIGHT = 0x05060c;
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const $ = (id) => document.getElementById(id);
+
+const canvas = $("hall");
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+} catch (e) {
+  $("err").hidden = false;
+  throw e;
+}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(NIGHT);
+scene.fog = new THREE.Fog(NIGHT, 5, 25);
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 80);
+const world = new THREE.Group();     // everything that reflects in the floor
+const extras = new THREE.Group();    // drawn in the main pass only
+scene.add(world, extras);
+
+// ---------- helpers ----------
+function canvasTex(w, h, draw) {
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  draw(c.getContext("2d"), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+function glowTex(r, g, b, cx = 0.5, cy = 0.5) {
+  return canvasTex(128, 128, (x) => {
+    const gr = x.createRadialGradient(128 * cx, 128 * cy, 0, 128 * cx, 128 * cy, 76);
+    gr.addColorStop(0, "rgba(" + r + "," + g + "," + b + ",0.75)");
+    gr.addColorStop(0.45, "rgba(" + r + "," + g + "," + b + ",0.22)");
+    gr.addColorStop(1, "rgba(" + r + "," + g + "," + b + ",0)");
+    x.fillStyle = gr;
+    x.fillRect(0, 0, 128, 128);
+  });
+}
+const additive = (map, opacity = 1) => new THREE.MeshBasicMaterial({ map, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false });
+
+// matcaps: lighting baked into one small canvas per colour
+const matcapCache = new Map();
+function matcap(hex) {
+  if (matcapCache.has(hex)) return matcapCache.get(hex);
+  const hsl = {};
+  new THREE.Color(hex).getHSL(hsl);
+  const L = (d) => "hsl(" + (hsl.h * 360).toFixed(1) + "," + (hsl.s * 100).toFixed(1) + "%," + Math.max(2, Math.min(96, hsl.l * 100 + d)).toFixed(1) + "%)";
+  const t = canvasTex(128, 128, (g) => {
+    const base = g.createRadialGradient(48, 38, 4, 64, 70, 74);
+    base.addColorStop(0, L(16)); base.addColorStop(0.5, L(0)); base.addColorStop(1, L(-26));
+    g.fillStyle = base; g.fillRect(0, 0, 128, 128);
+    const spec = g.createRadialGradient(44, 32, 0, 44, 32, 15);
+    spec.addColorStop(0, "rgba(255,244,220,0.9)"); spec.addColorStop(1, "rgba(255,244,220,0)");
+    g.fillStyle = spec; g.fillRect(0, 0, 128, 128);
+  });
+  matcapCache.set(hex, t);
+  return t;
+}
+function toyMat(hex, rim = 0.32) {
+  const m = new THREE.MeshMatcapMaterial({ matcap: matcap(hex) });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.rimColor = { value: new THREE.Color("#ffd9a0") };
+    sh.uniforms.rimStrength = { value: rim };
+    sh.fragmentShader = sh.fragmentShader
+      .replace("uniform float opacity;", "uniform float opacity;\nuniform vec3 rimColor;\nuniform float rimStrength;")
+      .replace("#include <opaque_fragment>",
+        "float rimF = pow(1.0 - clamp(dot(normal, viewDir), 0.0, 1.0), 2.6);\noutgoingLight += rimColor * rimF * rimStrength;\n#include <opaque_fragment>");
+  };
+  return m;
+}
+const GOLD = toyMat("#c39a4e", 0.2);
+
+// ---------- hall ----------
+const LEN = 40, H = 5.2, ARCH_Z = -24;
+let wallX = 1.6;
+const wallTex = canvasTex(256, 512, (g, w, h) => {
+  const gr = g.createLinearGradient(0, 0, 0, h);
+  gr.addColorStop(0, "#04050b"); gr.addColorStop(0.35, "#10162b"); gr.addColorStop(0.72, "#141b33"); gr.addColorStop(1, "#070913");
+  g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  g.fillStyle = "rgba(255,255,255,0.035)"; g.fillRect(0, 0, 2, h);
+  g.fillStyle = "rgba(0,0,0,0.35)"; g.fillRect(2, 0, 3, h);
+  g.fillStyle = "rgba(216,180,106,0.35)"; g.fillRect(0, h - 34, w, 2);   // gilt skirting line
+});
+wallTex.wrapS = THREE.RepeatWrapping;
+wallTex.repeat.set(LEN / 2.4, 1);
+const wallMat = new THREE.MeshBasicMaterial({ map: wallTex });
+const walls = [-1, 1].map((side) => {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(LEN, H), wallMat);
+  m.rotation.y = -side * Math.PI / 2;
+  m.position.set(side * wallX, H / 2, 6 - LEN / 2);
+  world.add(m);
+  return { m, side };
+});
+const endTex = wallTex.clone(); endTex.repeat.set(4, 1); endTex.needsUpdate = true;
+const endWall = new THREE.Mesh(new THREE.PlaneGeometry(10, H), new THREE.MeshBasicMaterial({ map: endTex }));
+endWall.position.set(0, H / 2, ARCH_Z - 0.06);
+world.add(endWall);
+
+// paintings in gold frames under picture lights
+const loader = new THREE.TextureLoader();
+const lightGlow = glowTex(255, 205, 140, 0.5, 0.3);
+const paintings = WALL_ART.map((a, k) => {
+  const side = k % 2 ? 1 : -1;
+  const z = -1.6 - k * 2.6;
+  const pw = a.w >= a.h ? 1.3 : 1.45 * a.w / a.h;
+  const ph = a.w >= a.h ? 1.3 * a.h / a.w : 1.45;
+  const g = new THREE.Group();
+  g.rotation.y = -side * Math.PI / 2;
+  g.position.set(side * wallX, 2.0, z);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(pw + 1.7, ph + 2.0), additive(lightGlow, 0.9));
+  glow.position.set(0, 0.2, 0.006);
+  const tex = loader.load(a.src);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const geo = new THREE.PlaneGeometry(pw, ph);
+  // picture light falls off down the canvas
+  geo.setAttribute("color", new THREE.BufferAttribute(new Float32Array([1, 1, 1, 1, 1, 1, 0.66, 0.66, 0.7, 0.66, 0.66, 0.7]), 3));
+  const pic = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, vertexColors: true }));
+  pic.position.z = 0.03;
+  pic.userData.k = k;
+  const o = 0.085, s = new THREE.Shape(), hole = new THREE.Path();
+  s.moveTo(-pw / 2 - o, -ph / 2 - o); s.lineTo(pw / 2 + o, -ph / 2 - o); s.lineTo(pw / 2 + o, ph / 2 + o); s.lineTo(-pw / 2 - o, ph / 2 + o); s.closePath();
+  hole.moveTo(-pw / 2, -ph / 2); hole.lineTo(-pw / 2, ph / 2); hole.lineTo(pw / 2, ph / 2); hole.lineTo(pw / 2, -ph / 2); hole.closePath();
+  s.holes.push(hole);
+  const frame = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2 }), GOLD);
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, pw * 0.62, 10), GOLD);
+  bar.rotation.z = Math.PI / 2;
+  bar.position.set(0, ph / 2 + 0.3, 0.22);
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 8), GOLD);
+  arm.rotation.x = Math.PI / 2;
+  arm.position.set(0, ph / 2 + 0.3, 0.11);
+  g.add(glow, pic, frame, bar, arm);
+  world.add(g);
+  return { g, pic, side, z, pw, ph, art: a };
+});
+const picMeshes = paintings.map((p) => p.pic);
+
+// the arch at the end: where two galleries blend
+const archShape = new THREE.Shape();
+archShape.moveTo(-1, 0); archShape.lineTo(1, 0); archShape.lineTo(1, 2); archShape.absarc(0, 2, 1, 0, Math.PI, false); archShape.lineTo(-1, 0);
+const archGeo = new THREE.ShapeGeometry(archShape, 32);
+{
+  const uv = archGeo.attributes.uv, pos = archGeo.attributes.position;
+  const shapeAspect = 2 / 3, imgAspect = ARCH_ART.w / ARCH_ART.h;
+  for (let i = 0; i < uv.count; i++) {
+    let u = (pos.getX(i) + 1) / 2, v = pos.getY(i) / 3;
+    if (imgAspect > shapeAspect) u = 0.5 + (u - 0.5) * shapeAspect / imgAspect;
+    else v = 0.5 + (v - 0.5) * imgAspect / shapeAspect;
+    uv.setXY(i, u, v);
+  }
+}
+const archTex = loader.load(ARCH_ART.src);
+archTex.colorSpace = THREE.SRGBColorSpace;
+const arch = new THREE.Mesh(archGeo, new THREE.MeshBasicMaterial({ map: archTex, fog: false, color: new THREE.Color(1.15, 1.12, 1.2) }));
+arch.position.set(0, 0, ARCH_Z);
+const archRim = new THREE.Mesh(archGeo, new THREE.MeshBasicMaterial({ color: "#d8b46a", fog: false }));
+archRim.position.set(0, -0.02, ARCH_Z - 0.02);
+archRim.scale.set(1.045, 1.03, 1);
+const archHalo = new THREE.Mesh(new THREE.PlaneGeometry(7, 8), additive(glowTex(190, 170, 255), 0.55));
+archHalo.material.fog = false;
+archHalo.position.set(0, 1.9, ARCH_Z + 0.05);
+world.add(archRim, arch, archHalo);
+
+// the gallery's name, standing in the hall so it reflects in the floor
+const titleCanvas = document.createElement("canvas");
+titleCanvas.width = 1024; titleCanvas.height = 512;
+const titleTex = new THREE.CanvasTexture(titleCanvas);
+titleTex.colorSpace = THREE.SRGBColorSpace;
+const title = new THREE.Mesh(new THREE.PlaneGeometry(2, 1), new THREE.MeshBasicMaterial({ map: titleTex, transparent: true, depthWrite: false, fog: false }));
+title.position.set(0, 3.2, -2.6);
+world.add(title);
+async function drawTitle() {
+  try {
+    await Promise.race([
+      Promise.all([document.fonts.load('300 150px "Fraunces"'), document.fonts.load('500 30px "Instrument Sans"')]),
+      new Promise((r) => setTimeout(r, 2500)),
+    ]);
+  } catch (e) { /* fall back to the serif stack */ }
+  const g = titleCanvas.getContext("2d");
+  g.clearRect(0, 0, 1024, 512);
+  g.textAlign = "center";
+  g.fillStyle = "#efe6d2";
+  if ("letterSpacing" in g) g.letterSpacing = "6px";
+  let size = 178;
+  const face = (px) => '300 ' + px + 'px "Fraunces", Georgia, serif';
+  g.font = face(size);
+  const widest = Math.max(...GALLERY_NAME.map((t) => g.measureText(t.toUpperCase()).width));
+  if (widest > 960) size = Math.floor(size * 960 / widest);
+  g.font = face(size);
+  GALLERY_NAME.forEach((t, i) => g.fillText(t.toUpperCase(), 512, 190 + i * size * 0.98));
+  if ("letterSpacing" in g) g.letterSpacing = "3px";
+  g.font = '500 30px "Instrument Sans", system-ui, sans-serif';
+  g.fillStyle = "#d8b46a";
+  g.fillText("YOUR GALLERY · EIGHT WORKS KEPT", 512, 190 + size * 0.98 + 78);
+  titleTex.needsUpdate = true;
+}
+drawTitle();
+
+// dust in the picture lights
+const DUST = reduceMotion ? 60 : 200;
+const dustPos = new Float32Array(DUST * 3);
+for (let i = 0; i < DUST; i++) {
+  dustPos[i * 3] = (Math.random() - 0.5) * 4.4;
+  dustPos[i * 3 + 1] = 0.3 + Math.random() * 3.8;
+  dustPos[i * 3 + 2] = 5 - Math.random() * 30;
+}
+const dustGeo = new THREE.BufferGeometry();
+dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPos, 3));
+const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({ size: 0.035, map: glowTex(255, 236, 200), transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+extras.add(dust);
+
+// ---------- reflective floor ----------
+const rt = new THREE.WebGLRenderTarget(4, 4);
+const floorMat = new THREE.ShaderMaterial({
+  uniforms: {
+    tRefl: { value: rt.texture }, res: { value: new THREE.Vector2(1, 1) }, time: { value: 0 },
+    fogColor: { value: new THREE.Color(NIGHT) }, fogNear: { value: 5 }, fogFar: { value: 25 },
+  },
+  vertexShader: `
+    varying vec3 vW;
+    void main() {
+      vec4 w = modelMatrix * vec4(position, 1.0);
+      vW = w.xyz;
+      gl_Position = projectionMatrix * viewMatrix * w;
+    }`,
+  fragmentShader: `
+    uniform sampler2D tRefl; uniform vec2 res; uniform float time;
+    uniform vec3 fogColor; uniform float fogNear; uniform float fogFar;
+    varying vec3 vW;
+    void main() {
+      vec2 uv = gl_FragCoord.xy / res;
+      float w1 = sin(vW.z * 2.3 + time * 0.9 + vW.x * 1.3);
+      float w2 = sin(vW.z * 5.1 - time * 1.4 + vW.x * 3.7);
+      uv += vec2(w1 * 0.007 + w2 * 0.003, w2 * 0.004);
+      vec3 refl = texture2D(tRefl, uv).rgb;
+      vec3 V = normalize(cameraPosition - vW);
+      float fres = pow(1.0 - clamp(V.y, 0.0, 1.0), 2.5);
+      vec3 col = vec3(0.004, 0.005, 0.011) + refl * mix(0.26, 0.95, fres);
+      col += vec3(0.5, 0.42, 0.3) * pow(max(0.0, w1 * w2), 6.0) * 0.04;
+      float f = smoothstep(fogNear, fogFar, length(cameraPosition - vW));
+      gl_FragColor = vec4(mix(col, fogColor, f), 1.0);
+      #include <colorspace_fragment>
+    }`,
+});
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 46), floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.position.set(0, 0, -15);
+extras.add(floor);
+const pool = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.6), additive(glowTex(255, 196, 120), 0.5));
+pool.rotation.x = -Math.PI / 2;
+pool.position.y = 0.01;
+extras.add(pool);
+
+// ---------- the beaver guide ----------
+const S = (r, w = 28, h = 20) => new THREE.SphereGeometry(r, w, h);
+function part(geo, mat, pos, scale, rot) {
+  const m = new THREE.Mesh(geo, mat);
+  if (pos) m.position.set(...pos);
+  if (scale) m.scale.set(...scale);
+  if (rot) m.rotation.set(...rot);
+  return m;
+}
+const M = {
+  fur: toyMat("#e0853a"), belly: toyMat("#f2cf9c"), dark: toyMat("#5e3724"), white: toyMat("#fff8ee", 0.1),
+  pupil: toyMat("#24160f", 0.15), wood: toyMat("#8d5a38"), earIn: toyMat("#c1663a"), beret: toyMat("#3d6fb6"),
+};
+const pet = new THREE.Group(), hop = new THREE.Group(), rig = new THREE.Group();
+pet.scale.setScalar(0.5);
+world.add(pet); pet.add(hop); hop.add(rig);
+const prof = [[0.001, 0], [0.3, 0.02], [0.48, 0.12], [0.57, 0.3], [0.56, 0.52], [0.48, 0.76], [0.36, 0.95], [0.2, 1.06], [0.001, 1.1]].map(([x, y]) => new THREE.Vector2(x, y));
+rig.add(part(new THREE.LatheGeometry(prof, 36), M.fur));
+rig.add(part(S(0.36), M.belly, [0, 0.46, 0.33], [1, 1.2, 0.62]));
+const feet = [];
+for (const sx of [-1, 1]) {
+  const foot = part(S(0.17, 20, 14), M.dark, [sx * 0.23, 0.06, 0.2], [1.05, 0.5, 1.35]);
+  feet.push(foot);
+  rig.add(foot);
+  rig.add(part(new THREE.CapsuleGeometry(0.085, 0.2, 6, 12), M.fur, [sx * 0.33, 0.66, 0.36], null, [-0.7, 0, sx * 0.75]));
+}
+const head = new THREE.Group();
+head.position.set(0, 1.42, 0);
+rig.add(head);
+head.add(part(S(0.66, 36, 26), M.fur, [0, 0, 0], [1.05, 0.95, 0.95]));
+head.add(part(S(0.27), M.belly, [0, -0.17, 0.49], [1.28, 0.86, 0.8]));
+head.add(part(S(0.09, 16, 12), M.dark, [0, -0.06, 0.71], [1.35, 1, 0.9]));
+for (const sx of [-1, 1]) {
+  head.add(part(new THREE.BoxGeometry(0.085, 0.13, 0.05), M.white, [sx * 0.047, -0.37, 0.62]));
+  head.add(part(S(0.15, 18, 12), M.fur, [sx * 0.46, 0.46, 0], [1, 1, 0.55]));
+  head.add(part(S(0.085, 14, 10), M.earIn, [sx * 0.46, 0.46, 0.06], [1, 1, 0.4]));
+}
+const eyes = [];
+for (const sx of [-1, 1]) {
+  const eye = new THREE.Group();
+  eye.position.set(sx * 0.24, 0.12, 0.5);
+  eye.add(part(S(0.16), M.white, [0, 0, 0], [1, 1.1, 0.6]));
+  const pupil = new THREE.Group();
+  pupil.add(part(S(0.11), M.pupil, [0, 0, 0.06], [1, 1.1, 0.45]));
+  pupil.add(part(S(0.034, 10, 8), M.white, [-0.035, 0.05, 0.11]));
+  eye.add(pupil);
+  head.add(eye);
+  eyes.push({ eye, pupil });
+}
+const beret = new THREE.Group();
+beret.position.set(0.08, 0.52, -0.02);
+beret.rotation.set(-0.12, 0, -0.28);
+beret.add(part(S(0.44, 28, 14), M.beret, [0, 0, 0], [1, 0.4, 1]));
+beret.add(part(new THREE.CylinderGeometry(0.03, 0.045, 0.1, 10), M.beret, [0, 0.17, 0]));
+head.add(beret);
+const pal = new THREE.Shape();
+pal.moveTo(-0.46, 0.0);
+pal.bezierCurveTo(-0.5, 0.32, -0.1, 0.43, 0.13, 0.37);
+pal.bezierCurveTo(0.43, 0.3, 0.56, 0.08, 0.49, -0.13);
+pal.bezierCurveTo(0.43, -0.34, 0.12, -0.41, -0.08, -0.35);
+pal.bezierCurveTo(-0.21, -0.31, -0.13, -0.17, -0.25, -0.15);
+pal.bezierCurveTo(-0.39, -0.13, -0.43, -0.11, -0.46, 0.0);
+const thumb = new THREE.Path();
+thumb.absarc(-0.25, 0.1, 0.07, 0, Math.PI * 2, true);
+pal.holes.push(thumb);
+const palGeo = new THREE.ExtrudeGeometry(pal, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.025, bevelSegments: 3, curveSegments: 22 });
+palGeo.center();
+const tailPivot = new THREE.Group();
+tailPivot.position.set(0.3, 0.3, -0.38);
+rig.add(tailPivot);
+const tail = part(palGeo, M.wood, [0.5, 0.12, -0.08], [1.25, 1.25, 1.25], [-0.55, -0.35, 0.45]);
+tailPivot.add(tail);
+["#4cc9d8", "#3d6fb6", "#9ed8c6", "#f3ede2", "#6b7fd7"].forEach((hx, i) => {
+  const [x, y] = [[0.26, 0.17], [0.33, -0.06], [0.14, -0.21], [-0.04, 0.22], [0.06, 0.01]][i];
+  tail.add(part(S(0.07, 14, 10), toyMat(hx), [x, y, 0.055], [1, 0.9, 0.38]));
+});
+
+// ---------- state ----------
+const WALK_MAX = 4 - (ARCH_Z + 7.2);
+let walk = 0, walkV = 0, focus = -1, focusT = 0;
+let petFace = 0, waddle = 0, idleFor = 0;
+const petPos = new THREE.Vector3(0, 0, -1);
+const sq = { x: 1, v: 0 };
+let jumpV = 0, jumpY = 0, airborne = false, launchAt = 0;
+let blinkT = 0, nextBlink = 2 + Math.random() * 4;
+const lookT = { x: 0, y: 0 }, lookS = { x: 0, y: 0 };
+const spring = (s, target, k, c, dt) => { s.v += (k * (target - s.x) - c * s.v) * dt; s.x += s.v * dt; };
+function bounce() {
+  if (airborne || launchAt) return;
+  sq.v -= 3.2;
+  launchAt = performance.now() + 140;
+}
+function setFocus(k) {
+  focus = k;
+  const on = k >= 0;
+  $("ticket").classList.toggle("gone", !on);
+  $("hint").style.opacity = on ? 0 : 1;
+  if (!on) return;
+  const p = paintings[k];
+  $("t-no").textContent = String(k + 1).padStart(2, "0");
+  $("t-title").textContent = p.art.title;
+  $("t-meta").textContent = p.art.artist + " · " + p.art.year + " · " + p.art.medium;
+  $("t-note").textContent = NOTES[k];
+  walk = THREE.MathUtils.clamp(4 - (p.z + 2.2), 0, WALK_MAX);
+  walkV = 0;
+}
+$("t-close").addEventListener("click", () => setFocus(-1));
+$("enter").addEventListener("click", () => { $("enter-note").textContent = "In the app this opens the join-code lobby."; bounce(); });
+
+// ---------- input ----------
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+let drag = null;
+canvas.addEventListener("pointerdown", (e) => {
+  drag = { y: e.clientY, x: e.clientX, moved: 0, t: performance.now() };
+  canvas.setPointerCapture?.(e.pointerId);
+});
+canvas.addEventListener("pointermove", (e) => {
+  const r = canvas.getBoundingClientRect();
+  lookT.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+  lookT.y = -(((e.clientY - r.top) / r.height) * 2 - 1);
+  if (!drag) return;
+  const dy = e.clientY - drag.y;
+  drag.moved += Math.abs(dy) + Math.abs(e.clientX - drag.x);
+  drag.y = e.clientY; drag.x = e.clientX;
+  if (drag.moved > 12) {
+    if (focus >= 0) setFocus(-1);
+    walk = THREE.MathUtils.clamp(walk - dy * 0.02, 0, WALK_MAX);
+    walkV = -dy * 1.1;
+  }
+});
+canvas.addEventListener("pointerup", (e) => {
+  if (drag && drag.moved < 12 && performance.now() - drag.t < 500) {
+    const r = canvas.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1));
+    ray.setFromCamera(ndc, camera);
+    const hitPic = ray.intersectObjects(picMeshes, false)[0];
+    if (ray.intersectObject(pet, true).length) bounce();
+    else if (hitPic) setFocus(hitPic.object.userData.k === focus ? -1 : hitPic.object.userData.k);
+    else if (focus >= 0) setFocus(-1);
+  }
+  drag = null;
+});
+canvas.addEventListener("pointercancel", () => { drag = null; });
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  if (focus >= 0) setFocus(-1);
+  walkV += e.deltaY * 0.02;
+}, { passive: false });
+window.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowUp" || e.key === "ArrowDown") { if (focus >= 0) setFocus(-1); walkV += e.key === "ArrowUp" ? 3 : -3; }
+  if (e.key === "Escape") setFocus(-1);
+});
+
+// ---------- layout ----------
+let tanV = 1;
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.fov = camera.aspect < 0.8 ? 72 : camera.aspect < 1.3 ? 58 : 48;
+  wallX = camera.aspect < 0.8 ? 1.6 : camera.aspect < 1.3 ? 1.9 : 2.5;
+  tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  camera.updateProjectionMatrix();
+  walls.forEach(({ m, side }) => { m.position.x = side * wallX; });
+  paintings.forEach((p) => { p.g.position.x = p.side * wallX; });
+  const tw = Math.min(wallX * 2 - 0.5, 4.2);
+  title.scale.set(tw / 2, tw / 2, 1);
+  const buf = renderer.getDrawingBufferSize(new THREE.Vector2());
+  floorMat.uniforms.res.value.copy(buf);
+  rt.setSize(Math.max(2, Math.floor(buf.x / 2)), Math.max(2, Math.floor(buf.y / 2)));
+}
+window.addEventListener("resize", resize);
+resize();
+
+// ---------- loop ----------
+const clock = new THREE.Clock();
+const basePos = new THREE.Vector3(), baseLook = new THREE.Vector3(), fPos = new THREE.Vector3(), fLook = new THREE.Vector3(), lookAt = new THREE.Vector3();
+const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+function frame() {
+  const dt = Math.min(clock.getDelta(), 1 / 30);
+  const t = clock.elapsedTime, now = performance.now();
+
+  // walking with inertia
+  if (!drag) {
+    walk = THREE.MathUtils.clamp(walk + walkV * dt, 0, WALK_MAX);
+    walkV *= Math.pow(0.02, dt);
+    if (walk <= 0 || walk >= WALK_MAX) walkV = 0;
+  }
+  const camZ = 4 - walk;
+
+  // camera: corridor pose blended with a frontal pose for the focused painting
+  focusT += ((focus >= 0 ? 1 : 0) - focusT) * (1 - Math.exp(-dt * 4.5));
+  basePos.set(0, 1.6, camZ);
+  baseLook.set(0, 1.75, camZ - 6);
+  if (focus >= 0) {
+    const p = paintings[focus];
+    const need = Math.max(p.ph / (2 * tanV), p.pw / (2 * tanV * camera.aspect)) * 1.5;
+    const d = Math.min(need, wallX * 2 - 0.35);
+    fPos.set(p.side * (wallX - d), 1.62, p.z);
+    fLook.set(p.side * wallX, 1.48, p.z);
+  }
+  const e = focusT * focusT * (3 - 2 * focusT);
+  camera.position.lerpVectors(basePos, fPos, e);
+  lookAt.lerpVectors(baseLook, fLook, e);
+  camera.lookAt(lookAt);
+
+  // the beaver walks ahead of you, or stands under the painting you opened
+  let tx = 0, tz = camZ - 5, faceT;
+  const moving = Math.abs(walkV) > 0.25 || (drag && drag.moved > 12);
+  idleFor = moving ? 0 : idleFor + dt;
+  if (focus >= 0) {
+    const p = paintings[focus];
+    tx = p.side * (wallX - 0.42); tz = p.z + 0.55;
+    faceT = p.side * Math.PI / 2;
+  } else {
+    faceT = idleFor > 0.7 ? 0 : walkV >= 0 ? Math.PI : 0;
+  }
+  const before = petPos.clone();
+  petPos.x += (tx - petPos.x) * (1 - Math.exp(-dt * 5));
+  petPos.z += (tz - petPos.z) * (1 - Math.exp(-dt * 7));
+  const speed = before.distanceTo(petPos) / Math.max(dt, 1e-4);
+  const stride = Math.min(1, speed / 1.2) * (reduceMotion ? 0.3 : 1);
+  waddle += speed * dt * 7;
+  petFace += angDiff(faceT, petFace) * (1 - Math.exp(-dt * 6));
+  pet.position.set(petPos.x, 0, petPos.z);
+  pet.rotation.y = petFace;
+  rig.rotation.z = Math.sin(waddle) * 0.1 * stride;
+  feet.forEach((f, i) => { f.position.z = 0.2 + Math.sin(waddle + i * Math.PI) * 0.1 * stride; });
+  pool.position.set(petPos.x, 0.01, petPos.z);
+
+  // jump with anticipation, squash and stretch keeps volume
+  if (launchAt && now >= launchAt) { launchAt = 0; airborne = true; jumpV = 4.6; sq.v += 6; }
+  if (airborne) {
+    jumpV -= 15 * dt; jumpY += jumpV * dt;
+    if (jumpY <= 0) { jumpY = 0; airborne = false; sq.v -= 5.5; }
+  }
+  hop.position.y = jumpY + Math.abs(Math.sin(waddle)) * 0.05 * stride;
+  spring(sq, 1, 220, 13, dt);
+  const sy = Math.max(0.6, sq.x * (1 + Math.sin(t * 2.2) * 0.018));
+  rig.scale.set(1 / Math.sqrt(sy), sy, 1 / Math.sqrt(sy));
+
+  // head: follows the finger when idle, looks up at the painting when you open one
+  const hx = focus >= 0 ? 0 : lookT.x, hy = focus >= 0 ? 1.4 : lookT.y;
+  lookS.x += (hx - lookS.x) * (1 - Math.exp(-dt * 6));
+  lookS.y += (hy - lookS.y) * (1 - Math.exp(-dt * 6));
+  head.rotation.y = lookS.x * 0.45 * Math.cos(petFace);
+  head.rotation.x = -lookS.y * 0.22;
+  for (const { pupil } of eyes) pupil.position.set(lookS.x * 0.035, Math.min(0.04, lookS.y * 0.03), 0);
+  blinkT += dt;
+  let lid = 1;
+  if (blinkT > nextBlink) {
+    const k = (blinkT - nextBlink) / 0.16;
+    lid = k < 1 ? Math.abs(1 - 2 * k) * 0.92 + 0.08 : 1;
+    if (k >= 1) { blinkT = 0; nextBlink = 2 + Math.random() * 4; }
+  }
+  for (const { eye } of eyes) eye.scale.y = lid;
+  tailPivot.rotation.y = Math.sin(t * 2.6) * 0.12 + Math.sin(waddle) * 0.2 * stride;
+
+  // the name fades as you pass under it; dust drifts
+  title.material.opacity = THREE.MathUtils.smoothstep(camZ - title.position.z, 1.5, 4.5) * (1 - e);
+  if (!reduceMotion) {
+    const dp = dustGeo.attributes.position;
+    for (let i = 0; i < DUST; i++) {
+      let y = dp.getY(i) + dt * 0.04;
+      if (y > 4.2) y = 0.3;
+      dp.setY(i, y);
+    }
+    dp.needsUpdate = true;
+  }
+
+  // HUD
+  let near = 0;
+  paintings.forEach((p, i) => { if (Math.abs(p.z - petPos.z) < Math.abs(paintings[near].z - petPos.z)) near = i; });
+  $("count").textContent = String((focus >= 0 ? focus : near) + 1).padStart(2, "0");
+  const atArch = walk > WALK_MAX - 1.2 && focus < 0;
+  $("cta").classList.toggle("gone", !atArch);
+  $("hint").style.opacity = atArch || focus >= 0 ? 0 : 1;
+  if (!atArch) $("enter-note").textContent = "";
+
+  // pass 1: the mirrored hall into a half-size target; pass 2: the hall and the floor that samples it
+  floorMat.uniforms.time.value = reduceMotion ? 0 : t;
+  extras.visible = false;
+  world.scale.y = -1;
+  renderer.setRenderTarget(rt);
+  renderer.render(scene, camera);
+  renderer.setRenderTarget(null);
+  world.scale.y = 1;
+  extras.visible = true;
+  renderer.render(scene, camera);
+}
+renderer.setAnimationLoop(frame);
+document.addEventListener("visibilitychange", () => {
+  renderer.setAnimationLoop(document.hidden ? null : frame);
+  if (!document.hidden) clock.getDelta();
+});
+window.__hall = { renderer, setFocus, walkTo: (v) => { walk = v; } };
+</script>

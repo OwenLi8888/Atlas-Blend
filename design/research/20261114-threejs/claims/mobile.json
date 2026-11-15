@@ -1,0 +1,214 @@
+{
+  "lane": "mobile",
+  "question": "Rules for making three.js look good and run smoothly on an iPhone inside an Expo React Native app's WebView (react-native-webview, WKWebView): performance budget, iOS WebKit specifics, WebView integration, battery/thermal.",
+  "claims": [
+    {
+      "claim": "Current three.js WebGLRenderer requires WebGL 2; WebGL 1 was dropped in r163, so the target WebKit must provide WebGL 2.",
+      "quote": "WebGL 1 is not supported since `r163`.",
+      "url": "https://threejs.org/docs/pages/WebGLRenderer.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "WebKit has supported WebGL 2 since Safari 15, and its WebGL implementation runs on Metal.",
+      "quote": "WebKit now supports WebGL2 (demos). In addition, the WebGL implementation now runs on top of Metal for better performance.",
+      "url": "https://webkit.org/blog/11989/new-webkit-features-in-safari-15/",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Import maps (needed for bare 'three' specifiers without a build step) are listed as a new feature in Safari 16.4 (post dated 2023-03-27; Safari 16.4 runs on iOS 16). NOTE: the quote is the opening part of the sentence only; the fetch tool truncated the remainder ('...without the need for a build step', as paraphrased by the tool).",
+      "quote": "JavaScript Import Maps give web developers the same sort of versioned file mapping used in other module systems,",
+      "url": "https://webkit.org/blog/13966/webkit-features-in-safari-16-4/",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Setting the renderer pixel ratio to the full devicePixelRatio is a major cost on phones: a three.js maintainer (Mugen87, 2018-11-16) states that it can kill performance even for simple scenes.",
+      "quote": "Even with simple scenes this can kill performance.",
+      "url": "https://discourse.threejs.org/t/low-fps-on-ios-mobile-with-pixel-ration-set-as-window-devicepixelratio/4963",
+      "observed": "2026-11-14",
+      "source_class": "secondary"
+    },
+    {
+      "claim": "Measured (user report, 2018-11-16, old hardware): an iOS device was limited to 40 fps with setPixelRatio(window.devicePixelRatio) even on a near-empty scene, and returned to 60 fps when the line was removed.",
+      "quote": "I got 40 fps on ios mobile devices (not tested on other mobile devices).",
+      "url": "https://discourse.threejs.org/t/low-fps-on-ios-mobile-with-pixel-ration-set-as-window-devicepixelratio/4963",
+      "observed": "2026-11-14",
+      "source_class": "secondary"
+    },
+    {
+      "claim": "Common forum guidance (looeee, three.js collaborator, 2019-04-28) is to clamp pixel ratio to a maximum of 2 or 3.",
+      "quote": "Usually, you'll set a max pixel ratio of 2 or 3 and clamp to that.",
+      "url": "https://discourse.threejs.org/t/restricting-viewport-size-for-mobile/7270",
+      "observed": "2026-11-14",
+      "source_class": "secondary"
+    },
+    {
+      "claim": "An adaptive alternative to a fixed cap: gkjohnson (three.js collaborator, 2019-04-28) suggests lowering pixel ratio until a target frame rate (example: 55 fps) is reached, because the right value depends on hardware.",
+      "quote": "So you could decrease the pixel ratio until you hit 55 fps, for example.",
+      "url": "https://discourse.threejs.org/t/restricting-viewport-size-for-mobile/7270",
+      "observed": "2026-11-14",
+      "source_class": "secondary"
+    },
+    {
+      "claim": "A recent (2026-11-06) forum resource describes an adaptive pixel-ratio ladder for phones that starts at 1 and steps 1 -> 1.25 -> 1.5, never exceeding devicePixelRatio, on screens whose native ratio is 2.6 to 3.",
+      "quote": "It starts at 1 and tries 1 → 1.25 → 1.5, never above devicePixelRatio.",
+      "url": "https://discourse.threejs.org/t/adaptive-pixel-ratio-on-phones-step-up-only-what-the-device-sustains/96534",
+      "observed": "2026-11-14",
+      "source_class": "secondary"
+    },
+    {
+      "claim": "Draw-call budget per the react-three-fiber docs: at most 1000 draw calls, ideally a few hundred or fewer (each mesh is one draw call). NOTE: the quote is the tail fragment of a longer sentence; the fetch tool would not return the full sentence.",
+      "quote": "no more than 1000 as the very maximum, and optimally a few hundred or less.",
+      "url": "https://r3f.docs.pmnd.rs/advanced/scaling-performance",
+      "observed": "2026-11-14",
+      "source_class": "secondary"
+    },
+    {
+      "claim": "A continuous 60-times-per-second render loop is the main battery drain; when the scene comes to rest, rendering should stop (render on demand).",
+      "quote": "But if the moving parts in your scene are allowed to come to rest, then it would be wasteful to keep rendering.",
+      "url": "https://r3f.docs.pmnd.rs/advanced/scaling-performance",
+      "observed": "2026-11-14",
+      "source_class": "secondary"
+    },
+    {
+      "claim": "The r3f docs name the always-on loop as the main battery drain.",
+      "quote": "This is what generally drains batteries the most and makes fans spin up.",
+      "url": "https://r3f.docs.pmnd.rs/advanced/scaling-performance",
+      "observed": "2026-11-14",
+      "source_class": "secondary"
+    },
+    {
+      "claim": "three.js official docs advise driving the loop with renderer.setAnimationLoop rather than a manual requestAnimationFrame (setAnimationLoop(null) is then the stop switch for pausing).",
+      "quote": "Applications are advised to always define the animation loop with this method and not manually with `requestAnimationFrame()` for best compatibility.",
+      "url": "https://threejs.org/docs/pages/WebGLRenderer.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "The WebGLRenderer 'antialias' option toggles MSAA on the default framebuffer (it is a constructor option, so it cannot be changed after creation).",
+      "quote": "Whether to use the default MSAA or not.",
+      "url": "https://threejs.org/docs/pages/WebGLRenderer.html",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "On iOS the WKWebView content process is outside the app's RAM accounting and can be terminated independently by the OS to free memory; react-native-webview exposes onContentProcessDidTerminate to detect this (so the app should reload the WebView there). NOTE: quote is the first part of the sentence; the tool reported it continues 'for new apps the user is opening.'",
+      "quote": "For instance, since iOS WebViews are not included in the total RAM of the app, they can be terminated independently of the app to liberate memory",
+      "url": "https://github.com/react-native-webview/react-native-webview/blob/master/docs/Reference.md",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "The WebView -> React Native bridge is only injected when onMessage is set.",
+      "quote": "You must set onMessage or the window.ReactNativeWebView.postMessage method will not be injected into the web page.",
+      "url": "https://github.com/react-native-webview/react-native-webview/blob/master/docs/Guide.md",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Bridge messages must be strings (JSON.stringify any structured payload).",
+      "quote": "window.ReactNativeWebView.postMessage only accepts one argument which must be a string.",
+      "url": "https://github.com/react-native-webview/react-native-webview/blob/master/docs/Guide.md",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "When passing inline HTML via source={{ html, baseUrl }}, baseUrl is what relative links in that HTML resolve against (relevant for pointing module/asset URLs at the LAN API server).",
+      "quote": "The base URL to be used for any relative links in the HTML.",
+      "url": "https://github.com/react-native-webview/react-native-webview/blob/master/docs/Reference.md",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Loading local static HTML with local assets is documented by react-native-webview as not working, with a local web server named as a workaround (supports the serve-over-LAN approach).",
+      "quote": "Possible workarounds include bundling all assets with webpack or similar, or running a local webserver.",
+      "url": "https://github.com/react-native-webview/react-native-webview/blob/master/docs/Guide.md",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "Expo SDK 58 docs (breadcrumb 'Reference (v58.0.0)') list react-native-webview as included in Expo Go for Android and iOS, installed with 'npx expo install react-native-webview'; page shows 'Recommended version: 14.0.1'.",
+      "quote": "`react-native-webview` provides a `WebView` component that renders web content in a native view.",
+      "url": "https://docs.expo.dev/versions/latest/sdk/webview/",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "The native alternative (expo-gl, used by @react-three/fiber/native) has an incomplete WebGL2 implementation and no argument checking, so invalid arguments can crash natively - a risk the WebView path does not carry.",
+      "quote": "So, passing invalid arguments may cause a native crash.",
+      "url": "https://docs.expo.dev/versions/latest/sdk/gl-view/",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "expo-gl does not work with remote debugging enabled.",
+      "quote": "This API does not function as intended with remote debugging enabled.",
+      "url": "https://docs.expo.dev/versions/latest/sdk/gl-view/",
+      "observed": "2026-11-14",
+      "source_class": "primary"
+    },
+    {
+      "claim": "iOS WebGL 'context lost' failures have been WebKit-level regressions rather than three.js bugs (iOS 17.0 regression, WebKit bug 264684, status RESOLVED FIXED; reporter confirmed fixed in 17.1.1). Maintainer Mugen87, 2023-11-11.",
+      "quote": "This is not a `three.js` specific issue, it affects all WebGL applications.",
+      "url": "https://discourse.threejs.org/t/three-js-broken-on-ios-17-with-context-lost/58025",
+      "observed": "2026-11-14",
+      "source_class": "secondary"
+    },
+    {
+      "claim": "Forum guidance on avoiding memory-driven context loss on phones: do not recreate geometries/materials in the render loop, reuse them, and avoid unnecessarily large textures (Lawrence3DPK, 2023-10-09). NOTE: quote is a sentence fragment.",
+      "quote": "not reusing geometries and materials where possible or generating / applying unnecessarily large textures",
+      "url": "https://discourse.threejs.org/t/how-to-fix-context-lost-android-iphone-ios/56829",
+      "observed": "2026-11-14",
+      "source_class": "secondary"
+    }
+  ],
+  "not_found": [
+    "three.js official manual pages (rendering-on-demand, responsive/HD-DPI, shadows, optimize-lots-of-objects): every URL tried returned HTTP 404 (threejs.org/manual/en/<page>.html, without .html, raw.githubusercontent.com/mrdoob/three.js/dev/manual/en/<page>.html, github.com blob). The manual's own wording on HD-DPI pixel counts, shadow-map draw cost and render-on-demand is therefore unconfirmed; r3f docs and forum posts were used instead.",
+    "Measured cost of post-processing / bloom (UnrealBloomPass) on mobile GPUs in ms or fps: no primary source or maintainer post with numbers opened; only search-snippet anecdotes of developers disabling post-processing on mobile.",
+    "Measured cost of MSAA (antialias: true) on iPhone GPUs: not found; the three.js docs only define the option.",
+    "Measured cost of shadow maps on mobile and recommended shadow map size for iPhone: not found (manual shadows page 404).",
+    "Hard numbers for WKWebView WebGL memory limit, max canvas area, or MAX_TEXTURE_SIZE on current iPhones: not found on WebKit blog, WebKit Bugzilla 264684, or react-native-webview docs. A three.js forum thread titled 'Memory limit crash on iOS 26' appeared in search but was not opened.",
+    "Any react-native-webview documentation or issue about <script type=\"module\"> / import maps with source.baseUrl (CORS behaviour for module scripts loaded from a LAN origin): Guide.md does not mention baseUrl; no issue found via search.",
+    "Any benchmark comparing three.js in react-native-webview against expo-gl / @react-three/fiber/native: not found. The r3f installation page makes no performance claims.",
+    "Official guidance on pausing the render loop on visibilitychange / React Native AppState inside a WebView: not found in react-native-webview docs or three.js docs opened.",
+    "Exact iOS point release that first shipped import maps: the WebKit post states only that Safari 16.4 is available on 'iOS 16'; the specific 16.4 iOS number was not quoted on the page text returned.",
+    "WebGL in OffscreenCanvas status after 16.4 was not checked (16.4 post says: 'Support for 3D in Offscreen Canvas is in development.')."
+  ],
+  "contradictions": [
+    {
+      "claim": "Whether the iOS 17 WebGL 'context lost' regression was fixed by the 17.1.1 update.",
+      "a": {
+        "quote": "Confirm this is no longer an issue with iPadOS 17.1.1 or 17.1.1 I'll close this ticket.",
+        "url": "https://bugs.webkit.org/show_bug.cgi?id=264684"
+      },
+      "b": {
+        "quote": "We are still experiencing this issue on iOS 17.1.2 phones",
+        "url": "https://bugs.webkit.org/show_bug.cgi?id=264684"
+      }
+    },
+    {
+      "claim": "Whether a fixed maximum pixel ratio is a sound rule on mobile.",
+      "a": {
+        "quote": "Usually, you'll set a max pixel ratio of 2 or 3 and clamp to that.",
+        "url": "https://discourse.threejs.org/t/restricting-viewport-size-for-mobile/7270"
+      },
+      "b": {
+        "quote": "It really just depends on the hardware.",
+        "url": "https://discourse.threejs.org/t/restricting-viewport-size-for-mobile/7270"
+      }
+    },
+    {
+      "claim": "Whether iOS WebGL crashes over time are avoidable by application-side memory hygiene.",
+      "a": {
+        "quote": "It turned out that this is a problem with the browser itself on iOS and there is no way to get rid of it.",
+        "url": "https://discourse.threejs.org/t/safari-any-web-browser-crash-on-iphone-when-use-webgl/81629"
+      },
+      "b": {
+        "quote": "unless you have some sort of major memory leak such as recreating geometries and / or materials in a render loop,",
+        "url": "https://discourse.threejs.org/t/how-to-fix-context-lost-android-iphone-ios/56829"
+      }
+    }
+  ]
+}

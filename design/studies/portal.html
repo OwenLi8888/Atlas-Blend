@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Blend Pixel Portal</title>
+<!-- Study 04 (style C, pocket pet): the whole flow as a small voxel game.
+     Pick a voxel pet, feed it the paintings you like (they break into cubes it eats),
+     jump through a pixel portal into your gallery ring, then two pets build a new painting
+     cube by cube. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #cdb8f2; overflow: hidden; touch-action: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .hud { position: fixed; left: 0; right: 0; display: grid; justify-items: center; gap: 8px; pointer-events: none; text-align: center; color: var(--ink, #2c1f4a); transition: color .6s; }
+  #top { top: max(18px, env(safe-area-inset-top)); }
+  #kick { font: 700 12px -apple-system, Helvetica, sans-serif; letter-spacing: .22em; }
+  #title { font: 27px/32px "Arial Rounded MT Bold", "Chalkboard SE", system-ui, sans-serif; padding: 0 18px; }
+  #bottom { bottom: max(22px, env(safe-area-inset-bottom)); }
+  #hint { font: 17px "Chalkboard SE", "Comic Sans MS", system-ui, sans-serif; min-height: 22px; padding: 0 18px; }
+  #btn { pointer-events: auto; font: 18px "Arial Rounded MT Bold", system-ui, sans-serif; color: #2c1f4a; background: #ffd447; border: 3px solid #2c1f4a;
+    border-radius: 18px; padding: 12px 30px; box-shadow: 0 5px 0 #2c1f4a; transition: opacity .25s, transform .1s; }
+  #btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #2c1f4a; }
+  #btn[hidden] { display: none; } #btn:disabled { opacity: .4; }
+  #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hud" id="top"><div id="kick">BLEND</div><div id="title">Pick your taste pet</div></div>
+<div class="hud" id="bottom"><div id="hint">tap one</div><button id="btn" hidden></button></div>
+<div id="flash"></div>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { PETS, QUIZ_ART, BLEND_ART, artUrl, loadImage } from "./pets.js";
+
+const INK = "#2c1f4a", ROUNDS = 3;
+const lerp = (a, b, k) => a + (b - a) * k;
+const io = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+const back = (k) => 1 + 2.7 * Math.pow(k - 1, 3) + 1.7 * Math.pow(k - 1, 2);
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+/* ---------- renderer, scene, camera ---------- */
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("c"), antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+const DAY = new THREE.Color("#cdb8f2"), NIGHT = new THREE.Color("#241a40");
+scene.background = DAY.clone();
+scene.add(new THREE.AmbientLight(0xffffff, 2.3));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2, 5, 6);
+scene.add(sun);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 80);
+const cam = { z: 8.5, y: 2.3, ty: 2.1 };
+function placeCamera() {
+  // on a wide window step back less; on a phone the width is what limits the view
+  const fit = Math.max(1, 0.5 / camera.aspect);
+  camera.position.set(0, cam.y, cam.z * fit);
+  camera.lookAt(0, cam.ty, 0);
+}
+function resize() {
+  renderer.setSize(innerWidth, innerHeight, false);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  placeCamera();
+}
+addEventListener("resize", resize);
+
+/* ---------- tweens ---------- */
+const tweens = new Set();
+const tween = (ms, step, ease = io) => new Promise((done) => tweens.add({ t0: performance.now(), ms, step, ease, done }));
+/** Move to a position and uniform scale with an optional hop. Pets keep their scale in userData.s (the idle squash reads it). */
+function fly(obj, to, ms = 450, hop = 0, ease = io) {
+  const p0 = obj.position.clone(), p1 = to.p ?? p0, pet = obj.userData.pet;
+  const s0 = pet ? obj.userData.s : obj.scale.x, s1 = to.s ?? s0, r0 = obj.rotation.y, r1 = to.ry ?? r0;
+  return tween(ms, (k) => {
+    obj.position.lerpVectors(p0, p1, k);
+    obj.position.y += Math.sin(Math.PI * k) * hop;
+    obj.rotation.y = lerp(r0, r1, k);
+    const s = lerp(s0, s1, k);
+    if (pet) obj.userData.s = s; else obj.scale.setScalar(s);
+  }, ease);
+}
+
+/* ---------- voxel pets, built from the shared 16x16 sprites ---------- */
+const VOX = 0.11, voxGeo = new THREE.BoxGeometry(VOX, VOX, VOX), voxMat = new THREE.MeshLambertMaterial();
+const pets = [];
+function makePet(def) {
+  const at = (x, y) => { const ch = def.rows[y]?.[x]; return ch && ch !== "." ? ch : null; };
+  const cells = [];
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const ch = at(x, y);
+    if (!ch) continue;
+    const edge = !at(x - 1, y) || !at(x + 1, y) || !at(x, y - 1) || !at(x, y + 1);
+    for (let z = 0; z < 4; z++) {
+      if (edge && (z === 0 || z === 3)) continue;        // the outline is thinner than the body: a soft chamfer
+      // face and belly live on the front layer only; the rest of the body is fur
+      const c = z === 3 || edge || "pry".includes(ch) ? ch : "b";
+      cells.push([x, y, z, c]);
+    }
+  }
+  const mesh = new THREE.InstancedMesh(voxGeo, voxMat, cells.length), m = new THREE.Matrix4(), col = new THREE.Color();
+  cells.forEach(([x, y, z, c], i) => {
+    mesh.setMatrixAt(i, m.makeTranslation((x - 7.5) * VOX, (15.5 - y) * VOX, (z - 1.5) * VOX));
+    mesh.setColorAt(i, col.set(def.ink[c]));
+  });
+  const g = new THREE.Group();
+  const hit = new THREE.Mesh(new THREE.BoxGeometry(16 * VOX, 16 * VOX, 5 * VOX));
+  hit.position.y = 8 * VOX; hit.visible = false;
+  g.add(mesh, hit);
+  g.userData = { pet: true, s: 1, hit, def, phase: Math.random() * 6 };
+  pets.push(g);
+  scene.add(g);
+  return g;
+}
+
+/* ---------- the island and clouds ---------- */
+const box = (w, h, d, color) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color }));
+const island = new THREE.Group();
+const grass = box(4.4, 0.4, 3.4, "#8fe3c1"), soil = box(4.0, 0.5, 3.0, "#c79a6b"), rock = box(2.8, 0.5, 2.0, "#a67c52");
+grass.position.y = -0.2; soil.position.y = -0.62; rock.position.y = -1.1;
+island.add(grass, soil, rock);
+island.position.z = 0.9;
+scene.add(island);
+const clouds = new THREE.Group();
+[[-2.6, 5.6, -4], [2.4, 4.3, -5], [-1.4, 2.4, -6], [2.9, 6.6, -6]].forEach(([x, y, z]) => {
+  const c = new THREE.Group();
+  [[0, 0, 1.3, 0.45], [0.5, 0.3, 0.8, 0.45], [-0.45, 0.25, 0.6, 0.35]].forEach(([dx, dy, w, h]) => { const b = box(w, h, 0.5, "#ffffff"); b.position.set(dx, dy, 0); c.add(b); });
+  c.position.set(x, y, z);
+  clouds.add(c);
+});
+scene.add(clouds);
+// pixel stars for the far side of the portal
+const stars = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: "#fff3c4", size: 3, sizeAttenuation: false, transparent: true, opacity: 0 }));
+stars.geometry.setAttribute("position", new THREE.Float32BufferAttribute(Array.from({ length: 900 }, (_, i) => (Math.random() - 0.5) * (i % 3 === 2 ? 6 : 26) - (i % 3 === 2 ? 9 : 0) + (i % 3 === 1 ? 4 : 0)), 3));
+scene.add(stars);
+
+/* ---------- painting cards ---------- */
+function squareCanvas(img, size) {
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = size;
+  const s = Math.max(size / img.width, size / img.height), w = img.width * s, h = img.height * s;
+  cv.getContext("2d").drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+  return cv;
+}
+const cardRim = new THREE.BoxGeometry(1.46, 1.46, 0.1), cardBody = new THREE.BoxGeometry(1.36, 1.36, 0.14), cardFace = new THREE.PlaneGeometry(1.2, 1.2);
+const rimMat = new THREE.MeshLambertMaterial({ color: INK }), bodyMat = new THREE.MeshLambertMaterial({ color: "#ffffff" });
+function makeCard(img) {
+  const t = new THREE.CanvasTexture(squareCanvas(img, 256));
+  t.colorSpace = THREE.SRGBColorSpace;
+  const g = new THREE.Group(), body = new THREE.Mesh(cardBody, bodyMat), face = new THREE.Mesh(cardFace, new THREE.MeshBasicMaterial({ map: t }));
+  face.position.z = 0.075;
+  g.add(new THREE.Mesh(cardRim, rimMat), body, face);
+  g.userData = { hit: body, img };
+  return g;
+}
+/** Colours of an image on a g x g grid, top row first. */
+function sample(img, g) {
+  const d = squareCanvas(img, g).getContext("2d").getImageData(0, 0, g, g).data, out = [];
+  for (let i = 0; i < g * g; i++) out.push(new THREE.Color().setRGB(d[i * 4] / 255, d[i * 4 + 1] / 255, d[i * 4 + 2] / 255, THREE.SRGBColorSpace));
+  return out;
+}
+
+/* ---------- one pool of flying cubes: fed paintings, and the blend painting being built ---------- */
+const POOL = 720, cubes = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial(), POOL), parts = [];
+cubes.frustumCulled = false;
+scene.add(cubes);
+const dummy = new THREE.Object3D(), tmpC = new THREE.Color();
+for (let i = 0; i < POOL; i++) { parts.push({ on: false }); dummy.scale.setScalar(0); dummy.updateMatrix(); cubes.setMatrixAt(i, dummy.matrix); cubes.setColorAt(i, tmpC.set("#fff")); }
+function emit(o) {                                        // { from, to, c0, c1, size, delay, dur, arc, stay }
+  const p = parts.find((q) => !q.on);
+  if (p) Object.assign(p, o, { on: true, t0: performance.now() + (o.delay ?? 0) });
+}
+function stepCubes(now) {
+  parts.forEach((p, i) => {
+    if (!p.on) return;
+    const k = THREE.MathUtils.clamp((now - p.t0) / p.dur, 0, 1), e = io(k);
+    dummy.position.lerpVectors(p.from, p.to, e);
+    dummy.position.y += Math.sin(Math.PI * e) * p.arc;
+    dummy.rotation.set(e * 5, e * 4, 0);
+    if (k === 1) dummy.rotation.set(0, 0, 0);
+    dummy.scale.setScalar(p.size * (p.stay ? 1 : 1 - e * 0.75) * (p.out ?? 1));
+    dummy.updateMatrix();
+    cubes.setMatrixAt(i, dummy.matrix);
+    cubes.setColorAt(i, tmpC.copy(p.c0).lerp(p.c1, e * e));
+    if (k === 1 && !p.stay) { p.on = false; dummy.scale.setScalar(0); dummy.updateMatrix(); cubes.setMatrixAt(i, dummy.matrix); }
+  });
+  cubes.instanceMatrix.needsUpdate = true;
+  cubes.instanceColor.needsUpdate = true;
+}
+const mouth = (pet) => pet.position.clone().add(V(0, 0.85 * pet.userData.s, 0.3));
+
+/* ---------- the pixel portal ---------- */
+const portal = new THREE.Group();
+portal.position.set(0, 3.5, -0.6);
+portal.scale.setScalar(0.001);
+const RING = 56, ring = new THREE.InstancedMesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), new THREE.MeshLambertMaterial(), RING);
+["#ff6fa3", "#ffd447", "#6fe0c8", "#ffffff"].forEach((c, j) => { for (let i = j; i < RING; i += 4) ring.setColorAt(i, tmpC.set(c)); });
+const disc = new THREE.Mesh(new THREE.CircleGeometry(1.42, 40), new THREE.ShaderMaterial({
+  uniforms: { uT: { value: 0 } },
+  vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+  fragmentShader: `varying vec2 vUv; uniform float uT;
+    void main(){
+      vec2 p = (floor(vUv * 30.0) + 0.5) / 30.0 - 0.5;             // snap to big pixels
+      float r = length(p) * 2.0, a = atan(p.y, p.x);
+      float arm = step(0.0, sin(a * 3.0 + r * 9.0 - uT * 2.6));
+      vec3 c = mix(vec3(1.0, 0.44, 0.64), vec3(0.44, 0.88, 0.78), arm);
+      c = mix(c, vec3(1.0, 0.83, 0.28), step(0.78, fract(r * 3.0 - uT * 0.7)));
+      c = mix(c, vec3(0.14, 0.10, 0.25), smoothstep(0.62, 0.05, r));  // the way through is dark
+      gl_FragColor = vec4(c, 1.0);
+    }`,
+}));
+portal.add(disc, ring);
+scene.add(portal);
+function stepPortal(t) {
+  disc.material.uniforms.uT.value = t;
+  for (let i = 0; i < RING; i++) {
+    const a = (i / RING) * Math.PI * 2 + t * 0.9, r = 1.5 + Math.sin(t * 3 + i * 1.7) * 0.07;
+    dummy.position.set(Math.cos(a) * r, Math.sin(a) * r, 0);
+    dummy.rotation.set(t + i, t * 1.3 + i, 0);
+    dummy.scale.setScalar(0.75 + 0.35 * Math.sin(t * 4 + i));
+    dummy.updateMatrix();
+    ring.setMatrixAt(i, dummy.matrix);
+  }
+  ring.instanceMatrix.needsUpdate = true;
+}
+
+/* ---------- input and UI ---------- */
+const $ = (id) => document.getElementById(id), btn = $("btn");
+const say = (kick, title, hint = "") => { $("kick").textContent = kick; $("title").textContent = title; $("hint").textContent = hint; };
+function press(label) {
+  btn.textContent = label; btn.hidden = false; btn.disabled = false;
+  return new Promise((r) => { btn.onclick = () => { btn.hidden = true; r(); }; });
+}
+const picks = [];                                         // { hit, onTap }
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+let down = null, spin = null;                             // spin: the gallery ring, while it can be dragged
+addEventListener("pointerdown", (e) => { down = [e.clientX, e.clientY, e.clientX]; });
+addEventListener("pointermove", (e) => { if (down && spin) { spin.rotation.y += (e.clientX - down[2]) * 0.01; down[2] = e.clientX; } });
+addEventListener("pointerup", (e) => {
+  const d = down; down = null;
+  if (!d || Math.hypot(e.clientX - d[0], e.clientY - d[1]) > 12 || e.target === btn) return;
+  ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(picks.map((p) => p.hit), false)[0];
+  if (hit) picks.find((p) => p.hit === hit.object).onTap();
+});
+
+/* ---------- the story ---------- */
+const HOME = V(0, 0, 1.5);
+async function story() {
+  const [imgs, blendImg] = await Promise.all([Promise.all(QUIZ_ART.map((id) => loadImage(artUrl(id)))), loadImage(artUrl(BLEND_ART))]);
+
+  // 1. pick a pet
+  const options = Object.values(PETS).map((def, i) => {
+    const p = makePet(def);
+    p.position.set((i - 1) * 0.98, 0, 1.3); p.userData.s = 0.01;
+    wait(i * 120).then(() => fly(p, { s: 0.5 }, 420, 0.5, back));
+    return p;
+  });
+  const me = await new Promise((r) => options.forEach((p) => picks.push({ hit: p.userData.hit, onTap: () => r(p) })));
+  picks.length = 0;
+  options.filter((p) => p !== me).forEach((p) => fly(p, { s: 0.001, ry: 6 }, 380).then(() => { scene.remove(p); pets.splice(pets.indexOf(p), 1); }));
+  await fly(me, { p: HOME, s: 0.85 }, 600, 1.2);
+  say("HELLO!", `${me.userData.def.name} is hungry for art`);
+  await press("Start the quiz");
+
+  // 2. the quiz: tap a painting, it breaks into cubes and the pet eats it
+  const eaten = [];
+  for (let r = 0; r < ROUNDS; r++) {
+    say(`ROUND ${r + 1} OF ${ROUNDS}`, "Feed me what you like!", "tap a painting");
+    const cards = imgs.slice(r * 4, r * 4 + 4).map((img, i) => {
+      const c = makeCard(img);
+      c.position.set((i % 2 ? 1 : -1) * 0.82, i < 2 ? 4.6 : 3.0, -0.6);
+      c.scale.setScalar(0.001);
+      scene.add(c);
+      wait(i * 90).then(() => fly(c, { s: 1 }, 420, 0, back));
+      picks.push({ hit: c.userData.hit, onTap: () => {
+        if (c.userData.fed) return;
+        c.userData.fed = true; eaten.push(img);
+        const G = 9, cols = sample(img, G), cell = 1.2 / G, to = mouth(me);
+        cols.forEach((col, j) => emit({
+          from: c.position.clone().add(V((j % G - (G - 1) / 2) * cell, ((G - 1) / 2 - Math.floor(j / G)) * cell, 0.1)),
+          to, c0: col, c1: col, size: cell, delay: Math.random() * 380, dur: 560, arc: 0.5, stay: false,
+        }));
+        c.visible = false;
+        fly(me, {}, 420, 0.75).then(() => fly(me, { s: me.userData.s + 0.02 }, 200, 0, back));
+        $("hint").textContent = `yum, ${eaten.length} so far`;
+        btn.disabled = false;
+      } });
+      return c;
+    });
+    const next = press(r === ROUNDS - 1 ? "I'm full!" : "Next round");
+    btn.disabled = true;
+    await next;
+    picks.length = 0;
+    cards.forEach((c, i) => fly(c, { p: c.position.clone().add(V(0, -7, 0)), s: 0.6 }, 520 + i * 60).then(() => scene.remove(c)));
+    await fly(me, {}, 520, 1.0);
+  }
+
+  // 3. a pixel portal opens; jump through it into the gallery
+  say("ALL DONE", "A portal to your gallery", "");
+  await tween(900, (k) => portal.scale.setScalar(Math.max(0.001, k)), back);
+  await press("Jump in");
+  say("", "");
+  const flash = $("flash");
+  tween(900, (k) => { cam.z = lerp(8.5, 3.2, k); cam.ty = lerp(2.1, 3.5, k); cam.y = lerp(2.3, 3.2, k); placeCamera(); }, (k) => k * k);
+  await fly(me, { p: V(0, 3.2, -0.5), s: 0.25, ry: Math.PI * 4 }, 900, 1.2);
+  await tween(220, (k) => { flash.style.opacity = k; });
+  portal.visible = false; clouds.visible = false;
+  scene.background.copy(NIGHT); stars.material.opacity = 1;
+  document.body.style.setProperty("--ink", "#f4ecff");
+  cam.z = 8.5; cam.ty = 2.1; cam.y = 2.3; placeCamera();
+  me.position.set(0, 4, 1.5); me.rotation.y = 0; me.userData.s = 0.85;
+  const gallery = new THREE.Group();
+  gallery.position.set(0, 3.7, -0.4); gallery.rotation.x = 0.12;
+  const shown = eaten.slice(0, 10), R = Math.max(1.5, shown.length * 0.3);
+  shown.forEach((img, i) => {
+    const c = makeCard(img), a = (i / shown.length) * Math.PI * 2;
+    c.position.set(Math.sin(a) * R, 0, Math.cos(a) * R); c.rotation.y = a; c.scale.setScalar(0.9);
+    gallery.add(c);
+  });
+  scene.add(gallery);
+  spin = gallery;
+  say("YOUR GALLERY", "Cool Tidewatcher", "drag to spin");
+  tween(500, (k) => { flash.style.opacity = 1 - k; });
+  await fly(me, { p: HOME }, 600, 0, back);
+  await press("Blend with a friend");
+
+  // 4. the blend: a friend's pet arrives, and the two build one painting cube by cube
+  spin = null;
+  say("BLEND", "A friend jumps in...", "");
+  fly(gallery, { p: V(0, 9, -3), s: 0.3 }, 800).then(() => scene.remove(gallery));
+  const friend = makePet(Object.values(PETS).find((d) => d !== me.userData.def));
+  friend.position.set(0.95, 7, 1.5); friend.userData.s = 0.55;
+  fly(me, { p: V(-0.95, 0, 1.5), s: 0.55 }, 600, 0.8);
+  await fly(friend, { p: V(0.95, 0, 1.5) }, 800, 0, back);
+  say("BLEND", "Two galleries, one painting", "");
+  const G = 20, cell = 2.4 / G, target = sample(blendImg, G), order = target.map((_, i) => i).sort(() => Math.random() - 0.5);
+  const centre = V(0, 3.55, -0.3), tints = [new THREE.Color(me.userData.def.ink.b), new THREE.Color(friend.userData.def.ink.b)];
+  order.forEach((j, n) => emit({
+    from: mouth(n % 2 ? friend : me),
+    to: centre.clone().add(V((j % G - (G - 1) / 2) * cell, ((G - 1) / 2 - Math.floor(j / G)) * cell, 0)),
+    c0: tints[n % 2], c1: target[j], size: cell * 0.96, delay: n * 6, dur: 700, arc: 0.6 + Math.random() * 0.8, stay: true,
+  }));
+  const hop = setInterval(() => { fly(me, {}, 300, 0.25); fly(friend, {}, 300, 0.25); }, 620);
+  await wait(G * G * 6 + 900);
+  clearInterval(hop);
+  // the cubes resolve into the real painting
+  const final = makeCard(blendImg);
+  final.position.copy(centre).add(V(0, 0, -0.12)); final.scale.setScalar(2.0);
+  const face = final.children[2];
+  face.material.transparent = true; face.material.opacity = 0; face.position.z = 0.14;
+  scene.add(final);
+  await tween(900, (k) => { face.material.opacity = k; parts.forEach((p) => { if (p.on) p.out = 1 - k; }); });
+  parts.forEach((p) => { p.on = false; });
+  dummy.scale.setScalar(0); dummy.updateMatrix();
+  for (let i = 0; i < POOL; i++) cubes.setMatrixAt(i, dummy.matrix);
+  say("BLEND", "A new painting is born", "made from both galleries");
+  for (let i = 0; i < 3; i++) await Promise.all([fly(me, {}, 340, 0.6), fly(friend, {}, 340, 0.6)]);
+  await press("Play again");
+  location.reload();
+}
+
+/* ---------- loop ---------- */
+renderer.setAnimationLoop((now) => {
+  for (const t of tweens) {
+    const k = Math.min(1, (now - t.t0) / t.ms);
+    t.step(t.ease(k));
+    if (k === 1) { tweens.delete(t); t.done(); }
+  }
+  const t = now / 1000;
+  for (const p of pets) {                                 // breathing squash and stretch, volume kept
+    const q = 1 + Math.sin(t * 3.2 + p.userData.phase) * 0.035, s = p.userData.s;
+    p.scale.set(s / Math.sqrt(q), s * q, s / Math.sqrt(q));
+  }
+  clouds.children.forEach((c, i) => { c.position.x += Math.sin(t * 0.2 + i) * 0.0015; });
+  if (portal.visible) stepPortal(t);
+  if (spin && !down) spin.rotation.y += 0.004;
+  stepCubes(now);
+  renderer.render(scene, camera);
+});
+resize();
+window.__portal = { renderer, picks, parts };
+story();
+</script>
+</body>
+</html>
