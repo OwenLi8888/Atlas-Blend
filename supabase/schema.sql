@@ -28,3 +28,17 @@ create table blends (
 alter table profiles enable row level security;
 alter table hearts enable row level security;
 alter table blends enable row level security;
+
+-- Signing up in one transaction: the profile and its first hearts together or not at all.
+create or replace function create_profile(p_id uuid, p_name text, p_blend_code text, p_art_ids text[])
+returns profiles
+language plpgsql
+as $$
+declare
+  made profiles;
+begin
+  insert into profiles (id, name, blend_code) values (p_id, p_name, p_blend_code) returning * into made;
+  insert into hearts (user_id, art_id) select made.id, art_id from unnest(p_art_ids) as art_id;
+  return made;
+end;
+$$;

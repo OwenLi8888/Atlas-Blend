@@ -50,7 +50,7 @@ async function call<T>(method: string, route: string, body?: unknown) {
 }
 
 async function person(name: string, artIds: string[]): Promise<Profile> {
-  const profile = await db.createProfile(name);
+  const profile = await db.createProfile({ name });
   for (const art_id of artIds) await call('POST', '/api/heart', { user_id: profile.id, art_id });
   return profile;
 }
@@ -179,8 +179,8 @@ describe('local database file', () => {
     const file = path.join(dir, 'nested', 'db.json');
 
     const first = createMemoryDb({ file });
-    const ada = await first.createProfile('Ada');
-    const bo = await first.createProfile('Bo', 'CANVAS');
+    const ada = await first.createProfile({ name: 'Ada' });
+    const bo = await first.createProfile({ name: 'Bo', code: 'CANVAS' });
     await first.saveHeart(ada.id, 'f0-0', 'the light');
     await first.saveHeart(ada.id, 'f0-1', undefined);
     await first.removeHeart(ada.id, 'f0-1');

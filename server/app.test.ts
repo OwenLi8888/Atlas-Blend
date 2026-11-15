@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type {
@@ -61,7 +62,7 @@ async function call<T>(method: string, path: string, body?: unknown, headers: Re
 
 /** A profile with exactly these hearts, made directly so tests can start from fewer than sign-up allows. */
 async function newProfile(name: string, artIds: string[] = []): Promise<Profile> {
-  const profile = await db.createProfile(name);
+  const profile = await db.createProfile({ name });
   for (const art_id of artIds) await call('POST', '/api/heart', { user_id: profile.id, art_id });
   return profile;
 }
@@ -72,8 +73,10 @@ describe('profiles', () => {
   const PICKS = ['a:1', 'b:1', 'c:1'];
 
   it('signs up with a six-letter blend code and the chosen works already hearted', async () => {
-    const { status, body } = await call<ProfileResponse>('POST', '/api/profile', { name: '  Ada  ', picks: [...PICKS, 'a:1'] });
+    const id = randomUUID();
+    const { status, body } = await call<ProfileResponse>('POST', '/api/profile', { id, name: '  Ada  ', picks: [...PICKS, 'a:1'] });
     expect(status).toBe(201);
+    expect(body.profile.id).toBe(id);
     expect(body.profile.name).toBe('Ada');
     expect(body.profile.blend_code).toMatch(new RegExp('^[A-Z]{' + BLEND_CODE_LENGTH + '}$'));
     expect(body.hearts.map(heart => heart.work.id).sort()).toEqual(PICKS);
@@ -83,20 +86,37 @@ describe('profiles', () => {
   });
 
   it('rejects a missing, empty or oversized name', async () => {
-    expect((await call('POST', '/api/profile', { picks: PICKS })).status).toBe(400);
-    expect((await call('POST', '/api/profile', { name: '   ', picks: PICKS })).status).toBe(400);
-    expect((await call('POST', '/api/profile', { name: 'x'.repeat(81), picks: PICKS })).status).toBe(400);
+    const id = randomUUID();
+    expect((await call('POST', '/api/profile', { id, picks: PICKS })).status).toBe(400);
+    expect((await call('POST', '/api/profile', { id, name: '   ', picks: PICKS })).status).toBe(400);
+    expect((await call('POST', '/api/profile', { id, name: 'x'.repeat(81), picks: PICKS })).status).toBe(400);
+  });
+
+  it('answers a repeated sign-up with the profile already made, not a second one', async () => {
+    const request = { id: randomUUID(), name: 'Ivy', picks: PICKS };
+    const first = await call<ProfileResponse>('POST', '/api/profile', request);
+    const again = await call<ProfileResponse>('POST', '/api/profile', { ...request, name: 'Someone else', picks: ['a:2', 'b:2', 'c:2'] });
+    expect(first.status).toBe(201);
+    expect(again.status).toBe(200);
+    expect(again.body.profile).toEqual(first.body.profile);
+    expect(again.body.hearts.map(heart => heart.work.id).sort()).toEqual(PICKS);
+  });
+
+  it('rejects a sign-up without a valid ID', async () => {
+    expect((await call('POST', '/api/profile', { name: 'Jo', picks: PICKS })).status).toBe(400);
+    expect((await call('POST', '/api/profile', { id: 'not-a-uuid', name: 'Jo', picks: PICKS })).status).toBe(400);
   });
 
   it('makes no profile when the picks are too few, unknown or malformed', async () => {
     const createProfile = vi.spyOn(db, 'createProfile');
-    expect((await call('POST', '/api/profile', { name: 'Flo' })).status).toBe(400);
-    expect((await call('POST', '/api/profile', { name: 'Flo', picks: 'a:1' })).status).toBe(400);
-    expect((await call('POST', '/api/profile', { name: 'Flo', picks: ['a:1', 'b:1'] })).status).toBe(400);
+    const id = randomUUID();
+    expect((await call('POST', '/api/profile', { id, name: 'Flo' })).status).toBe(400);
+    expect((await call('POST', '/api/profile', { id, name: 'Flo', picks: 'a:1' })).status).toBe(400);
+    expect((await call('POST', '/api/profile', { id, name: 'Flo', picks: ['a:1', 'b:1'] })).status).toBe(400);
     // The same work three times is one pick.
-    expect((await call('POST', '/api/profile', { name: 'Flo', picks: ['a:1', 'a:1', 'a:1'] })).status).toBe(400);
-    expect((await call('POST', '/api/profile', { name: 'Flo', picks: ['a:1', 'b:1', 7] })).status).toBe(400);
-    expect((await call('POST', '/api/profile', { name: 'Flo', picks: ['a:1', 'b:1', 'nope'] })).status).toBe(404);
+    expect((await call('POST', '/api/profile', { id, name: 'Flo', picks: ['a:1', 'a:1', 'a:1'] })).status).toBe(400);
+    expect((await call('POST', '/api/profile', { id, name: 'Flo', picks: ['a:1', 'b:1', 7] })).status).toBe(400);
+    expect((await call('POST', '/api/profile', { id, name: 'Flo', picks: ['a:1', 'b:1', 'nope'] })).status).toBe(404);
     expect(createProfile).not.toHaveBeenCalled();
     createProfile.mockRestore();
   });

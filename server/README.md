@@ -14,7 +14,7 @@ npm run dev
 
 To run without Supabase, use `npm run dev:local` instead. Profiles, hearts and blends are then kept in one local file (`server/.data/local-db.json`, git-ignored), so they survive restarts. It needs only the Typesense values in `.env`.
 
-With Supabase, run `supabase/migrations/001_blend_result.sql` once in the SQL editor. It adds the column that lets a saved blend be reopened; without it blends still work but are not listed afterwards.
+With Supabase, run `supabase/migrations/001_blend_result.sql` and `002_create_profile.sql` once in the SQL editor. The first adds the column that lets a saved blend be reopened; without it blends still work but are not listed afterwards. The second makes signing up one transaction; without it signing up still works, in two steps.
 
 The API listens on `127.0.0.1:43871`. The screens are at `/gallery.html` on the Vite dev server. Run the normal Vite dev server from the repo root; its `/api` proxy forwards here. For deployment, put a same-origin `/api` reverse proxy in front of it (the Vite proxy only exists in development).
 
@@ -78,7 +78,7 @@ Measured in one session: a note answered in 3 to 4 s; rooms hung in 10 to 16 s. 
 
 **Onboarding.** One tile per visual family (`cluster_id`), and no two tiles alike enough to count as one taste (similarity under 0.77, the same rule that groups hearts), so every pick starts a taste of its own. Families holding under 1.5% of the collection are skipped. Families are added most-different first, up to 30. Each is shown by its most typical work, measured as the families are made (after subtracting the collection average); when that work repeats a tile already shown, the next most typical is tried, ten deep, and a family with none is left out. Today that gives 29 tiles covering 95% of the collection.
 
-**Signing up.** `POST /api/profile` takes the name and the picks together and makes the profile with its first hearts in one step; with fewer than three different known artworks it makes nothing. With Supabase the hearts go in as one insert and the profile is removed again if that insert fails (PostgREST has no transaction across two tables).
+**Signing up.** `POST /api/profile` takes the name and the picks together and makes the profile with its first hearts in one step; with fewer than three different known artworks it makes nothing. The browser chooses the profile's ID (a random UUID) and keeps it across attempts, so when an answer is lost and it asks again it gets the profile already made (200), never a second one. With Supabase this is one transaction, the `create_profile` function: run `supabase/migrations/002_create_profile.sql` once in the SQL editor. Until then the server warns once and signs people up in two steps, removing the profile again if its hearts cannot be saved.
 
 ## Endpoints
 
@@ -87,7 +87,7 @@ Types for every request and response are in `src/rec/api.ts`. Artworks never inc
 | Request | Returns |
 | --- | --- |
 | `GET /api/health` | `{ok, works}` |
-| `POST /api/profile` `{name, picks}` | Signs up: `{profile, hearts}` with a six-letter `blend_code` and the picks hearted (201). 400 with fewer than `min_picks` different works |
+| `POST /api/profile` `{id, name, picks}` | Signs up: `{profile, hearts}` with a six-letter `blend_code` and the picks hearted (201). `id` is a new UUID from the browser; repeating the request answers with the profile already made (200). 400 with fewer than `min_picks` different works |
 | `POST /api/profile/:user_id/picks` `{picks}` | `{profile, hearts}`: someone left with no hearts choosing again, under the same minimum |
 | `GET /api/profile/:user_id` | `{profile, hearts}`, hearts newest first with their artwork and reason |
 | `GET /api/onboarding` | `{works, min_picks}` |

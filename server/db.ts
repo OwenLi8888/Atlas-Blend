@@ -3,7 +3,7 @@
  * `createSupabaseDb` is the real implementation. The server holds the secret
  * key and is the only thing that talks to Supabase (RLS is on with no policies).
  */
-import { randomInt } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import type { Heart, Profile, WallSource } from '../src/rec/api';
 import { ApiError } from './errors';
@@ -52,13 +52,26 @@ export interface SavedBlend {
   created_at: string;
 }
 
+export interface NewProfile {
+  name: string;
+  /**
+   * Chosen by whoever is signing up, so that asking again after a lost answer
+   * finds the profile already made. Generated when left out.
+   */
+  id?: string;
+  /** Fixes the blend code; otherwise a free one is generated. */
+  code?: string;
+  /** Works hearted from the start. */
+  artIds?: readonly string[];
+}
+
 export interface Db {
   /**
-   * Creates a profile with `artIds` already hearted: either the profile exists
-   * with all of them or it does not exist. `code` fixes its blend code;
-   * otherwise a free one is generated.
+   * Creates a profile with its first hearts: either the profile exists with
+   * all of them or it does not exist. When a profile with `id` already exists
+   * it is returned as it is and nothing is changed.
    */
-  createProfile(name: string, code?: string, artIds?: readonly string[]): Promise<Profile>;
+  createProfile(profile: NewProfile): Promise<Profile>;
   findProfile(id: string): Promise<Profile | null>;
   findProfiles(ids: readonly string[]): Promise<Profile[]>;
   findProfileByCode(code: string): Promise<Profile | null>;
@@ -81,7 +94,7 @@ interface Database {
   public: {
     Tables: {
       profiles: {
-        Row: { id: string; name: string | null; blend_code: string | null; created_at: string | null };
+        Row: ProfileRow;
         Insert: { id?: string; name?: string | null; blend_code?: string | null; created_at?: string | null };
         Update: { id?: string; name?: string | null; blend_code?: string | null; created_at?: string | null };
         Relationships: [];
@@ -118,11 +131,17 @@ interface Database {
       };
     };
     Views: Record<never, never>;
-    Functions: Record<never, never>;
+    Functions: {
+      /** Mirrors supabase/migrations/002_create_profile.sql. */
+      create_profile: {
+        Args: { p_id: string; p_name: string; p_blend_code: string; p_art_ids: string[] };
+        Returns: ProfileRow;
+      };
+    };
   };
 }
 
-type ProfileRow = Database['public']['Tables']['profiles']['Row'];
+type ProfileRow = { id: string; name: string | null; blend_code: string | null; created_at: string | null };
 type HeartRow = Database['public']['Tables']['hearts']['Row'];
 type BlendRow = Database['public']['Tables']['blends']['Row'];
 type HeartInsert = Database['public']['Tables']['hearts']['Insert'];
@@ -142,6 +161,8 @@ const POSTGRES_FOREIGN_KEY_VIOLATION = '23503';
 const MISSING_TABLE_CODES = new Set(['PGRST205', '42P01']);
 /** PostgREST and Postgres codes for a column the table does not have. */
 const MISSING_COLUMN_CODES = new Set(['PGRST204', '42703']);
+/** PostgREST and Postgres codes for a function the database does not have. */
+const MISSING_FUNCTION_CODES = new Set(['PGRST202', '42883']);
 
 export function generateBlendCode(): string {
   let code = '';
@@ -157,31 +178,54 @@ export function createSupabaseDb(url: string, secretKey: string): Db {
     },
   });
 
-  return {
-    async createProfile(name, code, artIds = []) {
-      const attempts = code === undefined ? BLEND_CODE_ATTEMPTS : 1;
-      for (let attempt = 0; attempt < attempts; attempt++) {
-        const { data, error } = await client
-          .from('profiles')
-          .insert({ name, blend_code: code ?? generateBlendCode() })
-          .select(PROFILE_COLUMNS)
-          .single();
-        if (error?.code === POSTGRES_UNIQUE_VIOLATION) continue;
-        if (error) throw storageError(error);
+  type InsertResult = { row: ProfileRow; error: null } | { row: null; error: { message: string; code?: string } };
+  /** False once the database is found not to have `create_profile`. */
+  let hasCreateProfile = true;
 
-        const profile = toProfile(data);
-        if (artIds.length > 0) {
-          // One insert, so the hearts are saved together or not at all. PostgREST
-          // has no transaction across two tables, so if they fail the profile is
-          // taken back; nobody has been told its ID yet.
-          const hearts = await client.from('hearts').insert(artIds.map(artId => ({ user_id: profile.id, art_id: artId })));
-          if (hearts.error) {
-            const undo = await client.from('profiles').delete().eq('id', profile.id);
-            if (undo.error) console.error('Could not remove half-made profile ' + profile.id + ': ' + undo.error.message);
-            throw storageError(hearts.error);
-          }
-        }
-        return profile;
+  /** Saves a profile and its first hearts, all or nothing, or answers with what Postgres refused. */
+  async function insertProfile(
+    profile: { id: string; name: string; blend_code: string },
+    artIds: readonly string[],
+  ): Promise<InsertResult> {
+    if (hasCreateProfile) {
+      const { data, error } = await client.rpc('create_profile', {
+        p_id: profile.id,
+        p_name: profile.name,
+        p_blend_code: profile.blend_code,
+        p_art_ids: [...artIds],
+      });
+      if (!error) return { row: data, error: null };
+      if (!error.code || !MISSING_FUNCTION_CODES.has(error.code)) return { row: null, error };
+      hasCreateProfile = false;
+      console.warn('create_profile is missing: run supabase/migrations/002_create_profile.sql so signing up is one transaction.');
+    }
+
+    // Without the function there is no transaction across the two tables. The
+    // hearts go in as one insert, and if it fails the profile is taken back.
+    const made = await client.from('profiles').insert(profile).select(PROFILE_COLUMNS).single();
+    if (made.error) return { row: null, error: made.error };
+    if (artIds.length > 0) {
+      const hearts = await client.from('hearts').insert(artIds.map(artId => ({ user_id: profile.id, art_id: artId })));
+      if (hearts.error) {
+        const undo = await client.from('profiles').delete().eq('id', profile.id);
+        if (undo.error) console.error('Could not remove half-made profile ' + profile.id + ': ' + undo.error.message);
+        return { row: null, error: hearts.error };
+      }
+    }
+    return { row: made.data, error: null };
+  }
+
+  return {
+    async createProfile({ name, id = randomUUID(), code, artIds = [] }) {
+      const attempts = code === undefined ? BLEND_CODE_ATTEMPTS : 1;
+      const hearted = [...new Set(artIds)];
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        const { row, error } = await insertProfile({ id, name, blend_code: code ?? generateBlendCode() }, hearted);
+        if (row) return toProfile(row);
+        if (error.code !== POSTGRES_UNIQUE_VIOLATION) throw storageError(error);
+        // Either the ID is taken, which means this sign-up already went through, or the blend code is.
+        const existing = await this.findProfile(id);
+        if (existing) return existing;
       }
       if (code !== undefined) throw new ApiError(409, 'That blend code is already taken');
       throw new ApiError(503, 'Could not create a blend code. Please try again.');

@@ -50,7 +50,7 @@ export async function seedDemoProfile(db: Db, catalog: Catalog): Promise<void> {
     });
   }
 
-  const profile = (await db.findProfileByCode(DEMO_BLEND_CODE)) ?? (await db.createProfile(DEMO_NAME, DEMO_BLEND_CODE));
+  const profile = (await db.findProfileByCode(DEMO_BLEND_CODE)) ?? (await db.createProfile({ name: DEMO_NAME, code: DEMO_BLEND_CODE }));
   const existing = new Set((await db.listHearts(profile.id, MAX_HEARTS)).map(heart => heart.art_id));
   let added = 0;
   for (const [artId, why] of wanted) {

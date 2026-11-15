@@ -76,9 +76,9 @@ function request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unkn
 
 export const api = {
   onboarding: () => request<OnboardingResponse>('GET', '/api/onboarding'),
-  /** Signs up with the works chosen at the entrance; the profile and its hearts are made together. */
-  createProfile: (name: string, picks: string[]) =>
-    request<ProfileResponse>('POST', '/api/profile', { name, picks } satisfies CreateProfileRequest),
+  /** Signs up with the works chosen at the entrance; the profile and its hearts are made together. Safe to repeat with the same `id`. */
+  createProfile: (id: string, name: string, picks: string[]) =>
+    request<ProfileResponse>('POST', '/api/profile', { id, name, picks } satisfies CreateProfileRequest),
   /** Chooses again for a profile left with no hearts. */
   choosePicks: (userId: string, picks: string[]) =>
     request<ProfileResponse>('POST', '/api/profile/' + userId + '/picks', { picks } satisfies PicksRequest),

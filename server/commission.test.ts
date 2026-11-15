@@ -169,8 +169,8 @@ describe('commission endpoints', () => {
     const base = baseOf();
     const post = (path: string, body: unknown) =>
       fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
-    const me = await db.createProfile('Ada');
-    const friend = await db.createProfile('Bo');
+    const me = await db.createProfile({ name: 'Ada' });
+    const friend = await db.createProfile({ name: 'Bo' });
     await post('/api/heart', { user_id: me.id, art_id: 'a' });
     await post('/api/heart', { user_id: friend.id, art_id: 'b' });
     return (await post('/api/blend', { user_id: me.id, code: friend.blend_code })) as BlendResponse;

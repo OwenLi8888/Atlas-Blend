@@ -3,6 +3,7 @@
  * project. Creates two temporary profiles and always deletes them afterwards.
  */
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import type {
@@ -57,7 +58,7 @@ try {
   const picksA = onboarding.works.slice(0, 3);
   const picksB = onboarding.works.slice(3, 6);
   const signUp = async (name: string, picks: readonly { id: string }[]) => {
-    const { profile } = await request<ProfileResponse>('POST', '/api/profile', { name, picks: picks.map(work => work.id) });
+    const { profile } = await request<ProfileResponse>('POST', '/api/profile', { id: randomUUID(), name, picks: picks.map(work => work.id) });
     temporaryProfiles.push(profile.id);
     return profile;
   };

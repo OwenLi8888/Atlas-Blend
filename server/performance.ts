@@ -1,4 +1,5 @@
 /** Repeatable local audit: real cached vectors, isolated DB, no paid models. */
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createApp } from './app';
 import { buildCatalog, curate } from './catalog';
@@ -37,7 +38,7 @@ for (let i = 0; i < 6; i++) {
   };
   await measure('onboarding', '/onboarding');
   const picks = catalog.onboarding.slice(0, 3).map(row => catalog.works[row].id);
-  const { profile: p } = await measure('sign up', '/profile', { name: 'Audit', picks });
+  const { profile: p } = await measure('sign up', '/profile', { id: randomUUID(), name: 'Audit', picks });
   await measure('heart', '/heart', { user_id: p.id, art_id: catalog.works[catalog.onboarding[3]].id });
   await measure('profile', '/profile/' + p.id);
   await measure('recs', '/recs/' + p.id);

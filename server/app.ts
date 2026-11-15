@@ -304,10 +304,19 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
   }
 
   // Signing up is one step: the profile is made with its first hearts or not at all.
+  // The browser chooses the profile's ID, so when an answer is lost on the way
+  // back and it asks again, it is given the profile already made, not a second one.
   app.post('/api/profile', async (req, res: Response<ProfileResponse>) => {
+    const id = uuid(bodyField(req, 'id'), 'id');
     const name = text(bodyField(req, 'name'), 'name', MAX_NAME_LENGTH);
     const picks = onboardingPicks(bodyField(req, 'picks'));
-    res.status(201).json(await profileResponse(await db.createProfile(name, undefined, picks)));
+
+    const existing = await db.findProfile(id);
+    if (existing) {
+      res.json(await profileResponse(existing));
+      return;
+    }
+    res.status(201).json(await profileResponse(await db.createProfile({ id, name, artIds: picks })));
   });
 
   // Someone who removed every heart chooses again, under the same rule as signing up.

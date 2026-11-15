@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Artwork, Profile, ProfileResponse } from '../rec/api';
 import { api, ApiFailure } from './api';
 import { Hung } from './Hung';
 import { Salon } from './Salon';
+import { newUserId } from './session';
 
 interface Props {
   /** Set when someone with a profile has no hearts left and is choosing again. */
@@ -21,6 +22,8 @@ export function Onboarding({ profile, onDone }: Props) {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The ID this visit signs up with, kept across attempts so trying again never makes a second profile. */
+  const signUpId = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,7 +55,12 @@ export function Onboarding({ profile, onDone }: Props) {
     setError(null);
     try {
       const picks = [...chosen];
-      onDone(profile ? await api.choosePicks(profile.id, picks) : await api.createProfile(name.trim() || 'Guest', picks));
+      if (profile) {
+        onDone(await api.choosePicks(profile.id, picks));
+      } else {
+        signUpId.current ??= newUserId();
+        onDone(await api.createProfile(signUpId.current, name.trim() || 'Guest', picks));
+      }
     } catch (failure) {
       setError(messageOf(failure));
       setBusy(false);

@@ -77,7 +77,7 @@ describe('curator endpoints', () => {
     return { status: response.status, body: (await response.json()) as T };
   }
   async function person({ db, base }: ReturnType<typeof start>): Promise<Profile> {
-    const profile = await db.createProfile('Ada');
+    const profile = await db.createProfile({ name: 'Ada' });
     await call(base(), 'POST', '/api/heart', { user_id: profile.id, art_id: 'rose', why: 'the pink' });
     return profile;
   }

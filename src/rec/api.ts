@@ -42,6 +42,12 @@ export interface HeartedWork {
  * entrance, in one step. Answers with a `ProfileResponse`.
  */
 export interface CreateProfileRequest {
+  /**
+   * A new random UUID chosen by the browser, which becomes the profile's ID.
+   * Sending the same request again answers with the profile already made (200)
+   * instead of making another.
+   */
+  id: string;
   name: string;
   /** Artwork IDs; at least `min_picks` different ones. */
   picks: string[];
