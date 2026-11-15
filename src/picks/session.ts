@@ -109,7 +109,7 @@ export function recallName(session: Session): string {
   }
 }
 export function rememberName(session: Session, name: string): void {
-  deviceStore.set(session, 'name', name || null);
+  deviceStore.set(session, 'name', name); // an emptied name is kept as empty, so a refresh does not bring the old one back
   try {
     if (name) window.localStorage.setItem(DEVICE_NAME, name);
   } catch {

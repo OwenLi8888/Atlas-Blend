@@ -53,7 +53,11 @@ export function App() {
   /** The gallery, while it is open: the canvases still being painted, to hang beside the saved ones. Null when closed. */
   const [wall, setWall] = useState<GalleryItem[] | null>(null);
   /** This player's profile in the Gallery API (server/); null while it is unknown or the API is not running. */
-  const [player, setPlayer] = useState<GalleryPlayer | null>(null);
+  // After a refresh in the studio it is the profile saved with the picks: the studio starts at once
+  // and must not wait for a new profile, nor make a second one for the same player.
+  const [player, setPlayer] = useState<GalleryPlayer | null>(() =>
+    record?.profileId && record.blendCode ? { profileId: record.profileId, blendCode: record.blendCode } : null,
+  );
 
   const go = useCallback(
     (next: Screen) => {
