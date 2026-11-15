@@ -1,12 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import './PhotoPicks.css';
-import { studioCast, type Character } from '../characters';
+import type { Character } from '../characters';
 import { columnsFor, layoutWall, type Box } from '../picks/masonry';
 import { loadDraft, saveDraft, savePicks, type PicksRecord } from '../picks/picksStore';
 import { loadPool, photoUrl, PICKS, shownIds, type PoolPhoto } from '../picks/pool';
 import type { Session } from '../picks/session';
-import { SpeechCloud } from './SpeechCloud';
 
 interface Props {
   character: Character;
@@ -20,14 +19,6 @@ type Phase = 'picking' | 'saving' | 'saved';
 
 /** How long "Nice picks!" stays up before moving on. */
 const CONFIRM_MS = 1600;
-
-/**
- * What the painter says. *Stars* mark the phrase to highlight; {n} is the number to pick.
- * A painter's own opening line is `pickLine` in src/characters.tsx.
- */
-const DEFAULT_LINE = 'Ooh, a quest! Pick the *{n} pictures* that make your heart go sparkle!';
-const FULL_LINE = '*Perfect picks!* Ready to continue?';
-const SAVED_LINE = '*Nice picks!*';
 
 /**
  * Screen 2: the chosen painter asks for the 5 pictures that speak to you, out of 25 hung like a
@@ -145,7 +136,6 @@ export function PhotoPicks({ character, session, onBack, onDone }: Props) {
 
   const order = useMemo(() => new Map(picks.map((id, i) => [id, i + 1])), [picks]);
   const full = picks.length === PICKS;
-  const askLine = (character.pickLine ?? DEFAULT_LINE).replace('{n}', String(PICKS));
   const saved = phase === 'saved';
 
   return (
@@ -158,9 +148,11 @@ export function PhotoPicks({ character, session, onBack, onDone }: Props) {
           <p className="eyebrow">Player {session.user} of 2</p>
         </div>
 
-        <div className="picks-guide">
-          <Guide character={character} cheer={saved} bounce={picks.length} />
-          <SpeechCloud name={character.name} line={saved ? SAVED_LINE : full ? FULL_LINE : askLine} roomFor={askLine} />
+        <div className="picks-intro">
+          <h1>Choose the right pictures</h1>
+          <p className="lede" aria-live="polite">
+            {saved ? 'Nice picks.' : full ? 'Perfect. Ready to continue?' : `Pick the ${PICKS} that speak to you.`}
+          </p>
         </div>
       </header>
 
@@ -254,60 +246,5 @@ function WallImage({ photo, box }: { photo: PoolPhoto; box: Box }) {
       draggable={false}
       onLoad={() => setLoaded(true)}
     />
-  );
-}
-
-/** The painter beside the bubble: the page 1 sprite on its paint puddle, blinking as it does in the studio. */
-function Guide({ character, cheer, bounce }: { character: Character; cheer: boolean; bounce: number }) {
-  const [blink, setBlink] = useState(false);
-  const spriteRef = useRef<HTMLSpanElement>(null);
-  const lastBounce = useRef(bounce);
-
-  // A quick happy bounce each time a picture is picked (not when one is put back).
-  useEffect(() => {
-    const picked = bounce > lastBounce.current;
-    lastBounce.current = bounce;
-    if (!picked || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    spriteRef.current?.animate(
-      [
-        { transform: 'translateY(0) scale(1)' },
-        { transform: 'translateY(2px) scale(1.06, 0.92)', offset: 0.18 },
-        { transform: 'translateY(-14px) scale(0.96, 1.06)', offset: 0.5 },
-        { transform: 'translateY(0) scale(1.04, 0.96)', offset: 0.82 },
-        { transform: 'translateY(0) scale(1)' },
-      ],
-      { duration: 440, easing: 'ease-out' },
-    );
-  }, [bounce]);
-  const blinkSrc = studioCast.find((c) => c.id === character.id)?.blink;
-
-  useEffect(() => {
-    if (!blinkSrc || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    let open = 0;
-    let close = 0;
-    const schedule = () => {
-      open = window.setTimeout(() => {
-        setBlink(true);
-        close = window.setTimeout(() => {
-          setBlink(false);
-          schedule();
-        }, 130);
-      }, 2200 + Math.random() * 3200);
-    };
-    schedule();
-    return () => {
-      window.clearTimeout(open);
-      window.clearTimeout(close);
-    };
-  }, [blinkSrc]);
-
-  return (
-    <div className={`picks-painter${cheer ? ' cheer' : ''}`} style={{ ['--tint' as string]: character.color }} aria-hidden="true">
-      <span className="picks-puddle" />
-      <span ref={spriteRef} className="picks-sprite">
-        <character.Sprite />
-        {blinkSrc && <img className="picks-blink" src={`./studio/${blinkSrc}`} alt="" draggable={false} style={{ opacity: blink ? 1 : 0 }} />}
-      </span>
-    </div>
   );
 }
