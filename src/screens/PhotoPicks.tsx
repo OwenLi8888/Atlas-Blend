@@ -89,10 +89,9 @@ export function PhotoPicks({ character, session, onBack, onDone }: Props) {
       alive.current = false;
     };
   }, []);
-  // A restored draft arrives already checked.
+  // A restored draft arrives already checked (picks and photos are set together on load).
   useEffect(() => {
-    setChecked((c) => (c.size || !picks.length ? c : new Set(picks)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setChecked((c) => (c.size || !picksRef.current.length ? c : new Set(picksRef.current)));
   }, [photos]);
 
   const tripTo = async (id: string) => {
@@ -104,38 +103,61 @@ export function PhotoPicks({ character, session, onBack, onDone }: Props) {
       setChecked((c) => new Set(c).add(id));
       return;
     }
-    const home = sprite.getBoundingClientRect();
-    const box = tile.getBoundingClientRect();
-    const size = home.width;
-    // Lands on the picture's lower right corner, brush reaching over to the check.
-    const land = { x: box.right - size * 0.7, y: box.bottom - size * 0.95 };
-    const arc = (from: { x: number; y: number }, to: { x: number; y: number }, lift: number) =>
-      Array.from({ length: 9 }, (_, i) => {
-        const k = i / 8;
-        const x = from.x + (to.x - from.x) * k;
-        const y = from.y + (to.y - from.y) * k - Math.sin(Math.PI * k) * lift;
-        const squash = i === 0 || i === 8 ? 'scale(1.08, 0.9)' : 'scale(0.96, 1.05)';
-        return { transform: `translate(${x}px, ${y}px) ${squash}` };
+    const size = sprite.getBoundingClientRect().width;
+    const pad = 8;
+    // Both ends are measured again every frame, so scrolling or resizing mid-trip keeps the painter
+    // on its picture; each is held inside the viewport, so a trip never happens off-screen.
+    const clampY = (y: number) => Math.min(Math.max(y, pad), window.innerHeight - size - pad);
+    const home = () => {
+      const r = sprite.getBoundingClientRect();
+      return { x: r.left, y: clampY(r.top) };
+    };
+    // the picture's lower right corner, brush reaching over to the check
+    const land = () => {
+      const b = tile.getBoundingClientRect();
+      return { x: b.right - size * 0.7, y: clampY(b.bottom - size * 0.95) };
+    };
+    const play = (ms: number, frame: (k: number) => void) =>
+      new Promise<void>((done) => {
+        const t0 = performance.now();
+        const step = (now: number) => {
+          if (!alive.current) return done();
+          const k = Math.min(1, (now - t0) / ms);
+          frame(k);
+          if (k < 1) requestAnimationFrame(step);
+          else done();
+        };
+        requestAnimationFrame(step);
       });
-    const start = { x: home.left, y: home.top };
+    const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
+    const hop = (from: () => { x: number; y: number }, to: () => { x: number; y: number }, ms: number) =>
+      play(ms, (k) => {
+        const a = from(), b = to(), e = ease(k);
+        const lift = Math.max(70, Math.abs(b.y - a.y) * 0.35);
+        const squash = k < 0.12 || k > 0.9 ? 'scale(1.08, 0.9)' : 'scale(0.96, 1.05)';
+        flyer.style.transform = `translate(${a.x + (b.x - a.x) * e}px, ${a.y + (b.y - a.y) * e - Math.sin(Math.PI * k) * lift}px) ${squash}`;
+      });
+
+    if (tile.getBoundingClientRect().bottom > window.innerHeight || tile.getBoundingClientRect().top < 0) {
+      tile.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    const start = home();
     Object.assign(flyer.style, { width: `${size}px`, height: `${size}px`, opacity: '1' });
     sprite.style.visibility = 'hidden';
-    const lift = Math.max(70, Math.abs(land.y - start.y) * 0.35);
-    await flyer.animate(arc(start, land, lift), { duration: 560, easing: 'ease-in-out', fill: 'forwards' }).finished;
+    await hop(() => start, land, 560);
     if (!alive.current) return;
     if (picksRef.current.includes(id)) {
       setPainting(id);
       setChecked((c) => new Set(c).add(id));
       // brushing: a little sway while the check draws itself
-      await flyer.animate(
-        [0, -10, 6, -8, 4, 0].map((r) => ({ transform: `translate(${land.x}px, ${land.y}px) rotate(${r}deg)` })),
-        { duration: 620, easing: 'ease-in-out', fill: 'forwards' },
-      ).finished;
+      await play(620, (k) => {
+        const p = land();
+        flyer.style.transform = `translate(${p.x}px, ${p.y}px) rotate(${Math.sin(k * Math.PI * 3) * 9 * (1 - k)}deg)`;
+      });
       if (!alive.current) return;
       setPainting(null);
     }
-    const back = sprite.getBoundingClientRect();
-    await flyer.animate(arc(land, { x: back.left, y: back.top }, lift * 0.8), { duration: 480, easing: 'ease-in-out', fill: 'forwards' }).finished;
+    await hop(land, home, 480);
     if (!alive.current) return;
     sprite.style.visibility = '';
     flyer.style.opacity = '0';
@@ -239,6 +261,13 @@ export function PhotoPicks({ character, session, onBack, onDone }: Props) {
 
   return (
     <main className="picks" ref={mainRef}>
+      {/* the ragged paint edge every painted check uses */}
+      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+        <filter id="pick-paint-edge" x="-10%" y="-10%" width="120%" height="120%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4" />
+          <feDisplacementMap in="SourceGraphic" scale="5" />
+        </filter>
+      </svg>
       <header className="picks-head">
         <div className="picks-top">
           <button type="button" className="btn ghost back" onClick={onBack} disabled={phase !== 'picking'}>
@@ -340,14 +369,8 @@ function PaintedCheck({ color, drawing }: { color: string; drawing: boolean }) {
   return (
     <span className={`pick-check${drawing ? ' drawing' : ''}`} aria-hidden="true">
       <svg viewBox="0 0 100 100">
-        <defs>
-          <filter id="paint-edge" x="-10%" y="-10%" width="120%" height="120%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4" />
-            <feDisplacementMap in="SourceGraphic" scale="5" />
-          </filter>
-        </defs>
         <path className="under" d={d} pathLength={1} />
-        <path className="paint" d={d} pathLength={1} style={{ stroke: color }} filter="url(#paint-edge)" />
+        <path className="paint" d={d} pathLength={1} style={{ stroke: color }} filter="url(#pick-paint-edge)" />
         <path className="ridge" d={d} pathLength={1} />
       </svg>
     </span>
