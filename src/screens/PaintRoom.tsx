@@ -4,16 +4,24 @@ import { studioCast, type Character } from '../characters';
 import { Player } from '../engine/player';
 import { getPlan } from '../plan/planStore';
 import type { StudioScene } from '../scene/studioScene';
-import { STYLE_MENU, type Painting, type StrokePlan } from '../types';
+import { STYLE_MENU, type Painting } from '../types';
 import { Studio } from './Studio';
 
-interface Props {
+/** One picture to paint, with its shape known up front so the easel can be sized before planning. */
+export interface Picture {
   painting: Painting;
+  /** Width / height. */
+  aspect: number;
+}
+
+interface Props {
+  /** Up to three pictures, one per easel, painted left to right. */
+  pictures: Picture[];
   character: Character;
   onBack: () => void;
 }
 
-/** One canvas per style, painted left to right. */
+/** One style per easel, so the three canvases also differ in look. */
 const STYLES = STYLE_MENU.slice(0, 3);
 /** CSS width of the hidden canvases the stroke players draw on; the 3D room shows them as textures. */
 const SHEET = 420;
@@ -23,61 +31,107 @@ const hasWebGL = () => !!document.createElement('canvas').getContext('webgl2');
 
 /**
  * Screen 3, in the painted studio. The chosen painter hops off the palette, takes a brush from the
- * jar and repaints the chosen painting on the three easels, one style per canvas, moving its
- * stepladder along as it goes. Without WebGL it falls back to the flat Studio screen.
+ * jar and paints the visitor's picks on the three easels, one after another, moving its stepladder
+ * along as it goes. Without WebGL it falls back to the flat Studio screen with the first pick.
  */
 export function PaintRoom(props: Props) {
   const [webgl] = useState(hasWebGL);
-  return webgl ? <Room {...props} /> : <Studio {...props} />;
+  const first = props.pictures[0];
+  if (!first) return null;
+  return webgl ? <Room {...props} /> : <Studio painting={first.painting} character={props.character} onBack={props.onBack} />;
 }
 
-function Room({ painting, character, onBack }: Props) {
+function Room({ pictures, character, onBack }: Props) {
   const sceneRef = useRef<HTMLCanvasElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
-  const [plan, setPlan] = useState<StrokePlan | null>(null);
-  const [failed, setFailed] = useState(false);
   /** -1 while the painter fetches its brush, then the canvas being painted. */
   const [index, setIndex] = useState(-1);
+  /** The canvas being painted is still being planned (first visit of a picture). */
+  const [studying, setStudying] = useState(false);
+  const [skipped, setSkipped] = useState<number[]>([]);
   const [done, setDone] = useState(false);
   const [run, setRun] = useState(0);
+  const works = pictures.slice(0, STYLES.length);
 
+  // Plan every picture at once; the worker takes them in turn while the painter walks to the jar.
   useEffect(() => {
-    let cancelled = false;
-    getPlan(painting).then(
-      (p) => !cancelled && setPlan(p),
-      () => !cancelled && setFailed(true),
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [painting]);
+    for (const w of works) getPlan(w.painting).catch(() => {});
+  }, [pictures]);
 
   useEffect(() => {
     const canvas = sceneRef.current;
     const host = hostRef.current;
     const panel = panelRef.current;
-    if (!plan || !canvas || !host) return;
+    if (!canvas || !host || !works.length) return;
     let cancelled = false;
     let scene: StudioScene | null = null;
     let ro: ResizeObserver | null = null;
     let current = -1;
     const players: Player[] = [];
-    const aspect = plan.widthMm / plan.heightMm;
-    const sheets = STYLES.map(() => {
+    // Pixel size set up front, the same the Player will measure (CSS size x DPR, at most 2): the 3D
+    // room uploads each sheet as a texture before its plan may be ready, and a texture cannot
+    // change size once uploaded.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const sheets = works.map((w) => {
       const sheet = document.createElement('canvas');
+      const h = Math.round(SHEET / w.aspect);
       sheet.style.width = `${SHEET}px`;
-      sheet.style.height = `${Math.round(SHEET / aspect)}px`;
+      sheet.style.height = `${h}px`;
+      sheet.width = Math.max(1, Math.round(SHEET * dpr));
+      sheet.height = Math.max(1, Math.round(h * dpr));
+      const g = sheet.getContext('2d', { alpha: false });
+      if (g) {
+        g.fillStyle = '#f4efe6';
+        g.fillRect(0, 0, sheet.width, sheet.height);
+      }
       host.append(sheet);
       return sheet;
     });
     setIndex(-1);
     setDone(false);
+    setSkipped([]);
     const bar = (progress: number) => {
       if (barRef.current) barRef.current.style.transform = `scaleX(${progress})`;
     };
     bar(0);
+
+    const paintAt = async (i: number) => {
+      current = i;
+      setIndex(i);
+      setStudying(true);
+      let plan;
+      try {
+        plan = await getPlan(works[i].painting);
+      } catch {
+        plan = null;
+      }
+      if (cancelled || i !== current) return;
+      setStudying(false);
+      if (!plan) {
+        // This picture could not be planned: the painter moves on, the canvas stays blank.
+        setSkipped((s) => [...s, i]);
+        scene?.workDone();
+        return;
+      }
+      const sheet = sheets[i];
+      const player = new Player(sheet, plan, {
+        style: STYLES[i].id,
+        durationMs: SECONDS_EACH * 1000,
+        onFrame: (f) => {
+          if (i !== current) return;
+          scene?.setBrush(f.x / sheet.clientWidth, f.y / sheet.clientHeight);
+          bar((i + f.progress) / works.length);
+        },
+        onDone: () => {
+          player.destroy(); // the finished picture stays on its canvas
+          players.splice(players.indexOf(player), 1);
+          if (i === current) scene?.workDone();
+        },
+      });
+      players.push(player);
+    };
 
     import('../scene/studioScene').then(({ createStudioScene }) => {
       if (cancelled) return;
@@ -87,28 +141,12 @@ function Room({ painting, character, onBack }: Props) {
         mode: 'paint',
         painterId: character.id,
         reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-        works: sheets.map((sheet) => ({ canvas: sheet, aspect })),
-        onReady: (i) => {
-          current = i;
-          setIndex(i);
-          const sheet = sheets[i];
-          const player = new Player(sheet, plan, {
-            style: STYLES[i].id,
-            durationMs: SECONDS_EACH * 1000,
-            onFrame: (f) => {
-              if (i !== current) return;
-              scene?.setBrush(f.x / sheet.clientWidth, f.y / sheet.clientHeight);
-              bar((i + f.progress) / STYLES.length);
-            },
-            onDone: () => {
-              player.destroy(); // the finished picture stays on its canvas
-              players.splice(players.indexOf(player), 1);
-              if (i === current) scene?.workDone();
-            },
-          });
-          players.push(player);
+        works: sheets.map((sheet, i) => ({ canvas: sheet, aspect: works[i].aspect })),
+        onReady: (i) => void paintAt(i),
+        onAllDone: () => {
+          bar(1);
+          setDone(true);
         },
-        onAllDone: () => setDone(true),
       });
       ro = new ResizeObserver(() => {
         const wide = window.matchMedia('(min-width: 900px) and (min-aspect-ratio: 1/1)').matches;
@@ -124,18 +162,18 @@ function Room({ painting, character, onBack }: Props) {
       scene?.dispose();
       for (const sheet of sheets) sheet.remove();
     };
-  }, [plan, character.id, run]);
+  }, [pictures, character.id, run]);
 
-  const style = index >= 0 ? STYLES[index] : null;
-  const status = failed
-    ? 'This painting could not be prepared. Go back and pick another.'
-    : !plan
-      ? `${character.name} is studying the painting…`
-      : done
-        ? `${character.name} painted it three ways.`
-        : style
-          ? `${character.name} is painting in ${style.label}…`
-          : `${character.name} is fetching a brush…`;
+  const now = index >= 0 ? works[index] : null;
+  const status = done
+    ? skipped.length
+      ? `${character.name} painted ${works.length - skipped.length} of your picks.`
+      : `${character.name} painted your picks.`
+    : !now
+      ? `${character.name} is fetching a brush…`
+      : studying
+        ? `${character.name} is studying “${now.painting.title}”…`
+        : `${character.name} is painting in ${STYLES[index].label}…`;
 
   return (
     <main className="paint-room">
@@ -147,16 +185,16 @@ function Room({ painting, character, onBack }: Props) {
             <span aria-hidden="true">←</span> Back
           </button>
           <div className="paint-title">
-            <h1>{painting.title}</h1>
-            <p>{[painting.artist, painting.year].filter(Boolean).join(', ')}</p>
+            <h1>{now ? now.painting.title : 'Your picks'}</h1>
+            <p>{now ? [now.painting.artist, now.painting.year].filter(Boolean).join(', ') : `${character.name} paints them in the studio`}</p>
           </div>
         </header>
 
         <section className="paint-foot" aria-label="Painting progress">
           <ol className="paint-steps">
-            {STYLES.map((s, i) => (
-              <li key={s.id} className={done || i < index ? 'done' : i === index ? 'now' : undefined}>
-                {s.label}
+            {works.map((w, i) => (
+              <li key={w.painting.id} className={done || i < index ? 'done' : i === index ? 'now' : undefined} title={w.painting.title}>
+                {STYLES[i].label}
               </li>
             ))}
           </ol>

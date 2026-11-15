@@ -566,7 +566,7 @@ export function createStudioScene(canvas, {
       onReady?.(i);
       await new Promise((res) => (waiting = res));
       act.tex.needsUpdate = true;
-      act.work = -1; act.tex = null;
+      act.work = -1; act.tex = null; act.texW = 0; act.texH = 0;
       ladder.children[0].rotation.z = 0;
       me.hop = clock();                                                      // done with this one
       await wait(0.5);
@@ -616,6 +616,12 @@ export function createStudioScene(canvas, {
       ladder.position.x += lead * (1 - Math.exp(-dt * 5));
       ladder.children[0].rotation.z = THREE.MathUtils.clamp(-lead * 0.5, -0.09, 0.09);
       hand.set(a.position.x - act.side * 0.17 * s, a.position.y + 0.25 * s, a.position.z + 0.03);
+      // a texture keeps the size it was first uploaded with: if the sheet was resized, start over
+      const img = act.tex.image;
+      if (act.texW !== img.width || act.texH !== img.height) {
+        if (act.texW) act.tex.dispose();
+        act.texW = img.width; act.texH = img.height;
+      }
       act.tex.needsUpdate = true;
     } else if (act.held) {
       hand.set(a.position.x - 0.17 * s, a.position.y + 0.25 * s, a.position.z + 0.03);
