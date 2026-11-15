@@ -34,7 +34,7 @@ export function Explore({ profile, hearts, onHearts }: Props) {
     if (loading.current || nextOffset === null) return;
     loading.current = true;
     try {
-      const page = await api.discover(seed, nextOffset);
+      const page = await api.discover(seed, nextOffset, profile.id);
       setWorks(current => [...current, ...page.works]);
       setNextOffset(page.next_offset);
       setFailure(null);
@@ -43,7 +43,7 @@ export function Explore({ profile, hearts, onHearts }: Props) {
     } finally {
       loading.current = false;
     }
-  }, [seed, nextOffset]);
+  }, [seed, nextOffset, profile.id]);
 
   useEffect(() => {
     const target = sentinel.current;
@@ -62,7 +62,7 @@ export function Explore({ profile, hearts, onHearts }: Props) {
     <main className="page">
       <header className="page-head">
         <h1>Explore</h1>
-        <p>The whole collection, in no particular order. Open a work to see others like it.</p>
+        <p>The whole collection, in no particular order, with a few we think you will love along the way. Open a work to see others like it.</p>
       </header>
 
       <div className="salon">

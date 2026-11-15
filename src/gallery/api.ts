@@ -6,6 +6,9 @@ import type {
   BlendsResponse,
   Commission,
   CreateProfileRequest,
+  CuratorNoteRequest,
+  CuratorNoteResponse,
+  CuratorResponse,
   DiscoverResponse,
   ErrorResponse,
   HeartRequest,
@@ -80,8 +83,12 @@ export const api = {
   unheart: (userId: string, artId: string) =>
     request<void>('DELETE', '/api/heart?user_id=' + userId + '&art_id=' + encodeURIComponent(artId)),
   recs: (userId: string) => request<RecsResponse>('GET', '/api/recs/' + userId),
-  discover: (seed: number, offset: number) => request<DiscoverResponse>('GET', '/api/discover?seed=' + seed + '&offset=' + offset),
+  discover: (seed: number, offset: number, userId: string) =>
+    request<DiscoverResponse>('GET', '/api/discover?seed=' + seed + '&offset=' + offset + '&user_id=' + userId),
   similar: (artId: string) => request<SimilarResponse>('GET', '/api/similar?id=' + encodeURIComponent(artId)),
+  curator: (userId: string) => request<CuratorResponse>('GET', '/api/curator/' + userId),
+  curatorNote: (userId: string, text: string, question?: string) =>
+    request<CuratorNoteResponse>('POST', '/api/curator/' + userId + '/note', { text, question } satisfies CuratorNoteRequest),
   blends: (userId: string) => request<BlendsResponse>('GET', '/api/blends/' + userId),
   savedBlend: (blendId: string, userId: string) => request<BlendResponse>('GET', '/api/blend/' + blendId + '?user_id=' + userId),
   blend: (userId: string, code: string) =>

@@ -10,6 +10,7 @@ import { forgetUserId, rememberedUserId, rememberUserId } from './session';
 type Route =
   | { page: 'for-you' }
   | { page: 'saved' }
+  | { page: 'rooms' }
   | { page: 'explore' }
   | { page: 'blends' }
   | { page: 'blend'; blendId: string };
@@ -21,6 +22,7 @@ function routeFromHash(): Route {
   const blend = BLEND_ROUTE.exec(hash);
   if (blend) return { page: 'blend', blendId: blend[1] };
   if (hash === '#/saved') return { page: 'saved' };
+  if (hash === '#/rooms') return { page: 'rooms' };
   if (hash === '#/explore') return { page: 'explore' };
   if (hash === '#/blends') return { page: 'blends' };
   return { page: 'for-you' };
@@ -95,7 +97,7 @@ export function GalleryApp() {
 
   const profile = session.state === 'ready' ? session.profile : null;
   const hasGallery = session.state === 'ready' && profile !== null && session.hearts.length > 0;
-  const inGallery = route.page === 'for-you' || route.page === 'saved';
+  const inGallery = route.page === 'for-you' || route.page === 'saved' || route.page === 'rooms';
   const inBlends = route.page === 'blends' || route.page === 'blend';
 
   return (
@@ -142,7 +144,7 @@ export function GalleryApp() {
               profile={profile}
               hearts={session.hearts}
               onHearts={hearts => setSession({ state: 'ready', profile, hearts })}
-              tab={route.page === 'saved' ? 'saved' : 'for-you'}
+              tab={route.page === 'saved' || route.page === 'rooms' ? route.page : 'for-you'}
             />
           )}
           {route.page === 'explore' && (
