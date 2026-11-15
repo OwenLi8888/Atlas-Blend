@@ -16,7 +16,7 @@ const results=[];
 try {
 for (const mode of ['cold','warm']) {
  const row={ mode }; const t=Date.now();
- await page.goto('http://localhost:5178/gallery.html');
+ await page.goto('http://localhost:5178/');
  await page.waitForSelector('.choice');
  row.gridDOM=Date.now()-t;
  await page.waitForFunction(() => [...document.querySelectorAll('.choice img')].filter(i=>i.getBoundingClientRect().top<innerHeight).every(i=>i.complete&&i.naturalWidth>0));

@@ -4,7 +4,7 @@ const vite=await createServer({server:{port:5178,proxy:{'/api':'http://127.0.0.1
 const browser=await chromium.launch({channel:'chrome',headless:true});
 const page=await browser.newPage({viewport:{width:1365,height:900}});
 try {
- await page.goto('http://localhost:5178/gallery.html');
+ await page.goto('http://localhost:5178/');
  await page.waitForSelector('.choice');
  for(let i=0;i<3;i++) await page.locator('.choice').nth(i).click();
  await page.getByRole('button',{name:'Open my gallery',exact:true}).click();

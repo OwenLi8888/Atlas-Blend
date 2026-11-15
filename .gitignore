@@ -13,12 +13,7 @@ catalog/data/cache/
 catalog/data/images/
 blendlab/runs/
 
-# Restyle
 screenshots/
-# Original uploads; web-sized copies live in public/paintings/
-/*.jpg
-/*.jpeg
-/*.png
 
 # Gallery API: local copy of the art catalog (rebuilt from Typesense)
 server/.cache/
