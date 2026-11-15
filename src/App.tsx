@@ -1,20 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
 import { characters } from './characters';
 import { loadPaintings } from './paintings';
+import { getSession, recallCharacter, rememberCharacter, setPicking, wasPicking } from './picks/session';
 import { getPlan } from './plan/planStore';
 import { Home } from './screens/Home';
 import { MuseumSetup } from './screens/MuseumSetup';
 import { Paintings } from './screens/Paintings';
 import { PaintRoom } from './screens/PaintRoom';
+import { PhotoPicks } from './screens/PhotoPicks';
 import type { Painting } from './types';
 
-type Screen = 'home' | 'paintings' | 'studio';
-const ORDER: Screen[] = ['home', 'paintings', 'studio'];
+type Screen = 'home' | 'picks' | 'paintings' | 'studio';
+const ORDER: Screen[] = ['home', 'picks', 'paintings', 'studio'];
 
 export function App() {
-  const [screen, setScreen] = useState<Screen>('home');
+  // The two-device session (?session=…&user=1|2). The character and the picks screen are remembered
+  // per session, so a refresh on the picks screen comes back to it with the same painter.
+  const [session] = useState(getSession);
+  const [characterId, setCharacterId] = useState<string | null>(() => recallCharacter(session));
+  const [screen, setScreen] = useState<Screen>(() => (wasPicking(session) && recallCharacter(session) ? 'picks' : 'home'));
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
-  const [characterId, setCharacterId] = useState<string | null>(null);
   const [paintings, setPaintings] = useState<Painting[] | null>(null);
   const [paintingIndex, setPaintingIndex] = useState(0);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -36,8 +41,17 @@ export function App() {
     (next: Screen) => {
       setDirection(ORDER.indexOf(next) >= ORDER.indexOf(screen) ? 'forward' : 'back');
       setScreen(next);
+      setPicking(session, next === 'picks');
     },
-    [screen],
+    [screen, session],
+  );
+
+  const selectCharacter = useCallback(
+    (id: string) => {
+      setCharacterId(id);
+      rememberCharacter(session, id);
+    },
+    [session],
   );
 
   const markMissing = useCallback((index: number) => {
@@ -56,12 +70,29 @@ export function App() {
     <>
       <div key={screen} className={`screen screen-${screen} ${direction}`}>
         {screen === 'home' && (
-          <Home characters={characters} selectedId={characterId} onSelect={setCharacterId} onContinue={() => go('paintings')} />
+          <Home characters={characters} selectedId={characterId} onSelect={selectCharacter} onContinue={() => go('picks')} />
+        )}
+        {screen === 'picks' && (
+          <PhotoPicks
+            character={character}
+            session={session}
+            onBack={() => go('home')}
+            onDone={() => {
+              // ---- HANDOFF: the recommendation step goes here ----
+              // This user's picks are saved by now. To read both users' records (same shape as the
+              // argument of onDone):
+              //   import { getSessionPicks } from './picks/picksStore';
+              //   const records = await getSessionPicks(session.sessionId);
+              // Add your screen to Screen/ORDER above and go to it here. Until it exists, the app
+              // carries on to the paintings screen.
+              go('paintings');
+            }}
+          />
         )}
         {screen === 'paintings' && (
           <Paintings
             paintings={paintings}
-            onBack={() => go('home')}
+            onBack={() => go('picks')}
             onPick={(index) => {
               setPaintingIndex(index);
               go('studio');

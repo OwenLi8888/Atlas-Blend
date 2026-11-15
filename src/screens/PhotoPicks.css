@@ -1,0 +1,609 @@
+/* ---- Screen 2: pick 5 of 25 pictures, hung like a gallery wall ----
+   A quiet near-white page: the painter and its bubble, then the pictures at their true shapes in
+   equal columns (5 / 4 / 3 / 2 by width, see src/picks/masonry.ts), then a slim bar fixed to the
+   bottom with the count and Continue. One gap, --gap, is used between columns, between stacked
+   pictures and (x 1.5) at the sides of the page. */
+
+/* .picks-bar is rendered in <body> (see PhotoPicks.tsx), so it gets the same variables. */
+.picks,
+.picks-bar {
+  --gap: clamp(16px, 2.5vw, 40px);
+  --side: calc(var(--gap) * 1.5);
+  --wall: #fcfbf9;
+  --bar: 68px;
+}
+
+.picks {
+  min-height: 100dvh;
+  padding: calc(var(--side) + env(safe-area-inset-top)) var(--side) calc(var(--bar) + var(--side) + env(safe-area-inset-bottom));
+  background: var(--wall);
+  display: flex;
+  flex-direction: column;
+  gap: var(--side);
+}
+
+/* The page behind the screen (seen on overscroll) matches the wall. */
+body:has(.picks) {
+  background: #fcfbf9;
+}
+
+.picks .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.picks-head {
+  display: grid;
+  gap: 12px;
+}
+
+.picks-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* ---- The painter and its speech bubble ---- */
+
+.picks-guide {
+  display: flex;
+  align-items: center;
+  /* Room for the cloud's tail of little bubbles. */
+  gap: clamp(30px, 5vw, 42px);
+  padding-top: 10px; /* the name tag pokes out of the top of the cloud */
+}
+
+.picks-painter {
+  position: relative;
+  flex: none;
+  width: clamp(72px, 20vw, 128px);
+  aspect-ratio: 1;
+  animation: painter-hop 620ms cubic-bezier(0.2, 0.7, 0.2, 1) 260ms both;
+}
+
+.picks-painter.cheer {
+  animation: painter-cheer 520ms cubic-bezier(0.2, 0.7, 0.2, 1) 2;
+}
+
+/* The puddle of its own paint the painter sits on, as on the palette of screen 1. */
+.picks-puddle {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: 0;
+  height: 26%;
+  border-radius: 50%;
+  background: var(--tint);
+  box-shadow: inset 0 0 0 1px rgba(20, 47, 64, 0.2);
+}
+
+/* A slow idle bob once it has hopped in. Picking a picture adds a quick bounce (PhotoPicks.tsx). */
+.picks-sprite {
+  position: absolute;
+  inset: 0 0 8%;
+  transform-origin: 50% 100%;
+  animation: painter-bob 2.8s ease-in-out 1s infinite alternate;
+}
+
+.picks-blink {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+@keyframes painter-hop {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes painter-bob {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes painter-cheer {
+  0%,
+  100% {
+    transform: none;
+  }
+  45% {
+    transform: translateY(-12px);
+  }
+}
+
+/* ---- The speech cloud (SpeechCloud.tsx): a storybook dialogue bubble ----
+   --puff is the radius of the scallops around the edge. The text is padded past them, inside the
+   rectangle the cloud is built around, so it can never spill out of the shape. */
+
+.speech {
+  --puff: 18px;
+  --rim: calc(var(--puff) + 3px);
+  position: relative;
+  isolation: isolate;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 27rem;
+  padding: calc(var(--rim) + 12px) calc(var(--rim) + 8px) calc(var(--rim) + 14px);
+  transform-origin: 0 60%;
+  animation: speech-pop 420ms cubic-bezier(0.3, 0.6, 0.3, 1) 180ms both;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.speech.typing {
+  cursor: pointer;
+}
+
+/* Squash and stretch: small, overshoot, a wobble, settle. */
+@keyframes speech-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) rotate(-3deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08, 1.04) rotate(1.5deg);
+  }
+  72% {
+    transform: scale(0.97, 1.02) rotate(-0.8deg);
+  }
+  88% {
+    transform: scale(1.01, 0.995) rotate(0.3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.speech-cloud {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: visible;
+}
+
+/* Floating: a soft shadow that falls below the cloud. */
+.speech-body {
+  filter: drop-shadow(0 7px 5px rgba(20, 47, 64, 0.16));
+}
+
+.speech-body .outline {
+  fill: var(--navy);
+  stroke: var(--navy);
+  stroke-width: 6px; /* half of it is covered by the fill: a 3px line */
+  stroke-linejoin: round;
+}
+
+.speech-body .fill {
+  fill: var(--white);
+}
+
+.speech-body .shade {
+  fill: var(--ivory);
+  opacity: 0.85;
+}
+
+.speech-body .gloss {
+  fill: var(--teal);
+  opacity: 0.13;
+}
+
+.speech-tail circle {
+  fill: var(--white);
+  stroke: var(--navy);
+  stroke-width: 3px;
+}
+
+.speech-tail circle:first-child {
+  stroke-width: 2.5px;
+}
+
+.speech-star {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: star-twinkle 3.2s ease-in-out infinite both;
+}
+
+.speech-star.rose {
+  fill: var(--rose);
+}
+
+.speech-star.teal {
+  fill: var(--teal);
+}
+
+@keyframes star-twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.55) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1) rotate(20deg);
+  }
+}
+
+/* The name tag: a little badge pinned across the top-left edge. */
+.speech-tag {
+  position: absolute;
+  top: -11px;
+  left: calc(var(--rim) - 2px);
+  padding: 3px 13px 4px;
+  border-radius: 999px;
+  border: 2.5px solid var(--navy);
+  background: var(--rose);
+  color: var(--ivory);
+  font-family: 'Fredoka', 'Baloo 2', 'Nunito', var(--sans);
+  font-weight: 600;
+  font-size: 0.86rem;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  transform: rotate(-4deg);
+  box-shadow: 0 2px 0 rgba(20, 47, 64, 0.18);
+}
+
+.speech h1 {
+  display: grid;
+  font-family: 'Fredoka', 'Baloo 2', 'Nunito', var(--sans);
+  font-weight: 600;
+  font-size: clamp(1.02rem, 3.7vw, 1.4rem);
+  line-height: 1.28;
+  letter-spacing: 0;
+  color: var(--navy);
+}
+
+/* The line being typed and the invisible longest line share one cell, so the cloud keeps its size. */
+.speech-line,
+.speech-room {
+  grid-area: 1 / 1;
+}
+
+.speech-room,
+.speech .untyped {
+  visibility: hidden;
+}
+
+.speech .hot {
+  display: inline-block;
+  color: var(--rose);
+}
+
+/* The key phrase gives one wiggle when its last letter lands. */
+.speech .hot.done {
+  animation: hot-wiggle 520ms ease-in-out 1;
+}
+
+@keyframes hot-wiggle {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: rotate(-4deg) scale(1.06);
+  }
+  45% {
+    transform: rotate(3.5deg) scale(1.08);
+  }
+  70% {
+    transform: rotate(-2deg) scale(1.03);
+  }
+}
+
+/* "Next" prompt in the bottom-right corner once the line is all there. */
+.speech-next {
+  position: absolute;
+  right: calc(var(--rim) + 2px);
+  bottom: calc(var(--rim) - 5px);
+  font-size: 0.7rem;
+  line-height: 1;
+  color: var(--rose);
+  animation: next-bounce 700ms ease-in-out infinite alternate;
+}
+
+@keyframes next-bounce {
+  from {
+    transform: translateY(-2px);
+  }
+  to {
+    transform: translateY(3px);
+  }
+}
+
+@media (max-width: 599px) {
+  .speech {
+    --puff: 14px;
+    padding: calc(var(--rim) + 10px) calc(var(--rim) + 5px) calc(var(--rim) + 12px);
+  }
+
+  .speech-tag {
+    font-size: 0.78rem;
+    padding: 2px 11px 3px;
+  }
+}
+
+/* ---- The wall ---- */
+
+/* Each <li> is placed by the layout (left, top, width, height in px). column-gap is not used for
+   layout: it is how the script reads --gap in px. */
+.picks-wall {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  column-gap: var(--gap);
+}
+
+.picks-wall li {
+  position: absolute;
+}
+
+/* A picture: flat, like a paper object on the wall. No border, shadow or rounding. */
+.pick-tile {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  transition: transform 160ms;
+}
+
+.pick-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 200ms;
+}
+
+.pick-tile img.loaded {
+  opacity: 1;
+}
+
+.pick-tile:disabled {
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .pick-tile:not(:disabled):hover {
+    transform: translateY(-2px);
+  }
+}
+
+/* Selected: a 3px line in the accent colour, 6px off the picture. Drawn as a frame rather than a
+   CSS outline so the keyboard focus ring can still show. On the narrowest gap it sits 4px off, so
+   the frames of two neighbours never touch. */
+.pick-tile.selected::after {
+  --off: min(6px, calc(var(--gap) / 2 - 4px));
+  content: '';
+  position: absolute;
+  inset: calc(-1 * (var(--off) + 3px));
+  border: 3px solid var(--rose);
+  pointer-events: none;
+}
+
+.pick-tile:focus-visible {
+  outline-offset: 2px;
+}
+
+.pick-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--rose);
+  color: var(--white);
+  border: 2px solid var(--white);
+  font-weight: 700;
+  font-size: 0.85rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  animation: badge-in 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A sixth pick: a small "no" shake, nothing selected. */
+.pick-tile.shake {
+  animation: tile-shake 400ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes tile-shake {
+  10%,
+  90% {
+    transform: translateX(-2px);
+  }
+  20%,
+  80% {
+    transform: translateX(4px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-6px);
+  }
+  40%,
+  60% {
+    transform: translateX(6px);
+  }
+}
+
+.picks-empty {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+/* ---- Count and Continue: a slim bar fixed to the bottom of the screen ---- */
+
+.picks-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  min-height: var(--bar);
+  padding: 10px var(--side) calc(10px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--wall);
+  border-top: 1px solid var(--hairline);
+  box-sizing: border-box;
+  /* It does not slide in with the screen, so it fades in as the screen settles. */
+  animation: bar-in 200ms ease-out 200ms both;
+}
+
+@keyframes bar-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.picks-bar .btn.primary {
+  min-height: 48px;
+  padding: 0 32px;
+  font-size: 1rem;
+}
+
+/* A sixth pick, or a save that stayed on the device: a small note that floats over the bar. */
+.picks-hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 12px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 2 * var(--side));
+  padding: 9px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--hairline);
+  background: var(--white);
+  box-shadow: var(--shadow);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--rose);
+  pointer-events: none;
+  transition: opacity 160ms;
+}
+
+.picks-hint:empty {
+  opacity: 0;
+}
+
+.picks-count {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  font-size: 0.95rem;
+  color: var(--navy-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.picks-count strong {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.7rem;
+  line-height: 1;
+  color: var(--navy);
+}
+
+.picks-pips {
+  display: inline-flex;
+  gap: 5px;
+  margin-left: 6px;
+  align-self: center;
+}
+
+.picks-pips span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(20, 47, 64, 0.3);
+  transition: background-color 160ms, box-shadow 160ms;
+}
+
+.picks-pips span.on {
+  background: var(--rose);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .picks-painter,
+  .picks-painter.cheer,
+  .picks-sprite,
+  .pick-badge,
+  .pick-tile.shake,
+  .picks-bar,
+  .speech-star,
+  .speech-next,
+  .speech .hot.done {
+    animation: none;
+  }
+
+  /* The cloud simply fades in, with its text already there. */
+  .speech {
+    animation: speech-fade 200ms ease-out both;
+  }
+
+  .pick-tile:not(:disabled):hover {
+    transform: none;
+  }
+}
+
+@keyframes speech-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

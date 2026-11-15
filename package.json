@@ -10,10 +10,12 @@
     "typecheck": "tsc --noEmit",
     "precompute": "node scripts/precompute-plans.mjs",
     "add-painting": "node scripts/add-painting.mjs",
-    "screenshots": "node scripts/screenshots.mjs"
+    "screenshots": "node scripts/screenshots.mjs",
+    "build-pool": "node scripts/build-pool.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource/fredoka": "^5.3.0",
     "@fontsource/instrument-serif": "^5.3.0",
     "d3-delaunay": "^6.0.6",
     "react": "^19.3.1",
@@ -29,6 +31,7 @@
     "jpeg-js": "^0.4.4",
     "playwright-core": "^1.65.1",
     "pngjs": "^7.0.0",
+    "sharp": "^0.35.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.8"
   }
