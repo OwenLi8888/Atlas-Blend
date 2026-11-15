@@ -1,4 +1,4 @@
-﻿// Drives the built app in a headless browser: screenshots every screen and every style at 50% and
+// Drives the built app in a headless browser: screenshots every screen and every style at 50% and
 // 100% for all paintings, and measures the acceptance criteria (taps, timing, frame rate, the
 // character staying on the brush, clean style switches).
 //
@@ -67,13 +67,14 @@ const note = (name, ok, detail) => {
 };
 const shot = (page, name) => page.screenshot({ path: path.join(out, `${name}.png`) });
 
-/** Home -> painting: returns the number of taps it took. */
+/** Home -> studio, then a style from the menu to start painting. Returns the taps it took to reach the studio. */
 async function openStudio(page, paintingIndex, character = 'Pip') {
   await page.goto(url);
   let taps = 0;
   await page.getByRole('radio', { name: new RegExp(character) }).click(); taps++;
   await page.getByRole('button', { name: 'Continue' }).click(); taps++;
   await page.locator('.painting-card').nth(paintingIndex).click(); taps++;
+  await page.selectOption('.style-select', 'swirl');
   await page.waitForFunction(() => !!window.__restyle, null, { timeout: 30000 });
   return taps;
 }
@@ -107,7 +108,7 @@ async function capture(viewport, tag) {
   for (let i = 0; i < paintings.length; i++) {
     await openStudio(page, i, ['Pip', 'Mo', 'Fig', 'Bea'][i % 4]);
     for (const style of STYLES) {
-      await page.getByRole('button', { name: style, exact: true }).click();
+      await page.selectOption('.style-select', style.toLowerCase());
       await seek(page, 0.5);
       await shot(page, `${tag}-3-${paintings[i].id}-${style.toLowerCase()}-050`);
       await seek(page, 1);
@@ -130,7 +131,7 @@ async function fallbacks() {
   const context = await browser.newContext({ viewport: PHONE, deviceScaleFactor: 2 });
   const page = await context.newPage();
   await page.route('**/paintings/hokusai.jpg', (r) => r.fulfill({ status: 404, body: 'Not found' }));
-  await page.route('**/paintings/monet.plan.json', (r) => r.fulfill({ status: 404, body: 'Not found' }));
+  await page.route('**/paintings/michelangelo.plan.json', (r) => r.fulfill({ status: 404, body: 'Not found' }));
   await page.goto(url);
   await page.getByRole('radio', { name: /Pip/ }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -141,6 +142,7 @@ async function fallbacks() {
 
   const t0 = Date.now();
   await page.locator('.painting-card').nth(2).click();
+  await page.selectOption('.style-select', 'swirl');
   await page.waitForFunction(() => !!window.__restyle, null, { timeout: 60000 });
   const strokes = await page.evaluate(() => window.__restyle.plan.strokes.length);
   note('missing plan falls back to the worker', strokes > 100, `${strokes} strokes planned in the browser, ready ${Date.now() - t0} ms after the tap`);
@@ -157,6 +159,7 @@ async function fallbacks() {
   const stillEmpty = await page.locator('.painting-card.empty').count();
   note('Museum setup upload fills the slot', stillEmpty === 0, `${stillEmpty} empty slot(s) after upload`);
   await page.locator('.painting-card').nth(1).click();
+  await page.selectOption('.style-select', 'swirl');
   await page.waitForFunction(() => !!window.__restyle, null, { timeout: 60000 });
   await page.evaluate(() => window.__restyle.seek(1));
   await page.waitForTimeout(300);
@@ -168,16 +171,20 @@ async function fallbacks() {
 async function timed() {
   const context = await browser.newContext({ viewport: PHONE, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   const page = await context.newPage();
-  const taps = await openStudio(page, 2); // Monet: the most strokes
-  note('taps from home to painting', taps === 3, `${taps} taps`);
+  const taps = await openStudio(page, 2);
+  note('taps from home to the studio', taps === 3, `${taps} taps, then one pick from the style menu starts the painting`);
 
   // Tap a style, then watch the whole replay.
   const run = await page.evaluate(async () => {
     const canvas = document.querySelector('canvas');
     const sprite = document.querySelector('.sprite');
-    const chip = [...document.querySelectorAll('.chip')].find((c) => c.textContent === 'Mosaic');
+    const pick = (id) => {
+      const select = document.querySelector('.style-select');
+      select.value = id;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    };
     const tap = performance.now();
-    chip.click();
+    pick('mosaic');
     let firstPaint = 0;
     let done = 0;
     const frames = [];
@@ -190,7 +197,8 @@ async function timed() {
         const p = window.__restyle.progress;
         if (!firstPaint && p > 0 && p < 0.5) firstPaint = now;
         const c = canvas.getBoundingClientRect();
-        const s = sprite.getBoundingClientRect();
+        // No sprite: the character is switched off (SHOW_PAINTER in Studio.tsx).
+        const s = sprite ? sprite.getBoundingClientRect() : c;
         // The sprite box must keep touching the canvas: it never leaves it.
         if (p > 0.01 && p < 1 && (s.right < c.left || s.left > c.right || s.bottom < c.top || s.top > c.bottom)) offCanvas++;
         if (p >= 1 && !done) {
@@ -213,17 +221,22 @@ async function timed() {
       slow: frames.filter((f) => f > 25).length,
       count: frames.length,
       offCanvas,
+      hasSprite: !!sprite,
     };
   });
   note('replay starts within 1 s of the tap', run.startMs < 1000, `${run.startMs.toFixed(0)} ms`);
   note('replay takes about 10 s', Math.abs(run.durationMs - 10000) < 800, `${(run.durationMs / 1000).toFixed(2)} s`);
   note('frame rate in Mosaic (headless desktop browser, phone viewport at 3x)', run.fps > 55, `${run.fps.toFixed(1)} fps mean, p95 frame ${run.p95.toFixed(1)} ms, ${run.slow}/${run.count} frames over 25 ms`);
-  note('character never leaves the canvas while painting', run.offCanvas === 0, `${run.offCanvas} frames off the canvas`);
+  if (run.hasSprite) note('character never leaves the canvas while painting', run.offCanvas === 0, `${run.offCanvas} frames off the canvas`);
 
   // Switch styles mid-paint, let it finish, and compare with a clean render of the same style.
   const same = await page.evaluate(async () => {
     const canvas = document.querySelector('canvas');
-    const chips = Object.fromEntries([...document.querySelectorAll('.chip')].map((c) => [c.textContent, c]));
+    const pick = (id) => {
+      const select = document.querySelector('.style-select');
+      select.value = id;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    };
     const hash = () => {
       const d = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
       let h = 2166136261;
@@ -235,22 +248,22 @@ async function timed() {
       return h >>> 0;
     };
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-    chips.Swirl.click();
+    pick('swirl');
     await wait(2500);
-    chips.Mosaic.click(); // mid-paint
+    pick('mosaic'); // mid-paint
     await wait(1200);
     window.__restyle.seek(1);
     await wait(100);
     const switched = hash();
-    chips.Mosaic.click(); // a clean replay of the same style
+    pick('mosaic'); // a clean replay of the same style
     window.__restyle.seek(1);
     await wait(100);
     const clean = hash();
-    chips.Mosaic.click();
+    pick('mosaic');
     window.__restyle.seek(0.5);
     await wait(100);
     const half1 = hash();
-    chips.Mosaic.click();
+    pick('mosaic');
     window.__restyle.seek(0.5);
     await wait(100);
     return { switched, clean, half1, half2: hash() };
@@ -269,6 +282,7 @@ async function tracking() {
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const canvas = document.querySelector('canvas');
     const sprite = document.querySelector('.sprite');
+    if (!sprite) return null;
     const player = window.__restyle;
     const samples = [];
     for (const p of [0.02, 0.08, 0.2, 0.4, 0.6, 0.8, 0.97]) {
@@ -292,10 +306,37 @@ async function tracking() {
     }
     return samples;
   });
+  if (!result) {
+    console.log('SKIP  brush tracking: the character is switched off (SHOW_PAINTER in Studio.tsx)');
+    await context.close();
+    return;
+  }
   const worst = Math.max(...result.map((s) => s.gap));
   note('brush tip sits on the stroke point', worst <= 4, `worst gap ${worst.toFixed(1)} px over ${result.length} moments (the bob is 2.4 px)`);
   const inside = result.every((s) => s.tipX >= -1 && s.tipX <= s.w + 1 && s.tipY >= -4 && s.tipY <= s.h + 4);
   note('brush tip stays inside the canvas', inside, result.map((s) => `${(s.p * 100).toFixed(0)}%: (${s.tipX.toFixed(0)}, ${s.tipY.toFixed(0)}) of ${s.w}x${s.h}`).join('; '));
+  await context.close();
+}
+
+/** Opening a painting shows it and waits: nothing is painted until a style is picked. */
+async function waits() {
+  const context = await browser.newContext({ viewport: PHONE, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  await page.goto(url);
+  await page.getByRole('radio', { name: /Pip/ }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.locator('.painting-card').nth(0).click();
+  await page.waitForTimeout(2000);
+  const state = await page.evaluate(() => ({
+    started: !!window.__restyle,
+    menu: document.querySelector('.style-select').value,
+    status: document.querySelector('.status').textContent,
+  }));
+  await shot(page, 'phone-3-before-style');
+  note('opening a painting does not start painting', !state.started && state.menu === '', `"${state.status}", menu on "${state.menu || 'Choose a style'}" after 2 s`);
+  await page.selectOption('.style-select', 'shapes');
+  await page.waitForFunction(() => window.__restyle && window.__restyle.progress > 0, null, { timeout: 5000 });
+  note('picking a style starts it', true, await page.locator('.status').textContent());
   await context.close();
 }
 
@@ -309,6 +350,8 @@ async function saving() {
   const offEarly = await save.isDisabled();
   await page.evaluate(() => window.__restyle.seek(1));
   await page.waitForTimeout(300);
+  const options = await page.locator('.style-select option:not([value=""])').allTextContents();
+  note('style menu lists the 3 styles', options.length === 3 && /^Swirl/.test(options[0]) && /^Shapes/.test(options[1]) && /^Mosaic/.test(options[2]), options.join(' | '));
   const [download] = await Promise.all([page.waitForEvent('download'), save.click()]);
   const file = path.join(out, `saved-${download.suggestedFilename()}`);
   await download.saveAs(file);
@@ -321,6 +364,7 @@ async function saving() {
 }
 
 try {
+  await waits();
   await saving();
   await capture(PHONE, 'phone');
   await capture(KIOSK, 'kiosk');

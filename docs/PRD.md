@@ -1,4 +1,4 @@
-# Restyle: product spec
+# Atlas: product spec
 
 Working name. HackPrinceton, Entertainment track. Source: `docs/Restyle PRD and BRD.pdf` plus the
 build brief of Nov 14, 2026.
@@ -10,7 +10,7 @@ same every visit. AAM's 2025 National Snapshot found 55% of US museums had fewer
 2019, at a median of 81% of pre-pandemic traffic. The share of adults who visit at all has
 recovered; how often they come back has not. Small museums are hit hardest.
 
-Restyle gives a museum's same paintings a new experience every visit. A visitor picks a character,
+Atlas gives a museum's same paintings a new experience every visit. A visitor picks a character,
 picks one of four featured paintings and watches the character repaint it stroke by stroke in one
 of three modern-art styles. Each replay takes about 10 seconds.
 
@@ -36,12 +36,13 @@ real painting. It is a web app with no install.
    A missing image shows an "Add painting" placeholder card instead of crashing. A small footer
    link opens a hidden **Museum setup** panel where staff can upload an image into any of the four
    slots for demos.
-3. **The studio.** A canvas card with the selected character beside it. The character paints the
-   chosen painting stroke by stroke over about 10 seconds in the default style (Swirl). Under the
-   canvas are three style chips: **Swirl**, **Shapes**, **Mosaic**. Tapping a chip clears the canvas
-   and the character repaints the same painting in that style. Also: Replay, Back, a press-and-hold
-   Compare that shows the original, a thin progress bar and a status line such as
-   "Pip is painting in Swirl…".
+3. **The studio.** A canvas card showing the chosen painting. Nothing is painted until the visitor
+   picks a style; then the character paints it stroke by stroke over about 10 seconds. Under the
+   canvas is a style menu (a dropdown) of three styles, each with the artist who made it famous:
+   **Swirl** (Van Gogh), **Shapes** (Picasso) and **Mosaic** (Antoni Gaudí). Picking a style
+   clears the canvas and the character repaints the same painting in that style. Also: Back, a thin progress bar, a status line such as "Pip is painting in Swirl…", and
+   three text-only actions: Replay, a press-and-hold Compare that shows the original, and Save
+   (the finished painting as a PNG).
 
 ## The four paintings
 
@@ -49,7 +50,7 @@ real painting. It is a web app with no install.
 |---|---|---|---|---|---|
 | vermeer | `vermeer.jpg` | Girl with a Pearl Earring | Johannes Vermeer | c. 1665 | 240 (portrait) |
 | hokusai | `hokusai.jpg` | The Great Wave off Kanagawa | Katsushika Hokusai | c. 1831 | 200 |
-| monet | `monet.jpg` | Bridge over a Pond of Water Lilies | Claude Monet | 1899 | 200 |
+| michelangelo | `michelangelo.jpg` | The Creation of Adam | Michelangelo | c. 1512 | 240 (figures) |
 | friedrich | `friedrich.jpg` | Wanderer above the Sea of Fog | Caspar David Friedrich | c. 1818 | 200 |
 
 The brief listed Cézanne's *The Basket of Apples* in the second slot; the team supplied Hokusai's
@@ -157,7 +158,7 @@ precompute script decodes images in Node with `jpeg-js` and `pngjs` and builds p
 
 ## Acceptance criteria
 
-1. Three taps from home to painting.
+1. Three taps from home to the studio; one pick from the style menu then starts the painting.
 2. A style replay starts within 1 s of the tap and finishes in about 10 s.
 3. Switching styles mid-paint restarts cleanly with no leftover strokes.
 4. The character stays on the brush and never jumps off the canvas.

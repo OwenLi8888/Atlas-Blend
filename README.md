@@ -1,4 +1,4 @@
-# Restyle
+# Atlas
 
 A museum's same paintings, a new experience every visit. A visitor picks a character, picks one of
 four featured paintings and watches the character repaint it stroke by stroke in one of three
@@ -41,7 +41,7 @@ is reloaded.
 
 ```
 npm run precompute             # every painting in paintings.json
-npm run precompute -- monet    # just one id
+npm run precompute -- hokusai   # just one id
 ```
 
 This writes `public/paintings/<id>.plan.json` (the ordered stroke list from `tryimpasto`'s

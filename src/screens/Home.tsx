@@ -13,7 +13,7 @@ export function Home({ characters, selectedId, onSelect, onContinue }: Props) {
   return (
     <main className="page home">
       <header className="page-head">
-        <p className="eyebrow">Restyle</p>
+        <p className="eyebrow">Atlas</p>
         <h1>Choose your painter</h1>
         <p className="lede">They will repaint a painting from this gallery while you watch.</p>
       </header>

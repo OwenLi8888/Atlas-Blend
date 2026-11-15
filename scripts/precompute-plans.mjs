@@ -1,7 +1,7 @@
 // Precomputes the stroke plan for every painting in public/paintings/paintings.json.
 //
 //   node scripts/precompute-plans.mjs            all paintings
-//   node scripts/precompute-plans.mjs monet      just these ids
+//   node scripts/precompute-plans.mjs hokusai    just these ids
 //
 // Writes public/paintings/<id>.plan.json. The app loads that file when it exists and otherwise
 // plans in a Web Worker, so this step only makes the first paint instant.

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Character } from '../characters';
 import { Player, type PlayerFrame } from '../engine/player';
 import { getPlan } from '../plan/planStore';
-import { STYLES, type Painting, type StrokePlan, type StyleId } from '../types';
+import { STYLE_MENU, type Painting, type StrokePlan, type StyleId } from '../types';
 
 interface Props {
   painting: Painting;
@@ -19,12 +19,19 @@ declare global {
   }
 }
 
+/**
+ * TEMPORARY: the character is hidden in the studio, so the painting builds up on its own.
+ * Set to true to bring back the character following the brush. Nothing else needs to change.
+ */
+const SHOW_PAINTER = false;
+
 /** How far the sprite moves toward the brush each frame. */
 const FOLLOW = 0.25;
 
 /** Screen 3: the character paints the chosen painting, in any of three styles. */
 export function Studio({ painting, character, onBack }: Props) {
-  const [style, setStyle] = useState<StyleId>('swirl');
+  /** null until the visitor picks a style: nothing is painted before that. */
+  const [style, setStyle] = useState<StyleId | null>(null);
   const [phase, setPhase] = useState<Phase>('planning');
   const [plan, setPlan] = useState<StrokePlan | null>(null);
   const [aspect, setAspect] = useState(0.8);
@@ -36,7 +43,8 @@ export function Studio({ painting, character, onBack }: Props) {
   const barRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<Player | null>(null);
   const frameRef = useRef<PlayerFrame | null>(null);
-  const styleRef = useRef<StyleId>(style);
+  const styleRef = useRef<StyleId>('swirl');
+  const started = style !== null;
 
   // The stroke plan: precomputed, or planned in the worker (a few seconds, once).
   useEffect(() => {
@@ -55,10 +63,11 @@ export function Studio({ painting, character, onBack }: Props) {
     };
   }, [painting]);
 
-  // The player lives as long as the plan does; styles and replays restart it in place.
+  // The player starts with the first style picked and lives as long as the plan does; later
+  // styles and replays restart it in place.
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!plan || !canvas) return;
+    if (!plan || !canvas || !started) return;
     const player = new Player(canvas, plan, {
       style: styleRef.current,
       onFrame: (frame) => {
@@ -75,10 +84,11 @@ export function Studio({ painting, character, onBack }: Props) {
       frameRef.current = null;
       if (window.__restyle === player) delete window.__restyle;
     };
-  }, [plan]);
+  }, [plan, started]);
 
   // The character: brush tip eased toward the stroke being painted, or standing by when idle.
   useEffect(() => {
+    if (!SHOW_PAINTER) return;
     const [tipX, tipY] = character.brushTip;
     const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let raf = 0;
@@ -164,6 +174,7 @@ export function Studio({ painting, character, onBack }: Props) {
   const paint = (next: StyleId) => {
     styleRef.current = next;
     setStyle(next);
+    // The first pick creates the player (the effect above); after that it restarts in place.
     if (!playerRef.current) return;
     playerRef.current.restart(next);
     setPhase('painting');
@@ -196,9 +207,17 @@ export function Studio({ painting, character, onBack }: Props) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const styleLabel = STYLES.find((s) => s.id === style)!.label;
+  /** A pick from the style menu. */
+  const choose = (id: string) => {
+    const option = STYLE_MENU.find((s) => s.id === id);
+    if (option) paint(option.id);
+  };
+
+  const styleLabel = STYLE_MENU.find((s) => s.id === style)?.label ?? '';
   const status =
-    phase === 'planning'
+    !style && phase !== 'error'
+      ? 'Choose a style to start.'
+      : phase === 'planning'
       ? `${character.name} is studying the painting…`
       : phase === 'painting'
         ? `${character.name} is painting in ${styleLabel}…`
@@ -235,9 +254,9 @@ export function Studio({ painting, character, onBack }: Props) {
       <div className="studio-stage" ref={stageRef}>
         <div className="easel" style={{ ['--ar' as string]: aspect }}>
           <div className="canvas-card">
-            <canvas ref={canvasRef} aria-label={`${painting.title}, repainted in ${styleLabel}`} role="img" />
+            <canvas ref={canvasRef} aria-label={style ? `${painting.title}, repainted in ${styleLabel}` : painting.title} role="img" />
             <img
-              className={`original${comparing ? ' on' : ''}`}
+              className={`original${comparing || !style ? ' on' : ''}`}
               src={painting.src}
               alt=""
               draggable={false}
@@ -245,42 +264,47 @@ export function Studio({ painting, character, onBack }: Props) {
             />
             <span className={`original-tag${comparing ? ' on' : ''}`}>Original</span>
           </div>
-          <div className="sprite" ref={spriteRef} aria-hidden="true">
-            <character.Sprite />
-          </div>
+          {SHOW_PAINTER && (
+            <div className="sprite" ref={spriteRef} aria-hidden="true">
+              <character.Sprite />
+            </div>
+          )}
         </div>
       </div>
 
       <section className="studio-controls" aria-label="Painting controls">
-        <div className={`progress${phase === 'planning' ? ' busy' : ''}`} aria-hidden="true">
+        <div className={`progress${phase === 'planning' && style ? ' busy' : ''}`} aria-hidden="true">
           <div className="progress-fill" ref={barRef} />
         </div>
         <p className="status" role="status">
           {status}
         </p>
-        <div className="chips" role="group" aria-label="Style">
-          {STYLES.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={`chip${s.id === style ? ' selected' : ''}`}
-              aria-pressed={s.id === style}
-              title={s.hint}
-              disabled={phase === 'error'}
-              onClick={() => paint(s.id)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
+        <label className="style-picker">
+          <span className="eyebrow">Style</span>
+          <select className="style-select" value={style ?? ''} disabled={phase === 'error'} onChange={(e) => choose(e.target.value)}>
+            <option value="" disabled hidden>
+              Choose a style
+            </option>
+            {STYLE_MENU.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.artist ? `${s.label} · ${s.artist}` : s.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="actions">
-          <button type="button" className="btn secondary" disabled={!plan} onClick={() => paint(style)}>
+          <button
+            type="button"
+            className="text-btn"
+            disabled={!plan || !style}
+            onClick={() => style && paint(style)}
+          >
             Replay
           </button>
-          <button type="button" className={`btn secondary hold${comparing ? ' held' : ''}`} {...hold}>
+          <button type="button" className={`text-btn hold${comparing ? ' held' : ''}`} disabled={!style} {...hold}>
             Hold to compare
           </button>
-          <button type="button" className="btn secondary save" disabled={phase !== 'done'} onClick={save}>
+          <button type="button" className="text-btn" disabled={phase !== 'done'} onClick={save}>
             Save
           </button>
         </div>

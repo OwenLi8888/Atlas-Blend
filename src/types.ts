@@ -42,8 +42,19 @@ export interface Painting {
 
 export type StyleId = 'swirl' | 'shapes' | 'mosaic';
 
-export const STYLES: { id: StyleId; label: string; hint: string }[] = [
-  { id: 'swirl', label: 'Swirl', hint: 'Inspired by Van Gogh' },
-  { id: 'shapes', label: 'Shapes', hint: "Inspired by Picasso's cubism" },
-  { id: 'mosaic', label: 'Mosaic', hint: 'A hand-made broken-tile mosaic' },
+export interface StyleOption {
+  id: StyleId;
+  label: string;
+  /** The artist who made the look famous, where there is one. */
+  artist?: string;
+}
+
+/**
+ * The style menu, in the order shown. To add a style, add its renderer in src/engine/styles/,
+ * add its id to StyleId and list it here.
+ */
+export const STYLE_MENU: StyleOption[] = [
+  { id: 'swirl', label: 'Swirl', artist: 'Van Gogh' },
+  { id: 'shapes', label: 'Shapes', artist: 'Picasso' },
+  { id: 'mosaic', label: 'Mosaic', artist: 'Antoni Gaudí' },
 ];
