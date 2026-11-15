@@ -5,7 +5,7 @@ import { C, VARS, VAR_LABEL } from "../theme";
 export interface BarSeries { label: string; color: string; values: Record<string, number> }
 
 /** Six variable bars. One series for a gallery card; A / B / painting on the reveal and panel. */
-export function Bars({ series, animate = false, compact = false }: { series: BarSeries[]; animate?: boolean; compact?: boolean }) {
+export function Bars({ series, animate = false, compact = false, onPaper = false }: { series: BarSeries[]; animate?: boolean; compact?: boolean; onPaper?: boolean }) {
   return (
     <View style={{ gap: compact ? 6 : 10 }}>
       {series.length > 1 && (
@@ -21,11 +21,11 @@ export function Bars({ series, animate = false, compact = false }: { series: Bar
       {VARS.map((k) => (
         <View key={k}>
           <View style={styles.row}>
-            <Text style={styles.name}>{VAR_LABEL[k][0]}</Text>
-            <Text style={styles.ends}>{VAR_LABEL[k][1]} / {VAR_LABEL[k][2]}</Text>
+            <Text style={[styles.name, onPaper && { color: C.ink }]}>{VAR_LABEL[k][0]}</Text>
+            <Text style={[styles.ends, onPaper && { color: C.inkDim }]}>{VAR_LABEL[k][1]} / {VAR_LABEL[k][2]}</Text>
           </View>
           {series.map((s) => (
-            <Bar key={s.label} value={s.values?.[k] ?? 0} color={s.color} animate={animate} thin={series.length > 1} />
+            <Bar key={s.label} value={s.values?.[k] ?? 0} color={s.color} animate={animate} thin={series.length > 1} track={onPaper ? C.paper2 : C.line} />
           ))}
         </View>
       ))}
@@ -33,14 +33,14 @@ export function Bars({ series, animate = false, compact = false }: { series: Bar
   );
 }
 
-function Bar({ value, color, animate, thin }: { value: number; color: string; animate: boolean; thin: boolean }) {
+function Bar({ value, color, animate, thin, track }: { value: number; color: string; animate: boolean; thin: boolean; track: string }) {
   const w = useRef(new Animated.Value(animate ? 0 : value)).current;
   useEffect(() => {
     if (animate) Animated.timing(w, { toValue: value, duration: 1400, useNativeDriver: false }).start();
     else w.setValue(value);
   }, [value, animate, w]);
   return (
-    <View style={[styles.track, { height: thin ? 5 : 8, marginTop: thin ? 3 : 4 }]}>
+    <View style={[styles.track, { height: thin ? 5 : 8, marginTop: thin ? 3 : 4, backgroundColor: track }]}>
       <Animated.View style={[styles.fill, { backgroundColor: color, width: w.interpolate({ inputRange: [0, 1], outputRange: ["3%", "100%"] }) }]} />
     </View>
   );

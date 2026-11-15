@@ -3,7 +3,9 @@ import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput,
 import { api, type Session } from "../api";
 import { Button } from "../components/Button";
 import type { Identity } from "../identity";
-import { C, serif } from "../theme";
+import { Ticket } from "../components/Ticket";
+import { StatusBar } from "expo-status-bar";
+import { C, S, kicker, titleFace } from "../theme";
 
 /**
  * Flow B (M5): get a 6-character code or enter a friend's. Both phones poll the session and
@@ -55,6 +57,7 @@ export function Lobby({ me, onBack, onBlend }: { me: Identity; onBack: () => voi
 
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <StatusBar style={S.statusBar} />
       <Pressable onPress={onBack}><Text style={styles.back}>‹ Gallery</Text></Pressable>
       <Text style={styles.title}>Blend</Text>
 
@@ -88,10 +91,17 @@ export function Lobby({ me, onBack, onBlend }: { me: Identity; onBack: () => voi
 
       {session && (
         <View style={{ gap: 18, marginTop: 24 }}>
-          <View style={styles.codeBox}>
-            <Text style={styles.kicker}>JOIN CODE</Text>
-            <Text style={styles.code}>{session.code}</Text>
-          </View>
+          <Ticket
+            tilt={1}
+            stub={
+              <View style={styles.codeBox}>
+                <Text style={styles.kicker}>{S.copy.codeKicker}</Text>
+                <Text style={styles.code}>{session.code}</Text>
+              </View>
+            }
+          >
+            <Text style={styles.note}>{S.copy.codeNote}</Text>
+          </Ticket>
           <Person name={session.host?.name ?? "?"} title={session.host?.title} ready={!!session.host?.has_gallery} color={C.a} you={isHost} />
           <Person name={session.guest?.name ?? "Waiting for a friend…"} title={session.guest?.title}
             ready={!!session.guest?.has_gallery} color={C.b} you={!isHost && !!session.guest} pending={!session.guest} />
@@ -121,14 +131,16 @@ function Person({ name, title, ready, color, you, pending }: { name: string; tit
 const styles = StyleSheet.create({
   wrap: { flex: 1, padding: 24 },
   back: { color: C.dim, fontSize: 15 },
-  title: { color: C.text, fontSize: 40, fontFamily: serif, marginTop: 10 },
-  body: { color: C.dim, fontSize: 15, lineHeight: 22, marginBottom: 8 },
+  title: { ...titleFace, color: C.text, fontSize: 52, lineHeight: 60, marginTop: 10 },
+  body: { color: C.dim, fontSize: 16, lineHeight: 24, marginBottom: 8 },
   demo: { color: C.dim, fontSize: 13, textAlign: "center", textDecorationLine: "underline" },
-  codeInput: { height: 72, borderRadius: 16, backgroundColor: C.panel, color: C.text, fontSize: 34, letterSpacing: 10, textAlign: "center", fontWeight: "700", borderWidth: 1, borderColor: C.line },
-  codeBox: { backgroundColor: C.panel, borderRadius: 20, padding: 18, alignItems: "center", gap: 4 },
-  kicker: { color: C.faint, fontSize: 11, letterSpacing: 1.6, fontWeight: "700" },
-  code: { color: C.text, fontSize: 44, letterSpacing: 8, fontWeight: "800" },
-  person: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 16, borderWidth: 1.5, backgroundColor: C.panel },
+  codeInput: { ...S.plaque, height: 72, backgroundColor: C.paper, borderColor: C.ink, color: C.ink, fontSize: 34, letterSpacing: 10, textAlign: "center", fontWeight: "700" },
+  codeBox: { alignItems: "center", gap: 4 },
+  kicker: { ...kicker, color: C.inkDim },
+  code: { color: C.ink, fontSize: 44, letterSpacing: 8, fontFamily: S.display },
+  note: { color: C.inkDim, fontSize: 17, fontFamily: S.hand, textAlign: "center" },
+  // a plaque per person; its shape comes from the skin, its border colour from the person
+  person: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, ...S.plaque },
   swatch: { width: 14, height: 14, borderRadius: 7 },
   pname: { color: C.text, fontSize: 16, fontWeight: "600" },
   ptitle: { color: C.dim, fontSize: 13 },
