@@ -1,6 +1,0 @@
-numpy>=2.0
-pillow>=11
-httpx>=0.27
-# CLIP embeddings for the catalog build (not needed at request time)
-torch>=2.5
-transformers>=4.45
