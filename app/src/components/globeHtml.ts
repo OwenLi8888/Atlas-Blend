@@ -66,7 +66,9 @@ export const GLOBE_HTML = `<!doctype html><html><head>
   var tiles=[], R=140, base=60, N=0, folded=false, built=false;
   var rotX=-8, rotY=0, rotZ=0, velX=0, velY=0, AUTO=0.12, FRICTION=0.945, VEL_MAX=5;
   var dragging=false, moved=0, lastX=0, lastY=0, downAt=0, downNode=null, spinBoost=0, focus=null;
-  function post(m){ if(window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(m)); }
+  function post(m){ var s=JSON.stringify(m);
+    if(window.ReactNativeWebView) window.ReactNativeWebView.postMessage(s);
+    else if(window.parent && window.parent!==window) window.parent.postMessage(s,'*'); }
   function rnd(i,a,b){ var s=Math.sin(i*a)*b; return s-Math.floor(s); }   // deterministic 0..1 per index
 
   // even spread for any N (golden-angle spiral), as lat/lon

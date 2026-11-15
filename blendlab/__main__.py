@@ -6,6 +6,7 @@
   python -m blendlab review                    open the rating page (http://localhost:8790)
   python -m blendlab ratings                   print the average rating per version and method
   python -m blendlab sheet v3 --open           one image: A | B | merge for every pair, with checks
+  python -m blendlab paint v3 --pairs ow1      video of the merge being painted, stroke by stroke
 """
 from __future__ import annotations
 
@@ -106,7 +107,29 @@ def main(argv=None):
     sh.add_argument("version")
     sh.add_argument("--method", default="rules_local")
     sh.add_argument("--open", action="store_true", help="open it in the image viewer")
+    pt = sub.add_parser("paint", help="painting-process video of blend outputs (impasto strokes, stroke by stroke)")
+    pt.add_argument("ref", help="a version (paints runs/<version>/<method>/*.jpg) or a path to any image")
+    pt.add_argument("--method", default="rules_local")
+    pt.add_argument("--pairs", help="comma list of pair ids (default: all)")
+    pt.add_argument("--style", default="oil", choices=["oil", "watercolor", "dots"])
+    pt.add_argument("--area", type=int, help="planning budget in mm2 (default 200000; higher = more, finer strokes)")
+    pt.add_argument("--size", type=int, help="video long side in px (default 640)")
+    pt.add_argument("--seconds", type=float, help="painting time in the video (default 14)")
+    st = sub.add_parser("still", help="(for the API) blend A + B into one still, JSON lines on stdout")
+    st.add_argument("a")
+    st.add_argument("b")
+    st.add_argument("--out", required=True)
+    st.add_argument("--method", help="default rules_local; rules_hosted needs a GEMINI/OPENAI key")
     args = ap.parse_args(argv)
+
+    if args.cmd == "still":
+        from .still import main as still_main
+        return still_main(args.a, args.b, args.out, args.method)
+    if args.cmd == "paint":
+        from .paint import run as paint_run
+        paint_run(args.ref, args.method, args.pairs.split(",") if args.pairs else None,
+                  args.style, args.area, args.size, args.seconds)
+        return
 
     from .methods import METHODS
     names = args.methods.split(",") if getattr(args, "methods", None) else [n for n, m in METHODS.items() if not m["legacy"]]

@@ -46,6 +46,16 @@ npm run api                      # API on :8787
 cd app && npx expo start         # scan the QR with Expo Go on each iPhone (same Wi-Fi)
 ```
 
+**Desktop, two-image blend:** `npm run api`, then `cd app && npx expo start --web` and open
+<http://localhost:8081>. Enter a name, tap **Just blend two images** (or **Blend two images** on
+Home), pick A (the picture: a painting from the list, or upload your own) and B (the painting
+whose technique to use; always the other medium: oil A takes a watercolor B and vice versa), then
+**Paint it**. The worker reads B's technique (medium, palette and values, how broken or blended
+its brushwork is, stroke direction, toned ground), repaints A that way stroke by stroke with
+impasto, and the video plays, about 2-3 s after the tap (`worker/src/technique.ts`,
+`worker/src/transfer.ts`, kept warm by `api/src/painter.ts`). **Add to globe** lands it on your
+globe. The picker offers only paintings with a clear subject (`catalog/data/pickable.json`).
+
 The app finds the API automatically on the laptop running Expo (`EXPO_PUBLIC_API_URL` overrides).
 `http://<laptop>:8787/dev/globe` previews the globe gallery in a desktop browser.
 

@@ -33,7 +33,7 @@ function BlendReplay({ tile }: { tile: BlendTile }) {
   return (
     <>
       <VideoView player={player} style={styles.video} contentFit="contain" nativeControls={false} />
-      <Text style={styles.title}>Blend with {tile.partner}</Text>
+      <Text style={styles.title}>{tile.partner.includes(" + ") ? tile.partner : `Blend with ${tile.partner}`}</Text>
       <Text style={styles.meta}>Blend score {tile.score}</Text>
     </>
   );

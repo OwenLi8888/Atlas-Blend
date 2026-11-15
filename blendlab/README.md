@@ -9,7 +9,6 @@ python -m blendlab run v3 --note "what changed"   # every non-legacy method x th
 python -m blendlab review                         # rate outputs at http://localhost:8790
 python -m blendlab ratings                        # average score per version and method
 python -m blendlab pair aic-11 path/to/photo.jpg  # try any two images -> runs/_scratch/
-python -m blendlab sheet v3 --open                # one image: A | B | merge per pair, checks in green/red
 ```
 
 A = composition / subject, B = the look (palette, brushwork, medium).
@@ -28,9 +27,21 @@ Each run folder (`runs/<version>/`, gitignored) keeps a copy of `methods.py`, so
 reproduced. Ratings live in `ratings.json` (tracked) and drive the next version.
 
 Legacy methods break a rule in the PDF (B's objects leak in, or two subjects get merged), so they
-only run when named: `--methods hybrid`.
+only run when named: `--methods hybrid`. Test pairs follow the PDF: 10 pairs, including 2 opposite
+(p9, p10) and 1 identical (p11).
 
-Test pairs (from v3 on) are oil and watercolor only: `ow1`-`ow5` use an oil painting as the subject and a
-watercolor as the style (result: watercolor), `wo1`-`wo5` the reverse (result: oil). `ow5` and `wo5` are the
-deliberately opposite pairs from the PDF; an identical pair can't be cross-medium, so there isn't one.
-v1 and v2 used mixed-medium pairs, kept in their own `runs/<version>/meta.json`.
+## Painting-process video
+
+```bash
+python -m blendlab paint v3 --pairs ow1,ow3     # -> runs/v3/painting/rules_local/<pair>/
+python -m blendlab paint v3 --style watercolor  # oil (default), watercolor or dots
+python -m blendlab paint path/to/any.jpg        # -> runs/_scratch/painting/<name>/
+```
+
+Plays the finished blend back as a painting, stroke by stroke, the way magic-brush does: the
+impasto stroke planner (MIT, Dongha Kim, vendored in `worker/src/vendor/impasto/`) plans knife
+and bristle strokes in 8 layers (underpaint, block-in, masses, presses, forms, detail, contours,
+accents), and magic-brush's renderers draw them onto a blank canvas. Each folder gets
+`painting_<style>.mp4` (~16 s), `process_<style>.png` (the canvas after each layer next to the
+target), `final_<style>.png` and `strokes.json`. `--area` sets the planning budget in mm²
+(default 200,000, about 1,000-2,500 strokes and ~15 s per image; lower is coarser and faster).

@@ -6,18 +6,18 @@ import { saveIdentity, type Identity } from "../identity";
 import { C, serif } from "../theme";
 
 /** Flow A.1: enter a display name. No account; device id + name is the identity. */
-export function Welcome({ existing, onDone }: { existing: Identity | null; onDone: (i: Identity) => void }) {
+export function Welcome({ existing, onDone, onPair }: { existing: Identity | null; onDone: (i: Identity) => void; onPair?: (i: Identity) => void }) {
   const [name, setName] = useState(existing?.name ?? "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  async function go() {
+  async function go(next: "quiz" | "pair" = "quiz") {
     setBusy(true);
     setErr(null);
     try {
       const ident = await saveIdentity(name, existing);
       await api.user(ident.id, ident.name);
-      onDone(ident);
+      if (next === "pair" && onPair) onPair(ident); else onDone(ident);
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -45,7 +45,8 @@ export function Welcome({ existing, onDone }: { existing: Identity | null; onDon
           onSubmitEditing={() => name.trim() && go()}
         />
         {err && <Text style={styles.err}>{err}</Text>}
-        <Button title="Start the quiz" onPress={go} disabled={!name.trim()} busy={busy} />
+        <Button title="Start the quiz" onPress={() => go("quiz")} disabled={!name.trim()} busy={busy} />
+        {onPair && <Button title="Just blend two images" kind="ghost" onPress={() => go("pair")} disabled={!name.trim()} busy={busy} />}
       </View>
     </KeyboardAvoidingView>
   );
