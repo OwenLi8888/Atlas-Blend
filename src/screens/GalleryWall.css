@@ -3,7 +3,7 @@
    the colour. The 3D wall fills the screen; the title and the parts of the hang sit on top, the
    caption of the picture in front below. */
 
-.gallery-room {
+.wall-room {
   --ink: #111111;
   --ink-soft: rgba(17, 17, 17, 0.62);
   --line: rgba(17, 17, 17, 0.16);
@@ -14,16 +14,16 @@
   overflow: hidden;
   background: var(--paper);
   color: var(--ink);
-  animation: gallery-in 260ms ease-out both;
+  animation: wall-in 260ms ease-out both;
 }
 
-@keyframes gallery-in {
+@keyframes wall-in {
   from {
     opacity: 0;
   }
 }
 
-.gallery-scene {
+.wall-scene {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -33,11 +33,11 @@
   cursor: grab;
 }
 
-.gallery-scene:active {
+.wall-scene:active {
   cursor: grabbing;
 }
 
-.gallery-panel {
+.wall-panel {
   position: absolute;
   inset: 0;
   display: flex;
@@ -46,35 +46,35 @@
   pointer-events: none;
 }
 
-.gallery-head {
+.wall-head {
   display: grid;
   gap: 12px;
   padding: calc(var(--pad) + env(safe-area-inset-top)) var(--pad) 28px;
   background: linear-gradient(to bottom, rgba(241, 241, 239, 0.94) 60%, rgba(241, 241, 239, 0));
 }
 
-.gallery-top {
+.wall-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.gallery-title {
+.wall-title {
   text-align: right;
 }
 
-.gallery-title h1 {
+.wall-title h1 {
   font-size: clamp(1.5rem, 5.4vw, 2.2rem);
   color: var(--ink);
 }
 
-.gallery-title p {
+.wall-title p {
   font-size: 0.8rem;
   color: var(--ink-soft);
 }
 
-.gallery-btn {
+.wall-btn {
   min-height: 40px;
   padding: 0 16px;
   border-radius: 999px;
@@ -87,7 +87,7 @@
   pointer-events: auto;
 }
 
-.gallery-tabs {
+.wall-tabs {
   display: flex;
   gap: 18px;
   overflow-x: auto;
@@ -95,7 +95,7 @@
   pointer-events: auto;
 }
 
-.gallery-tabs button {
+.wall-tabs button {
   flex: none;
   padding: 6px 0;
   border: 0;
@@ -109,12 +109,12 @@
   text-transform: uppercase;
 }
 
-.gallery-tabs button.on {
+.wall-tabs button.on {
   color: var(--ink);
   border-bottom-color: var(--ink);
 }
 
-.gallery-foot {
+.wall-foot {
   display: grid;
   gap: 10px;
   justify-items: center;
@@ -122,7 +122,7 @@
   background: linear-gradient(to top, rgba(241, 241, 239, 0.96) 68%, rgba(241, 241, 239, 0));
 }
 
-.gallery-row {
+.wall-row {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -130,7 +130,7 @@
   width: 100%;
 }
 
-.gallery-caption {
+.wall-caption {
   flex: 1 1 auto;
   min-width: 0;
   max-width: 520px;
@@ -140,7 +140,7 @@
   text-align: center;
 }
 
-.gallery-caption strong {
+.wall-caption strong {
   font-family: var(--serif);
   font-weight: 400;
   font-size: clamp(1.2rem, 4.8vw, 1.6rem);
@@ -152,7 +152,7 @@
   overflow: hidden;
 }
 
-.gallery-tag {
+.wall-tag {
   padding: 3px 12px;
   border-radius: 999px;
   background: var(--ink);
@@ -162,13 +162,13 @@
   letter-spacing: 0.04em;
 }
 
-.gallery-sub {
+.wall-sub {
   font-size: 0.85rem;
   color: var(--ink-soft);
 }
 
 /* Every painting, small, under the caption: tap one to walk to it. */
-.gallery-thumbs {
+.wall-thumbs {
   list-style: none;
   margin: 0;
   padding: 2px 2px 4px;
@@ -180,7 +180,7 @@
   pointer-events: auto;
 }
 
-.gallery-thumbs button {
+.wall-thumbs button {
   display: block;
   padding: 3px;
   border: 1px solid var(--line);
@@ -188,19 +188,19 @@
   opacity: 0.6;
 }
 
-.gallery-thumbs button.on {
+.wall-thumbs button.on {
   border-color: var(--ink);
   box-shadow: 0 0 0 1px var(--ink);
   opacity: 1;
 }
 
-.gallery-thumbs img {
+.wall-thumbs img {
   display: block;
   height: 44px;
   width: auto;
 }
 
-.gallery-why {
+.wall-why {
   max-width: 46ch;
   font-size: 0.95rem;
   line-height: 1.45;
@@ -208,7 +208,7 @@
   color: var(--ink);
 }
 
-.gallery-arrow {
+.wall-arrow {
   flex: none;
   width: 46px;
   height: 46px;
@@ -220,11 +220,11 @@
   pointer-events: auto;
 }
 
-.gallery-arrow:disabled {
+.wall-arrow:disabled {
   opacity: 0.25;
 }
 
-.gallery-empty {
+.wall-empty {
   position: absolute;
   inset: 0;
   display: grid;
@@ -234,19 +234,19 @@
   text-align: center;
 }
 
-.gallery-empty h2 {
+.wall-empty h2 {
   font-family: var(--serif);
   font-weight: 400;
   font-size: clamp(1.6rem, 6vw, 2.4rem);
   color: var(--ink);
 }
 
-.gallery-empty p {
+.wall-empty p {
   color: var(--ink-soft);
 }
 
 /* Without WebGL: a strip that scrolls sideways. */
-.gallery-strip {
+.wall-strip {
   list-style: none;
   margin: 0;
   padding: 130px var(--pad) 40px;
@@ -257,14 +257,14 @@
   align-items: center;
 }
 
-.gallery-strip li {
+.wall-strip li {
   flex: none;
   display: grid;
   gap: 8px;
   justify-items: center;
 }
 
-.gallery-strip img {
+.wall-strip img {
   max-height: 55dvh;
   max-width: 78vw;
   border: 3px solid var(--ink);
@@ -273,7 +273,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gallery-room {
+  .wall-room {
     animation: none;
   }
 }

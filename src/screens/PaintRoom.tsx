@@ -11,7 +11,7 @@ import type { Session } from '../picks/session';
 import { getPlan } from '../plan/planStore';
 import type { StudioScene } from '../scene/studioScene';
 import { STYLE_MENU, type StyleId } from '../types';
-import type { GalleryItem } from './Gallery';
+import type { GalleryItem } from './GalleryWall';
 import { Studio } from './Studio';
 
 interface Props {

@@ -1,4 +1,4 @@
-import './Gallery.css';
+import './GalleryWall.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadWorks } from '../blend/works';
 import type { GalleryScene } from '../scene/galleryScene';
@@ -37,7 +37,7 @@ interface Props {
  * purpose, so the paintings carry all the colour. Swipe (or use the arrows) to walk along it, tap
  * the picture in front to read why it was chosen. It opens over the screen it was called from.
  */
-export function Gallery({ live, onBack }: Props) {
+export function GalleryWall({ live, onBack }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<GalleryScene | null>(null);
   const [items] = useState<GalleryItem[]>(() => {
@@ -88,17 +88,17 @@ export function Gallery({ live, onBack }: Props) {
   const here = item?.section;
 
   return (
-    <div className={`gallery-room${reading ? ' reading' : ''}`} role="dialog" aria-modal="true" aria-label="Your gallery">
+    <div className={`wall-room${reading ? ' reading' : ''}`} role="dialog" aria-modal="true" aria-label="Your gallery">
       {!items.length ? (
-        <div className="gallery-empty">
+        <div className="wall-empty">
           <h2>Nothing on the wall yet</h2>
           <p>Every canvas your painter finishes is hung here.</p>
         </div>
       ) : webgl ? (
-        <canvas ref={canvasRef} className="gallery-scene" aria-label="The gallery wall. Swipe to walk along it, tap a picture to read about it." />
+        <canvas ref={canvasRef} className="wall-scene" aria-label="The gallery wall. Swipe to walk along it, tap a picture to read about it." />
       ) : (
         // Without WebGL: the same pictures as a plain strip that scrolls sideways.
-        <ul className="gallery-strip">
+        <ul className="wall-strip">
           {items.map((it, i) => (
             <li key={i}>
               <img src={it.src} alt={it.title} />
@@ -107,13 +107,13 @@ export function Gallery({ live, onBack }: Props) {
           ))}
         </ul>
       )}
-      <div className="gallery-panel">
-        <header className="gallery-head">
-          <div className="gallery-top">
-            <button type="button" className="gallery-btn" onClick={onBack}>
+      <div className="wall-panel">
+        <header className="wall-head">
+          <div className="wall-top">
+            <button type="button" className="wall-btn" onClick={onBack}>
               <span aria-hidden="true">←</span> Back
             </button>
-            <div className="gallery-title">
+            <div className="wall-title">
               <h1>Your gallery</h1>
               {items.length > 0 && (
                 <p>
@@ -123,7 +123,7 @@ export function Gallery({ live, onBack }: Props) {
             </div>
           </div>
           {webgl && sections.length > 1 && (
-            <nav className="gallery-tabs" aria-label="Parts of the gallery">
+            <nav className="wall-tabs" aria-label="Parts of the gallery">
               {sections.map((s) => (
                 <button key={s.id} type="button" className={s.id === here ? 'on' : undefined} aria-current={s.id === here} onClick={() => sceneRef.current?.go(s.at)}>
                   {s.title}
@@ -134,25 +134,25 @@ export function Gallery({ live, onBack }: Props) {
         </header>
 
         {webgl && item && (
-          <footer className="gallery-foot">
-            <div className="gallery-row">
-              <button type="button" className="gallery-arrow" aria-label="Previous painting" disabled={index === 0} onClick={() => sceneRef.current?.step(-1)}>
+          <footer className="wall-foot">
+            <div className="wall-row">
+              <button type="button" className="wall-arrow" aria-label="Previous painting" disabled={index === 0} onClick={() => sceneRef.current?.step(-1)}>
                 ←
               </button>
-              <div className="gallery-caption" aria-live="polite">
-                <span className="gallery-tag">{item.tag}</span>
+              <div className="wall-caption" aria-live="polite">
+                <span className="wall-tag">{item.tag}</span>
                 <strong>{item.title}</strong>
-                <span className="gallery-sub">{item.sub}</span>
+                <span className="wall-sub">{item.sub}</span>
               </div>
-              <button type="button" className="gallery-arrow" aria-label="Next painting" disabled={index === items.length - 1} onClick={() => sceneRef.current?.step(1)}>
+              <button type="button" className="wall-arrow" aria-label="Next painting" disabled={index === items.length - 1} onClick={() => sceneRef.current?.step(1)}>
                 →
               </button>
             </div>
             {reading && item.why ? (
-              <p className="gallery-why">{item.why}</p>
+              <p className="wall-why">{item.why}</p>
             ) : (
               // every painting at a glance: the wall shows one at a time on a phone
-              <ul ref={thumbsRef} className="gallery-thumbs" aria-label="All paintings">
+              <ul ref={thumbsRef} className="wall-thumbs" aria-label="All paintings">
                 {items.map((it, i) => (
                   <li key={i}>
                     <button type="button" className={i === index ? 'on' : undefined} aria-current={i === index} aria-label={`${it.title}, ${i + 1} of ${items.length}`} onClick={() => sceneRef.current?.go(i)}>
@@ -163,7 +163,7 @@ export function Gallery({ live, onBack }: Props) {
               </ul>
             )}
             {item.why && (
-              <button type="button" className="gallery-btn" aria-expanded={reading} onClick={() => setReading((on) => !on)}>
+              <button type="button" className="wall-btn" aria-expanded={reading} onClick={() => setReading((on) => !on)}>
                 {reading ? 'Close' : 'Why this one?'}
               </button>
             )}

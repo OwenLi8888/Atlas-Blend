@@ -3,7 +3,7 @@ import { joinGallery, type GalleryPlayer } from './blend/gallery';
 import { characters } from './characters';
 import { savePicks, type PicksRecord } from './picks/picksStore';
 import { deviceStore, getSession, joinRoom, newRoom, recallCharacter, rememberCharacter, setPicking, wasPicking } from './picks/session';
-import { Gallery, type GalleryItem } from './screens/Gallery';
+import { GalleryWall, type GalleryItem } from './screens/GalleryWall';
 import { Home } from './screens/Home';
 import { PaintRoom } from './screens/PaintRoom';
 import { PhotoPicks } from './screens/PhotoPicks';
@@ -124,7 +124,7 @@ export function App() {
       )}
     </div>
     {/* outside .screen: its entrance animation would otherwise hold the gallery's fixed box */}
-    {wall && <Gallery live={wall} onBack={() => setWall(null)} />}
+    {wall && <GalleryWall live={wall} onBack={() => setWall(null)} />}
     </>
   );
 }
