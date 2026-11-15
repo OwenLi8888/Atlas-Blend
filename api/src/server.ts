@@ -13,13 +13,20 @@
  * GET  /blends/:id/progress       server-sent events: matching, painting, agent todos
  * GET  /blends/:id/events?after=n same events for polling clients
  * POST /demo/teammate             {user_id} pre-built teammate gallery + ready session (demo fallback)
+ * GET  /artworks                  the catalog, for picking two images
+ * POST /uploads                   {data: data-URL, name} -> {ref: "upload:<id>", image}
+ * POST /pair/blend                {user_id, a, b} (artwork id or upload ref) -> {blend_id};
+ *                                 blend A + B, paint it stroke by stroke, land it on the globe
  */
 import "./env.js";
 import cors from "cors";
 import express, { type Request, type Response, type NextFunction } from "express";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { bus, startBlend } from "./jobs.js";
+import { startPairBlend, type PairInput } from "./pairJobs.js";
+import { warmPainter } from "./painter.js";
 import { BLEND_DIR, CATALOG_DIR, PYTHON, RUNTIME } from "./paths.js";
 import { runJsonLines } from "./proc.js";
 import { makeStore, type Blend, type BlendEvent, type Gallery, type Session } from "./store.js";
@@ -27,7 +34,7 @@ import { makeStore, type Blend, type BlendEvent, type Gallery, type Session } fr
 const store = makeStore();
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "25mb" })); // uploads arrive as data URLs
 app.use("/catalog/images", express.static(join(CATALOG_DIR, "images"), { maxAge: "7d" }));
 app.use("/files", express.static(join(RUNTIME, "files")));
 
@@ -35,7 +42,13 @@ const artworks: Record<string, any> = Object.fromEntries(
   JSON.parse(readFileSync(join(CATALOG_DIR, "artworks.json"), "utf8")).map((a: any) => [a.id, a]));
 const rounds: any[] = JSON.parse(readFileSync(join(CATALOG_DIR, "quiz_rounds.json"), "utf8"));
 
-const base = (req: Request) => process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
+// Desktop on localhost gets localhost URLs (PUBLIC_BASE_URL is for phones on the LAN and goes stale
+// when the laptop's IP changes); everyone else gets PUBLIC_BASE_URL when it is set.
+const base = (req: Request) => {
+  const host = req.get("host") ?? "";
+  if (/^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(host)) return `${req.protocol}://${host}`;
+  return process.env.PUBLIC_BASE_URL || `${req.protocol}://${host}`;
+};
 const abs = (req: Request, u: string | null | undefined) => (!u ? u : u.startsWith("http") ? u : base(req) + u);
 const art = (req: Request, id: string) => {
   const a = artworks[id];
@@ -54,6 +67,16 @@ app.get("/health", (_req, res) => res.json({ ok: true, store: store.kind }));
 
 app.get("/quiz", (req, res) => {
   res.json({ rounds: rounds.map((r) => ({ ...r, artworks: r.artwork_ids.map((id: string) => art(req, id)) })) });
+});
+
+// Two-image blend picker: oil and watercolor paintings with a clear subject (catalog/data/pickable.json)
+const pickable: { oil: string[]; watercolor: string[] } = JSON.parse(readFileSync(join(CATALOG_DIR, "pickable.json"), "utf8"));
+const mediumOf = (id: string): "oil" | "watercolor" | null =>
+  pickable.oil.includes(id) ? "oil" : pickable.watercolor.includes(id) ? "watercolor" : null;
+
+app.get("/artworks", (req, res) => {
+  const ids = req.query.pick ? [...pickable.oil, ...pickable.watercolor] : Object.keys(artworks);
+  res.json({ artworks: ids.map((id) => ({ ...art(req, id), pick_medium: mediumOf(id) })) });
 });
 
 app.get("/artworks/:id", (req, res) => {
@@ -235,6 +258,52 @@ app.post("/demo/teammate", wrap(async (req, res) => {
   res.json(await sessionOut(req, s));
 }));
 
+// ------------------------------------------------------------------ two-image blend
+const UPLOADS = join(RUNTIME, "files", "uploads");
+
+app.post("/uploads", wrap(async (req, res) => {
+  const m = /^data:image\/(png|jpe?g|webp);base64,(.+)$/s.exec(String(req.body?.data ?? ""));
+  if (!m) return bad(res, 400, "send a PNG, JPEG or WebP image as a data URL");
+  const id = randomUUID().slice(0, 12), ext = m[1] === "png" ? "png" : m[1] === "webp" ? "webp" : "jpg";
+  mkdirSync(UPLOADS, { recursive: true });
+  writeFileSync(join(UPLOADS, `${id}.${ext}`), Buffer.from(m[2], "base64"));
+  const name = String(req.body?.name ?? "Your photo").replace(/\.[a-z0-9]+$/i, "").slice(0, 40);
+  writeFileSync(join(UPLOADS, `${id}.json`), JSON.stringify({ name, file: `${id}.${ext}` }));
+  res.json({ ref: `upload:${id}`, title: name, image: `${base(req)}/files/uploads/${id}.${ext}` });
+}));
+
+/** An artwork id or upload ref -> its file, label and (for pickable paintings) medium. */
+function pairInput(req: Request, ref: string): PairInput | null {
+  if (ref.startsWith("upload:")) {
+    const meta = join(UPLOADS, `${ref.slice(7).replace(/[^a-z0-9-]/gi, "")}.json`);
+    if (!existsSync(meta)) return null;
+    const { name, file } = JSON.parse(readFileSync(meta, "utf8"));
+    return { ref, path: join(UPLOADS, file), label: name, thumb: `${base(req)}/files/uploads/${file}`, medium: null };
+  }
+  const a = artworks[ref];
+  return a ? { ref, path: join(CATALOG_DIR, a.image_path), label: a.title, thumb: `${base(req)}/catalog/${a.image_path}`, medium: mediumOf(ref) } : null;
+}
+
+app.post("/pair/blend", wrap(async (req, res) => {
+  const { user_id, a, b } = req.body ?? {};
+  if (!user_id || !(await store.getUser(user_id))) return bad(res, 400, "unknown user");
+  const A = pairInput(req, String(a ?? "")), B = pairInput(req, String(b ?? ""));
+  if (!A || !B) return bad(res, 400, "pick two images");
+  // B lends its technique, so it must be a known oil or watercolor painting; A is your picture
+  // (an upload, or a pickable painting of the other medium)
+  if (!B.medium) return bad(res, 400, "the second image must be an oil or watercolor painting from the list");
+  if (!A.ref.startsWith("upload:") && !A.medium) return bad(res, 400, "pick the first image from the list or upload one");
+  if (A.medium && A.medium === B.medium) return bad(res, 400, `the first is ${A.medium}, so the second must be ${A.medium === "oil" ? "watercolor" : "oil"}`);
+  // the globe lives on the gallery record; a person who skipped the quiz gets one from the two picks
+  const ensureGallery = async () => {
+    if (await store.getGallery(user_id)) return;
+    const ids = [a, b].filter((x) => artworks[x]);
+    await buildGallery(user_id, ids.length ? ids : DEMO_PICKS());
+  };
+  const blend = await startPairBlend(store, user_id, A, B as PairInput & { medium: "oil" | "watercolor" }, ensureGallery);
+  res.json({ blend_id: blend.id });
+}));
+
 // Desktop preview of the app's globe gallery (same HTML the WebView renders), for quick checks.
 app.get("/dev/globe", wrap(async (req, res) => {
   const { GLOBE_HTML } = await import("../../app/src/components/globeHtml.js");
@@ -277,4 +346,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 const port = Number(process.env.PORT ?? 8787);
-app.listen(port, "0.0.0.0", () => console.log(`Blend API on :${port} (store: ${store.kind})`));
+app.listen(port, "0.0.0.0", () => {
+  console.log(`Blend API on :${port} (store: ${store.kind})`);
+  warmPainter(); // two-image blends: keep the painter process warm so a blend takes seconds
+});

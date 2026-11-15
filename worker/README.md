@@ -19,3 +19,16 @@ Spike result on a 640 px still: 1.8 to 4.3 s per render (budget: 40 s).
 ```
 npx tsx src/cli.ts --still still.png --out out/ --brush watercolor
 ```
+
+## impasto engine (`--engine impasto`)
+
+The stroke planner and renderers from magic-brush: `planImpasto` (impasto, MIT, Dongha Kim,
+`src/vendor/impasto/`, unmodified copy, see its README) plans the whole still as one canvas of
+`--area` mm² (default 200,000), and `src/impasto/{oil,watercolor,dots}.ts` (magic-brush's
+renderers, ported to @napi-rs/canvas) draw the strokes in paint order, timed like magic-brush's
+player (long strokes get more time than dabs). Writes `painting_<style>.mp4`,
+`process_<style>.png`, `final_<style>.png` and `strokes.json`.
+
+```
+npx tsx src/cli.ts --engine impasto --still still.png --out out/ --brush oil|watercolor|dots
+```

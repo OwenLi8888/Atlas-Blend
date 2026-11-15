@@ -4,6 +4,8 @@ export interface Artwork {
   id: string; title: string; artist: string; year: number; medium: string; brush: string;
   subjects: string[]; source_url: string; license: string; image: string;
   variables: Record<string, number>;
+  /** Two-image blend picker only: the painting's medium. */
+  pick_medium?: "oil" | "watercolor" | null;
 }
 export interface Round { round: number; artwork_ids: string[]; design_note: string; artworks: Artwork[] }
 export interface BlendTile { blend_id: string; thumb_url: string; video_url: string; partner: string; score: number }
@@ -61,5 +63,8 @@ export const api = {
   paint: (code: string, user_id: string) => req<{ blend_id: string }>("POST", `/session/${code}/paint`, { user_id }),
   demoTeammate: (user_id: string) => req<Session>("POST", "/demo/teammate", { user_id }),
   blend: (id: string) => req<any>("GET", `/blends/${id}`),
+  artworks: (pick = false) => req<{ artworks: Artwork[] }>("GET", pick ? "/artworks?pick=1" : "/artworks"),
+  upload: (data: string, name: string) => req<{ ref: string; title: string; image: string }>("POST", "/uploads", { data, name }),
+  pairBlend: (user_id: string, a: string, b: string) => req<{ blend_id: string }>("POST", "/pair/blend", { user_id, a, b }),
   events: (id: string, after: number) => req<{ status: string; events: BlendEvent[] }>("GET", `/blends/${id}/events?after=${after}`),
 };

@@ -1,10 +1,11 @@
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, SafeAreaView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Platform, SafeAreaView, StyleSheet, View } from "react-native";
 import { api, type Gallery } from "./src/api";
 import { loadIdentity, type Identity } from "./src/identity";
 import { Home } from "./src/screens/Home";
 import { Lobby } from "./src/screens/Lobby";
+import { PairBlend } from "./src/screens/PairBlend";
 import { Quiz } from "./src/screens/Quiz";
 import { Reveal } from "./src/screens/Reveal";
 import { Welcome } from "./src/screens/Welcome";
@@ -12,7 +13,7 @@ import { C } from "./src/theme";
 
 type Screen =
   | { name: "boot" } | { name: "welcome" } | { name: "quiz" } | { name: "home"; justBlended?: string }
-  | { name: "lobby" } | { name: "reveal"; blendId: string };
+  | { name: "lobby" } | { name: "reveal"; blendId: string } | { name: "pair" };
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ name: "boot" });
@@ -29,7 +30,7 @@ export default function App() {
         setGallery(await api.gallery(ident.id));
         setScreen({ name: "home" });
       } catch {
-        setScreen({ name: "quiz" }); // known device, no gallery yet (or server was reset)
+        setScreen({ name: "welcome" }); // known device, no gallery yet: quiz or two-image blend
       }
     })();
   }, []);
@@ -46,16 +47,21 @@ export default function App() {
       body = <View style={styles.center}><ActivityIndicator color={C.text} /></View>;
       break;
     case "welcome":
-      body = <Welcome existing={me} onDone={(i) => { setMe(i); setScreen({ name: "quiz" }); }} />;
+      body = <Welcome existing={me} onDone={(i) => { setMe(i); setScreen({ name: "quiz" }); }}
+        onPair={(i) => { setMe(i); setScreen({ name: "pair" }); }} />;
       break;
     case "quiz":
       body = <Quiz me={me!} onDone={(g) => { setGallery(g); setScreen({ name: "home" }); }} />;
       break;
     case "home":
-      body = <Home me={me!} gallery={gallery!} justBlended={screen.justBlended} onBlend={() => setScreen({ name: "lobby" })} onRetake={() => setScreen({ name: "quiz" })} />;
+      body = <Home me={me!} gallery={gallery!} justBlended={screen.justBlended} onBlend={() => setScreen({ name: "lobby" })} onPair={() => setScreen({ name: "pair" })} onRetake={() => setScreen({ name: "quiz" })} />;
       break;
     case "lobby":
       body = <Lobby me={me!} onBack={() => setScreen({ name: "home" })} onBlend={(blendId) => setScreen({ name: "reveal", blendId })} />;
+      break;
+    case "pair":
+      // no gallery yet (skipped the quiz): back goes to the start; the first blend creates one
+      body = <PairBlend me={me!} onBack={() => setScreen(gallery ? { name: "home" } : { name: "welcome" })} onDone={(id) => refresh(id)} />;
       break;
     case "reveal":
       body = <Reveal blendId={screen.blendId} onDone={() => refresh(screen.blendId)} />;
@@ -65,7 +71,8 @@ export default function App() {
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="light" />
-      {body}
+      {/* on desktop web, keep the phone layout in a centred phone-width column */}
+      {Platform.OS === "web" ? <View style={styles.webCol}>{body}</View> : body}
     </SafeAreaView>
   );
 }
@@ -73,4 +80,5 @@ export default function App() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  webCol: { flex: 1, width: "100%", maxWidth: 440, alignSelf: "center" },
 });
