@@ -1,0 +1,246 @@
+/* The speech cloud's styles (SpeechCloud.tsx). Restored unchanged from page 2 (src/screens/PhotoPicks.css
+   before 5fec6fd, which took the painter and its cloud off that screen) so every screen that shows
+   the cloud draws the same one. Import this file wherever <SpeechCloud> is rendered. */
+
+/* ---- The speech cloud (SpeechCloud.tsx): a storybook dialogue bubble ----
+   --puff is the radius of the scallops around the edge. The text is padded past them, inside the
+   rectangle the cloud is built around, so it can never spill out of the shape. */
+
+.speech {
+  --puff: 18px;
+  --rim: calc(var(--puff) + 3px);
+  position: relative;
+  isolation: isolate;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 27rem;
+  padding: calc(var(--rim) + 12px) calc(var(--rim) + 8px) calc(var(--rim) + 14px);
+  transform-origin: 0 60%;
+  animation: speech-pop 420ms cubic-bezier(0.3, 0.6, 0.3, 1) 180ms both;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.speech.typing {
+  cursor: pointer;
+}
+
+/* Squash and stretch: small, overshoot, a wobble, settle. */
+@keyframes speech-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) rotate(-3deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08, 1.04) rotate(1.5deg);
+  }
+  72% {
+    transform: scale(0.97, 1.02) rotate(-0.8deg);
+  }
+  88% {
+    transform: scale(1.01, 0.995) rotate(0.3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.speech-cloud {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: visible;
+}
+
+/* Floating: a soft shadow that falls below the cloud. */
+.speech-body {
+  filter: drop-shadow(0 7px 5px rgba(20, 47, 64, 0.16));
+}
+
+.speech-body .outline {
+  fill: var(--navy);
+  stroke: var(--navy);
+  stroke-width: 6px; /* half of it is covered by the fill: a 3px line */
+  stroke-linejoin: round;
+}
+
+.speech-body .fill {
+  fill: var(--white);
+}
+
+.speech-body .shade {
+  fill: var(--ivory);
+  opacity: 0.85;
+}
+
+.speech-body .gloss {
+  fill: var(--teal);
+  opacity: 0.13;
+}
+
+.speech-tail circle {
+  fill: var(--white);
+  stroke: var(--navy);
+  stroke-width: 3px;
+}
+
+.speech-tail circle:first-child {
+  stroke-width: 2.5px;
+}
+
+.speech-star {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: star-twinkle 3.2s ease-in-out infinite both;
+}
+
+.speech-star.rose {
+  fill: var(--rose);
+}
+
+.speech-star.teal {
+  fill: var(--teal);
+}
+
+@keyframes star-twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.55) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1) rotate(20deg);
+  }
+}
+
+/* The name tag: a little badge pinned across the top-left edge. */
+.speech-tag {
+  position: absolute;
+  top: -11px;
+  left: calc(var(--rim) - 2px);
+  padding: 3px 13px 4px;
+  border-radius: 999px;
+  border: 2.5px solid var(--navy);
+  background: var(--rose);
+  color: var(--ivory);
+  font-family: 'Fredoka', 'Baloo 2', 'Nunito', var(--sans);
+  font-weight: 600;
+  font-size: 0.86rem;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  transform: rotate(-4deg);
+  box-shadow: 0 2px 0 rgba(20, 47, 64, 0.18);
+}
+
+.speech h1 {
+  display: grid;
+  font-family: 'Fredoka', 'Baloo 2', 'Nunito', var(--sans);
+  font-weight: 600;
+  font-size: clamp(1.02rem, 3.7vw, 1.4rem);
+  line-height: 1.28;
+  letter-spacing: 0;
+  color: var(--navy);
+}
+
+/* The line being typed and the invisible longest line share one cell, so the cloud keeps its size. */
+.speech-line,
+.speech-room {
+  grid-area: 1 / 1;
+}
+
+.speech-room,
+.speech .untyped {
+  visibility: hidden;
+}
+
+.speech .hot {
+  display: inline-block;
+  color: var(--rose);
+}
+
+/* The key phrase gives one wiggle when its last letter lands. */
+.speech .hot.done {
+  animation: hot-wiggle 520ms ease-in-out 1;
+}
+
+@keyframes hot-wiggle {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: rotate(-4deg) scale(1.06);
+  }
+  45% {
+    transform: rotate(3.5deg) scale(1.08);
+  }
+  70% {
+    transform: rotate(-2deg) scale(1.03);
+  }
+}
+
+/* "Next" prompt in the bottom-right corner once the line is all there. */
+.speech-next {
+  position: absolute;
+  right: calc(var(--rim) + 2px);
+  bottom: calc(var(--rim) - 5px);
+  font-size: 0.7rem;
+  line-height: 1;
+  color: var(--rose);
+  animation: next-bounce 700ms ease-in-out infinite alternate;
+}
+
+@keyframes next-bounce {
+  from {
+    transform: translateY(-2px);
+  }
+  to {
+    transform: translateY(3px);
+  }
+}
+
+@media (max-width: 599px) {
+  .speech {
+    --puff: 14px;
+    padding: calc(var(--rim) + 10px) calc(var(--rim) + 5px) calc(var(--rim) + 12px);
+  }
+
+  .speech-tag {
+    font-size: 0.78rem;
+    padding: 2px 11px 3px;
+  }
+}
+
+.speech .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .speech-star,
+  .speech-next,
+  .speech .hot.done {
+    animation: none;
+  }
+
+  /* The cloud simply fades in, with its text already there. */
+  .speech {
+    animation: speech-fade 200ms ease-out both;
+  }
+}
+
+@keyframes speech-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
