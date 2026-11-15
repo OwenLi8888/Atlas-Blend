@@ -2,8 +2,8 @@
 
 A museum's same paintings, a new experience every visit. A visitor picks a character, picks one of
 four featured paintings and watches the character repaint it stroke by stroke in one of three
-styles: **Swirl** (inspired by Van Gogh), **Shapes** (inspired by Picasso's cubism) or **Print**
-(linocut). It is a static web app for a gallery kiosk tablet or a visitor's phone (QR code beside
+styles: **Swirl** (inspired by Van Gogh), **Shapes** (inspired by Picasso's cubism) or **Mosaic**
+(inspired by Roman and Byzantine tile mosaics). It is a static web app for a gallery kiosk tablet or a visitor's phone (QR code beside
 the real painting). No install, no backend.
 
 HackPrinceton, Entertainment track. Spec: [`docs/PRD.md`](docs/PRD.md).
@@ -73,7 +73,8 @@ mirrors it when it paints rightwards). Up to six characters are shown.
 - `src/engine/player.ts`: spreads the strokes over 10 s, weighting each by sqrt(length x width) so
   the picture arrives coarse to fine. Finished strokes are drawn once to an offscreen canvas; each
   frame copies it and draws the strokes in progress.
-- `src/engine/styles/`: the three renderers. Each draws the same stroke list its own way, and all
+- `src/engine/styles/`: the three renderers (Swirl, Shapes, Mosaic). Mosaic keeps its own tile
+  grid and redraws only the cells a stroke changes. Each draws the same stroke list its own way, and all
   randomness is seeded by stroke index, so replays are identical.
 - `src/screens/`: the three screens and the Museum setup panel.
 

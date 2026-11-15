@@ -38,7 +38,7 @@ real painting. It is a web app with no install.
    slots for demos.
 3. **The studio.** A canvas card with the selected character beside it. The character paints the
    chosen painting stroke by stroke over about 10 seconds in the default style (Swirl). Under the
-   canvas are three style chips: **Swirl**, **Shapes**, **Print**. Tapping a chip clears the canvas
+   canvas are three style chips: **Swirl**, **Shapes**, **Mosaic**. Tapping a chip clears the canvas
    and the character repaints the same painting in that style. Also: Replay, Back, a press-and-hold
    Compare that shows the original, a thin progress bar and a status line such as
    "Pip is painting in Swirl…".
@@ -66,7 +66,7 @@ The brief listed Cézanne's *The Basket of Apples* in the second slot; the team 
 | M4 | Style player | Any style replays all strokes in 10 s, coarse to fine, at 60 fps on a recent phone |
 | M5 | Swirl renderer | Short thick dashes following a swirling flow field, color jitter, dark edges |
 | M6 | Shapes renderer | Each stroke becomes a flat angular facet in a reduced palette with a thin navy outline |
-| M7 | Print renderer | Three inks by brightness, rough carved edges, paper gouge lines in the key ink, paper grain |
+| M7 | Mosaic renderer | Square tiles in grout, half-size tiles for detail, about 24 tile colors, a light bevel and grout shadow |
 | M8 | Character follows the brush | The character's brush tip sits on the current stroke's point every frame |
 | M9 | Compare | Press and hold to see the original painting |
 | M10 | Museum setup | Staff add a painting with an image plus a JSON entry; a hidden upload panel works for demos |
@@ -127,12 +127,18 @@ instant and the character's path is identical in every style.
   quadrilateral or triangle spanning the stroke's start, end and width) at an angle snapped to 15°
   steps, filled flat with the stroke color snapped to about 10 colors posterized from the painting,
   with a thin navy outline (`#142F40` at 70%). Larger facets occasionally get hatch lines.
-- **Print (linocut).** Three inks: paper (`#E7DECD`), a mid ink (the painting's dominant hue,
-  desaturated) and a key ink (`#142F40`). Each stroke's ink comes from its color's luminance, with
-  the two thresholds set from that painting's own stroke-luminance percentiles (about the 35th and
-  70th), so low-contrast paintings still get three distinct inks. Edges are rough and jittered.
-  Key-ink strokes get thin paper-colored gouge lines along the stroke. A subtle paper grain covers
-  everything and the mid ink is slightly misregistered.
+- **Mosaic (inspired by Roman and Byzantine tile mosaics).** The canvas starts as grout (`#CFC6B4`)
+  and is a grid of square cells, about 80 along the long side, sized in device pixels (the pitch is
+  rounded to a whole even number so tiles and half-tiles sit on pixels). The grout gap is 12% of
+  the tile, at least 1px. As each stroke is drawn, including strokes in progress, points are
+  sampled along its path and across its width, and every cell they cover takes that stroke's color;
+  later strokes overwrite earlier ones. Only cells that changed are redrawn. Strokes in the last two
+  detail layers split the cells they touch into 2 × 2 half-size tiles, and a split cell stays
+  split. Each tile is turned up to ±4°, resized ±6% and shifted ±4% in lightness and ±3° in hue,
+  seeded by cell index (tiles on a pitch under 8 device pixels are set straight, since turning
+  them only blurs them). Larger tiles get a 1px bevel, lighter top-left and darker bottom-right.
+  Colors snap to about 24 posterized from the painting, with saturation lifted slightly. When the
+  replay ends a faint 1px grout shadow is drawn under and to the right of every tile.
 
 **Stack.** Vite, React, TypeScript, Canvas 2D, `tryimpasto` for planning only. No backend: static
 files, `base: './'`. Everything runs on Windows with only Node installed (no bash, no Python). The
@@ -146,7 +152,9 @@ precompute script decodes images in Node with `jpeg-js` and `pngjs` and builds p
 3. Switching styles mid-paint restarts cleanly with no leftover strokes.
 4. The character stays on the brush and never jumps off the canvas.
 5. 60 fps on a recent iPhone (checked in a phone-sized viewport at minimum).
-6. Vermeer's face is still readable in Swirl. Monet shows three distinct inks in Print.
+6. Vermeer's face is still readable in Swirl, and recognizable in Mosaic thanks to the half-size
+   detail tiles. In Mosaic the grout lines are clearly visible at phone size and tiles stay square
+   and aligned to the grid.
 7. Swapping a painting means editing paintings.json plus one image file, then rerunning the precompute script.
 8. `npm run build` passes with no TypeScript errors.
 9. Every screen, and every style at 50% and 100% for all four paintings, is screenshotted in a headless browser and reviewed.

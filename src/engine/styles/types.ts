@@ -11,6 +11,14 @@ export interface StyleRenderer {
    * Must be deterministic: the same index and t always draw the same thing.
    */
   draw(ctx: CanvasRenderingContext2D, index: number, t: number, mmPerPx: number): void;
-  /** Drawn over the whole canvas every frame, in device pixels (paper grain). */
-  overlay?(ctx: CanvasRenderingContext2D, widthPx: number, heightPx: number): void;
+  /**
+   * True for a style that keeps its own picture (Mosaic's tile grid). The player then always hands
+   * draw() the committed canvas, strokes in progress included, and draw() adds only what is new
+   * since its last call for that stroke. The result must not depend on the order of the calls.
+   */
+  incremental?: boolean;
+  /** The canvas was just cleared to `ground` at this size in device pixels: forget everything drawn. */
+  begin?(widthPx: number, heightPx: number): void;
+  /** Every stroke is down: one last pass over the committed canvas. */
+  finish?(ctx: CanvasRenderingContext2D): void;
 }

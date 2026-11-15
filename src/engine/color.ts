@@ -1,8 +1,6 @@
 import type { Rgb } from '../types';
 
 export const IVORY = '#E7DECD';
-export const NAVY = '#142F40';
-export const NAVY_RGB: Rgb = [0x14 / 255, 0x2f / 255, 0x40 / 255];
 
 export type Hsl = [number, number, number];
 
@@ -29,9 +27,4 @@ export function hslCss(h: number, s: number, l: number): string {
 
 export function rgbCss([r, g, b]: Rgb): string {
   return `rgb(${Math.round(clamp01(r) * 255)} ${Math.round(clamp01(g) * 255)} ${Math.round(clamp01(b) * 255)})`;
-}
-
-/** Perceptual-ish luminance of an sRGB colour (Rec. 709 weights on the gamma-encoded values). */
-export function luminance([r, g, b]: Rgb): number {
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }

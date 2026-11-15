@@ -75,6 +75,8 @@ export class Player {
   private paused = false;
   private finished = false;
   private dirty = true;
+  /** The style's finishing pass has been drawn. */
+  private sealed = false;
   private cssW = 1;
   private cssH = 1;
   /** Device pixels per mm. */
@@ -152,9 +154,11 @@ export class Player {
   /** Back to bare ground. The next render lays every stroke finished by then again (restart, resize, seek). */
   private reset(): void {
     this.committedCount = 0;
+    this.sealed = false;
     this.cctx.setTransform(1, 0, 0, 1, 0, 0);
     this.cctx.fillStyle = this.style.ground;
     this.cctx.fillRect(0, 0, this.committed.width, this.committed.height);
+    this.style.begin?.(this.committed.width, this.committed.height);
     this.dirty = true;
   }
 
@@ -194,18 +198,30 @@ export class Player {
       this.committedCount++;
     }
 
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(this.committed, 0, 0);
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    // Strokes in progress go on top of the copy; an incremental style adds them to the committed
+    // canvas itself (it only ever draws what is new).
+    const live = style.incremental ? cctx : ctx;
+    if (!style.incremental) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(this.committed, 0, 0);
+    }
+    live.setTransform(scale, 0, 0, scale, 0, 0);
     let latest = this.committedCount - 1;
     let latestT = 1;
     for (let i = this.committedCount; i < n && start[i] <= elapsed; i++) {
       const t = (elapsed - start[i]) / (end[i] - start[i] || 1);
-      style.draw(ctx, i, t, mmPerPx);
+      style.draw(live, i, t, mmPerPx);
       latest = i;
       latestT = t;
     }
-    style.overlay?.(ctx, this.canvas.width, this.canvas.height);
+    if (this.committedCount === n && !this.sealed) {
+      this.sealed = true;
+      style.finish?.(cctx);
+    }
+    if (style.incremental) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(this.committed, 0, 0);
+    }
 
     // The brush is on the most recently started stroke, at the point it has reached.
     if (latest >= 0) {

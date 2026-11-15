@@ -1,4 +1,4 @@
-// Tiles screenshots/ into contact sheets (screenshots/sheet-*.png) for a quick visual review.
+﻿// Tiles screenshots/ into contact sheets (screenshots/sheet-*.png) for a quick visual review.
 //   node scripts/contact-sheet.mjs
 import { readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -12,7 +12,7 @@ const groups = {
   'kiosk-screens': files.filter((f) => /^kiosk-[12]-|^kiosk.*compare/.test(f)),
 };
 for (const tag of ['phone', 'kiosk']) {
-  for (const style of ['swirl', 'shapes', 'print']) {
+  for (const style of ['swirl', 'shapes', 'mosaic']) {
     groups[`${tag}-${style}`] = files.filter((f) => f.startsWith(`${tag}-3-`) && f.includes(`-${style}-`));
   }
 }

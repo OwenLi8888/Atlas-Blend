@@ -1,5 +1,5 @@
 import type { StrokePlan, StyleId } from '../../types';
-import { createPrint } from './print';
+import { createMosaic } from './mosaic';
 import { createShapes } from './shapes';
 import { createSwirl } from './swirl';
 import type { StyleRenderer } from './types';
@@ -15,5 +15,5 @@ export function styleFor(plan: StrokePlan, id: StyleId): StyleRenderer {
     byStyle = {};
     cache.set(plan, byStyle);
   }
-  return (byStyle[id] ??= id === 'swirl' ? createSwirl(plan) : id === 'shapes' ? createShapes(plan) : createPrint(plan));
+  return (byStyle[id] ??= id === 'swirl' ? createSwirl(plan) : id === 'shapes' ? createShapes(plan) : createMosaic(plan));
 }
