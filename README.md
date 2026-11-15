@@ -61,9 +61,9 @@ directly: `http://localhost:5173/?session=abc123&user=1&view=gallery`.
   the whole interface; `src/gallery/HangItUp.tsx` and `src/App.tsx` do the rest.
 - The painting the room hangs: `getFinalPainting(sessionId)` in `src/gallery/galleryData.ts`. Today
   it is what this device finished (kept in localStorage), else `public/gallery/placeholder.jpg`.
-- Sample paintings: `public/gallery/samples/samples.json` (`id`, `file`, `title`, `style`,
-  `credit`) and the 11 images beside it. They are generated stand-ins: replace the files and edit
-  the JSON. `node scripts/make-gallery-placeholders.mjs` writes the stand-ins again.
+- The pictures around it: 11 of the 100 pool photos (`public/pool/`), chosen by the session id, so
+  both devices see the same wall and each session a different one (`loadWall` in the same file).
+  Only if the pool cannot be loaded do the stand-ins in `public/gallery/samples/` hang there.
 - A painter's own line after the high five: `galleryLine` in `src/characters.tsx`.
 - Check it: with `npm run dev -- --port 5199` running, `node scripts/gallery-shots.mjs` plays the
   whole flow at 1440 and 390 wide, checks the layout and saves `screenshots/gallery-*.png`.

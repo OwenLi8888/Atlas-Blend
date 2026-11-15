@@ -3,7 +3,9 @@
  * sample paintings that fill the rest of the ring. The room only talks to this file.
  */
 import { characters, type Character } from '../characters';
+import { hashString, mulberry32 } from '../engine/rng';
 import { getSessionPicks } from '../picks/picksStore';
+import { loadPool, photoUrl } from '../picks/pool';
 import { deviceStore, type Session } from '../picks/session';
 
 export interface FinalPainting {
@@ -75,6 +77,45 @@ export async function loadSamples(): Promise<SamplePainting[]> {
   } catch {
     return [];
   }
+}
+
+/** A picture hung beside the new painting. */
+export interface WallPicture {
+  id: string;
+  imageUrl: string;
+  title: string;
+  /** The line under the title on the plaque: the artist for a pool photo, the look for a sample. */
+  style: string;
+  credit: string;
+}
+
+/**
+ * The pictures that hang around the new painting: `count` of the 100 pool photos
+ * (public/pool/, the same ones the picks screen shows), chosen by the session id, so both devices
+ * of a session see the same wall and another session sees a different one. If the pool cannot be
+ * loaded, the sample paintings of samples.json hang there instead.
+ */
+export async function loadWall(sessionId: string, count: number): Promise<WallPicture[]> {
+  try {
+    const pool = [...(await loadPool())].sort((a, b) => a.id.localeCompare(b.id));
+    const random = mulberry32(hashString(`atlas-gallery:${sessionId}`));
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const wall = pool.slice(0, count).map((p) => ({
+      id: p.id,
+      imageUrl: photoUrl(p.file),
+      title: p.title || 'Untitled',
+      style: p.artist || 'Artist unrecorded',
+      credit: p.year ?? '',
+    }));
+    if (wall.length) return wall;
+  } catch {
+    // The samples below.
+  }
+  const samples = await loadSamples();
+  return samples.slice(0, count).map((s) => ({ id: s.id, imageUrl: sampleUrl(s.file), title: s.title, style: s.style, credit: s.credit }));
 }
 
 /** The two painters of a session: user 1's first, user 2's second. */

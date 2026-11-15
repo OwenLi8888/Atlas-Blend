@@ -2,7 +2,7 @@ import './Gallery.css';
 import './SpeechCloud.css';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { FLIGHT_MS, HUNG_NAME } from '../gallery/flight';
-import { getDuo, getFinalPainting, loadSamples, sampleUrl, type Duo } from '../gallery/galleryData';
+import { getDuo, getFinalPainting, loadWall, type Duo } from '../gallery/galleryData';
 import { PainterSprite } from '../gallery/PainterSprite';
 import { savePainting } from '../gallery/savePainting';
 import type { Session } from '../picks/session';
@@ -34,7 +34,7 @@ interface Item {
   imageUrl: string;
   title: string;
   style: string;
-  /** Sample paintings only. */
+  /** The pictures around the new one: the year for a pool photo, the credit for a sample. */
   credit?: string;
   /** The painting the two users just made. */
   isNew: boolean;
@@ -100,7 +100,7 @@ function measure(el: HTMLElement): Dims {
 
 /**
  * The last page: a small round gallery. The visitor stands in the middle; the wall around them is
- * a ring of 12 framed canvases, the new painting first and sample paintings after it. Drag, swipe,
+ * a ring of 12 framed canvases, the new painting first and pictures from the photo pool after it. Drag, swipe,
  * wheel or use the arrow keys to turn; tap a canvas to see it up close.
  */
 export function Gallery({ session, characterId, arrival, onFrontReady, onPlayAgain }: Props) {
@@ -127,9 +127,9 @@ export function Gallery({ session, characterId, arrival, onFrontReady, onPlayAga
       const mine: Item = { key: 'new', imageUrl: final.imageUrl, title: final.title || 'Our Painting', style: final.style, isNew: true, createdAt: final.createdAt };
       setItems((list) => [mine, ...list.filter((i) => !i.isNew)]);
     });
-    loadSamples().then((samples) => {
+    loadWall(session.sessionId, SLOTS - 1).then((wall) => {
       if (cancelled) return;
-      const rest = samples.slice(0, SLOTS - 1).map((s): Item => ({ key: s.id, imageUrl: sampleUrl(s.file), title: s.title, style: s.style, credit: s.credit, isNew: false }));
+      const rest = wall.map((s): Item => ({ key: s.id, imageUrl: s.imageUrl, title: s.title, style: s.style, credit: s.credit, isNew: false }));
       setItems((list) => [...list.filter((i) => i.isNew), ...rest]);
     });
     getDuo(session, characterId).then((d) => {
