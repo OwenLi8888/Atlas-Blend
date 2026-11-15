@@ -29,7 +29,7 @@ function planWorker(): Worker {
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve(img);
+    img.onload = () => { void img.decode().then(() => resolve(img), reject); };
     img.onerror = () => reject(new Error('The painting image could not be loaded'));
     img.src = src;
   });

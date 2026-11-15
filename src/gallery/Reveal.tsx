@@ -4,6 +4,7 @@ import { Player } from '../engine/player';
 import { getPlan } from '../plan/planStore';
 import type { StrokePlan } from '../types';
 import { api } from './api';
+import { revealUrl, thumbnailUrl } from './images';
 import { Detail } from './Detail';
 import { byline, museumName, possessive } from './format';
 import { Hung } from './Hung';
@@ -17,10 +18,10 @@ interface Props {
 
 /**
  * Physical width the stroke planner works at. Wider means finer strokes and a
- * slower plan: 220 mm took about 4.4 s to plan, 150 mm about 2 s. The painted
+ * slower plan. Use a coarse 90 mm plan for prompt playback. The painted
  * version settles into the real image at the end, so fine strokes are not needed.
  */
-const PAINTING_WIDTH_MM = 150;
+const PAINTING_WIDTH_MM = 90;
 /** How often to ask whether the piece being made is ready. */
 const COMMISSION_POLL_MS = 1000;
 
@@ -61,6 +62,7 @@ export function Reveal({ me, blend, revisit }: Props) {
   const made = commission.status === 'ready' && commission.image_url !== null;
   const making = commission.status === 'pending';
   const subject = subjectOf(blend, commission);
+  useEffect(() => setPainted(revisit), [subject.planId, revisit]);
   const { plan, unplannable } = usePlan(revisit ? null : subject);
   const ready = subject !== null && (revisit || plan !== null || unplannable);
 
@@ -87,9 +89,9 @@ export function Reveal({ me, blend, revisit }: Props) {
       <div className="reveal-stage">
         <Leanings label="You lean toward" trends={blend.trends.you} onOpen={setOpen} />
         <div className="reveal-centre">
-          {!ready && (making || made) && (
+          {!ready && (
             <button type="button" className="interlude" onClick={() => setOpen(meeting)} aria-label={'Look closer at ' + meeting.title}>
-              <img src={meeting.image_url} alt={meeting.title} draggable={false} />
+              <img src={revealUrl(meeting.id)} alt={meeting.title} fetchPriority="high" draggable={false} />
             </button>
           )}
           {ready && subject && !revisit && (
@@ -102,6 +104,7 @@ export function Reveal({ me, blend, revisit }: Props) {
           )}
 
           <div className="reveal-plate" aria-live="polite">
+            {making && ready && <p className="making">Your commissioned piece is being made; its story will appear here.</p>}
             {!ready && (making || made) && (
               <>
                 <p className="making">{making ? 'A piece is being made for the two of you…' : 'Mixing the paints…'}</p>
@@ -155,9 +158,8 @@ export function Reveal({ me, blend, revisit }: Props) {
   );
 }
 
-/** The commissioned piece once it exists; the collection work if there will be none; nothing while it is being made. */
-function subjectOf(blend: BlendResponse, commission: Commission): Subject | null {
-  if (commission.status === 'pending') return null;
+/** Paint the collection match immediately while the commissioned piece is being made. */
+function subjectOf(blend: BlendResponse, commission: Commission): Subject {
   if (commission.status === 'ready' && commission.image_url) {
     return {
       planId: 'commission:' + blend.id,
@@ -167,7 +169,7 @@ function subjectOf(blend: BlendResponse, commission: Commission): Subject | null
     };
   }
   const work = blend.top_artwork;
-  return { planId: 'blend:' + work.id, source: api.imageUrl(work.id), settled: work.image_url, label: work.title };
+  return { planId: 'blend:' + work.id, source: revealUrl(work.id), settled: revealUrl(work.id), label: work.title };
 }
 
 /** Follows the piece being made for a blend until both the image and its label have settled. */
@@ -178,7 +180,8 @@ function useCommission(blend: BlendResponse): Commission {
   useEffect(() => {
     if (settled) return;
     let cancelled = false;
-    const timer = window.setInterval(async () => {
+    let timer: number;
+    const poll = async () => {
       try {
         const latest = await api.commission(blend.id);
         if (!cancelled) setCommission(latest);
@@ -186,10 +189,12 @@ function useCommission(blend: BlendResponse): Commission {
         // The server no longer knows this piece (for example it restarted): reveal the collection work.
         if (!cancelled) setCommission({ status: 'failed', image_url: null, title: null, label_status: 'failed', label: null });
       }
-    }, COMMISSION_POLL_MS);
+      if (!cancelled) timer = window.setTimeout(poll, COMMISSION_POLL_MS);
+    };
+    timer = window.setTimeout(poll, COMMISSION_POLL_MS);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
   }, [settled, blend.id]);
 
@@ -244,7 +249,7 @@ function Leanings({ label, trends, onOpen }: { label: string; trends: readonly T
           return (
             <li key={work.id}>
               <button type="button" className="leaning" onClick={() => onOpen(work)} aria-label={'Look closer at ' + work.title}>
-                <img src={work.image_url} alt="" loading="lazy" draggable={false} />
+                <img src={thumbnailUrl(work.id)} alt="" loading="lazy" decoding="async" draggable={false} />
                 <span>{trend.family}</span>
               </button>
             </li>
@@ -268,6 +273,7 @@ interface PaintingProps {
 function Painting({ plan, settled, label, onDone }: PaintingProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [finished, setFinished] = useState(false);
+  const [decoded, setDecoded] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -296,7 +302,7 @@ function Painting({ plan, settled, label, onDone }: PaintingProps) {
   return (
     <div className="painting" style={paintingBox(plan.widthMm / plan.heightMm)}>
       <canvas ref={canvasRef} role="img" aria-label={label + ', being painted'} />
-      <img className={'painting-original' + (finished ? ' shown' : '')} src={settled} alt="" draggable={false} />
+      <img className={'painting-original' + (finished && decoded ? ' shown' : '')} src={settled} alt="" draggable={false} onLoad={event => { void event.currentTarget.decode().then(() => setDecoded(true), () => {}); }} />
     </div>
   );
 }

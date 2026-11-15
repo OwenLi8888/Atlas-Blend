@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BlendResponse, BlendSummary, Profile } from '../rec/api';
 import { api, ApiFailure } from './api';
+import { thumbnailUrl } from './images';
 import { Reveal } from './Reveal';
 
 const MIN_CODE_LENGTH = 6;
@@ -112,7 +113,7 @@ export function Blends({ profile, onMade }: BlendsProps) {
           <div className="blend-cards">
             {saved.map(blend => (
               <a key={blend.id} className="blend-card" href={'#/blends/' + blend.id}>
-                <img src={blend.image_url ?? blend.top_artwork.image_url} alt="" loading="lazy" draggable={false} />
+                <img src={blend.image_url ?? thumbnailUrl(blend.top_artwork.id)} alt="" loading="lazy" draggable={false} />
                 <span className="blend-card-with">With {blend.friend.name || 'a friend'}</span>
                 <span className="blend-card-title">{blend.title ?? blend.top_artwork.title}</span>
                 <span className="blend-card-meta">
