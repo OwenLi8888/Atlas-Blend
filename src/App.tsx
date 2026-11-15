@@ -1,19 +1,21 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { characters } from './characters';
+import { setInGallery, wasInGallery } from './gallery/galleryData';
 import type { PicksRecord } from './picks/picksStore';
 import { loadPool, photoUrl } from './picks/pool';
 import { getSession, recallCharacter, rememberCharacter, setPicking, wasPicking } from './picks/session';
+import { Gallery, type Arrival } from './screens/Gallery';
 import { Home } from './screens/Home';
 import { PaintRoom, type Picture } from './screens/PaintRoom';
 import { PhotoPicks } from './screens/PhotoPicks';
 
 /**
  * The flow: 1 choose a painter in the studio, 2 pick 5 of 25 pictures, 3 the painter paints three
- * of those picks in the studio. (The paintings screen and Museum setup are not in this flow; their
+ * of those picks in the studio, 4 the finished painting is hung in the gallery room. (The paintings screen and Museum setup are not in this flow; their
  * components are still in src/screens/.)
  */
-type Screen = 'home' | 'picks' | 'studio';
-const ORDER: Screen[] = ['home', 'picks', 'studio'];
+type Screen = 'home' | 'picks' | 'studio' | 'gallery';
+const ORDER: Screen[] = ['home', 'picks', 'studio', 'gallery'];
 
 /** How many of the picks the painter paints: one per easel. */
 const EASELS = 3;
@@ -48,7 +50,15 @@ export function App() {
   // per session, so a refresh on the picks screen comes back to it with the same painter.
   const [session] = useState(getSession);
   const [characterId, setCharacterId] = useState<string | null>(() => recallCharacter(session));
-  const [screen, setScreen] = useState<Screen>(() => (wasPicking(session) && recallCharacter(session) ? 'picks' : 'home'));
+  const [screen, setScreen] = useState<Screen>(() =>
+    // A refresh in the gallery, or a link to it (?view=gallery), opens the gallery.
+    wasInGallery(session) ? 'gallery' : wasPicking(session) && recallCharacter(session) ? 'picks' : 'home',
+  );
+  /** How the gallery was reached: it plays the painting's arrival differently for each. */
+  const [arrival, setArrival] = useState<Arrival>({ kind: 'direct' });
+  /** Resolves the hand-off's view transition once the gallery has the painting in its frame. */
+  const frontReady = useRef<(() => void) | null>(null);
+  const onFrontReady = useCallback(() => frontReady.current?.(), []);
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
   const [pictures, setPictures] = useState<Picture[]>([]);
   /** Bumped to remount the picks screen (its draft is kept) when the studio could not be set up. */
@@ -59,6 +69,7 @@ export function App() {
       setDirection(ORDER.indexOf(next) >= ORDER.indexOf(screen) ? 'forward' : 'back');
       setScreen(next);
       setPicking(session, next === 'picks');
+      setInGallery(session, next === 'gallery');
     },
     [screen, session],
   );
@@ -102,6 +113,19 @@ export function App() {
       )}
       {screen === 'studio' && pictures.length > 0 && (
         <PaintRoom pictures={pictures} character={character} onBack={() => go('picks')} />
+      )}
+      {screen === 'gallery' && (
+        <Gallery
+          session={session}
+          characterId={characterId}
+          arrival={arrival}
+          onFrontReady={onFrontReady}
+          // A new session: the address without ?session, which page 1 then fills in.
+          onPlayAgain={() => {
+            setInGallery(session, false);
+            window.location.assign(window.location.pathname);
+          }}
+        />
       )}
     </div>
   );

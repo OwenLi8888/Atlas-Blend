@@ -1,0 +1,700 @@
+/* ---- The last screen: a small round gallery ----
+   The visitor stands inside a ring of 12 canvases (CSS 3D), placed so the canvas straight ahead
+   lies in the screen plane: it is drawn flat and at its true size.
+   Sizes (--p, --slot-w, --slot-h, --char, --top) are measured in Gallery.tsx.
+
+   Colours are the app's: the tokens of src/styles.css, the room colour of screens 1 and 3
+   (#e8d6b8) and their veil (244, 236, 222), the lamplight of the studio's dust (#fff1c8), the wood
+   of its canvas edges (#b98a5c), the blank-canvas cream (#f4efe6) and Sunny's gold (#ffc62e). */
+
+.gallery {
+  --wood: #b98a5c;
+  --mat: #f4efe6;
+  --lamp: #fff1c8;
+  --gold: #ffc62e;
+  --floor: #e8d6b8;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --plaque-h: 92px;
+  position: relative;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--ivory);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body:has(.gallery) {
+  background: #e8d6b8;
+}
+
+/* The room has its own way in (a fade, or the painting's flight): no 24px slide, whose transform
+   would also unpin the position: fixed pieces below. */
+.screen.screen-gallery {
+  animation: none;
+}
+
+/* The room fades in around the painting that is flying to its frame. */
+.gallery > :not(.gal-flyer) {
+  animation: gal-in 520ms ease-out both;
+}
+
+.gallery.shared > * {
+  animation: none;
+}
+
+@keyframes gal-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---- Wall, lamplight, floor ---- */
+
+.gal-wall {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(244, 236, 222, 0.9), rgba(244, 236, 222, 0) 55%), var(--ivory);
+}
+
+/* Paper grain. */
+.gal-wall::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.08 0 0 0 0 0.18 0 0 0 0 0.25 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.2;
+  mix-blend-mode: multiply;
+}
+
+/* Warm lamplight on the wall behind the canvas straight ahead. */
+.gal-lamp {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--top) + var(--slot-h) / 2);
+  width: calc(var(--slot-w) * 2.6);
+  height: calc(var(--slot-h) * 1.7);
+  transform: translate(-50%, -50%);
+  background: radial-gradient(closest-side, var(--lamp), rgba(255, 241, 200, 0.55) 45%, rgba(255, 241, 200, 0));
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.gal-floor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--top) + var(--slot-h) + var(--plaque-h) - 6px);
+  bottom: 0;
+  background: linear-gradient(to bottom, rgba(232, 214, 184, 0), var(--floor) 26px, var(--floor));
+  box-shadow: inset 0 40px 40px -40px rgba(20, 47, 64, 0.1);
+}
+
+/* ---- The ring ---- */
+
+.gal-stage {
+  position: absolute;
+  inset: 0;
+  perspective: var(--p);
+  perspective-origin: 50% calc(var(--top) + var(--slot-h) / 2);
+  touch-action: none;
+  cursor: grab;
+  outline: none;
+}
+
+.gal-stage:active {
+  cursor: grabbing;
+}
+
+.gal-ring {
+  position: absolute;
+  left: 50%;
+  top: var(--top);
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.gal-panel {
+  --far: 0;
+  position: absolute;
+  left: calc(var(--slot-w) / -2);
+  top: 0;
+  width: var(--slot-w);
+  margin: 0;
+  display: grid;
+  grid-template-rows: var(--slot-h) var(--plaque-h) auto;
+  justify-items: center;
+  backface-visibility: hidden;
+}
+
+/* A thin warm wood frame around a cream mat. Pictures hang with their bottom edges in line. */
+.gal-frame {
+  position: relative;
+  align-self: end;
+  width: min(100%, calc(var(--slot-h) * var(--ar)));
+  aspect-ratio: var(--ar);
+  padding: clamp(8px, 4%, 16px);
+  background: var(--mat);
+  border: 5px solid var(--wood);
+  box-shadow: 0 0 0 1px var(--hairline), 0 18px 40px rgba(20, 47, 64, 0.14);
+  opacity: 0;
+  transition: opacity 300ms;
+}
+
+.gal-panel.loaded .gal-frame,
+.gal-panel.is-new .gal-frame,
+.gal-focus .gal-frame {
+  opacity: 1;
+}
+
+.gal-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Canvases away from the front are a little darker. */
+.gal-panel .gal-frame::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  background: var(--navy);
+  opacity: calc(var(--far) * 0.3);
+  pointer-events: none;
+}
+
+.gal-plaque {
+  align-self: start;
+  margin-top: 12px;
+  max-width: 100%;
+  padding: 7px 16px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--hairline);
+  background: var(--white);
+  box-shadow: var(--shadow);
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  line-height: 1.2;
+  opacity: calc(1 - var(--far) * 0.45);
+}
+
+.gal-plaque > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gal-plaque-title {
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  line-height: 1.12;
+}
+
+.gal-plaque-meta {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--olive);
+}
+
+.gal-plaque-by,
+.gal-plaque-credit {
+  font-size: 0.82rem;
+  color: var(--navy-soft);
+}
+
+/* A faint reflection of the frame on the floor. */
+.gal-reflection {
+  width: min(100%, calc(var(--slot-h) * var(--ar)));
+  height: 110px;
+  object-fit: cover;
+  object-position: 50% 100%;
+  transform: scaleY(-1);
+  opacity: calc(0.16 - var(--far) * 0.08);
+  -webkit-mask-image: linear-gradient(to top, #000, transparent 85%);
+  mask-image: linear-gradient(to top, #000, transparent 85%);
+  pointer-events: none;
+}
+
+/* ---- The new painting: spotlight, sparkles, plaque ---- */
+
+.gal-spot {
+  position: absolute;
+  left: -45%;
+  right: -45%;
+  top: -12%;
+  height: calc(var(--slot-h) * 1.3);
+  background: radial-gradient(closest-side, var(--lamp), rgba(255, 241, 200, 0));
+  opacity: 0;
+  transition: opacity 1200ms ease-out;
+  pointer-events: none;
+}
+
+.gallery.arrived .gal-spot {
+  opacity: 0.9;
+}
+
+.gal-panel.is-new .gal-plaque {
+  opacity: 0;
+}
+
+.gallery.arrived .gal-panel.is-new .gal-plaque {
+  opacity: calc(1 - var(--far) * 0.45);
+  transition: opacity 600ms ease-out 250ms;
+}
+
+.gallery.arrived:not(.skipped) .gal-panel.is-new .gal-frame {
+  animation: gal-land 520ms var(--ease) both;
+}
+
+@keyframes gal-land {
+  0% {
+    transform: scale(1.045);
+  }
+  55% {
+    transform: scale(0.985);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+.gal-sparkles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.gal-sparkle {
+  position: absolute;
+  margin: -8px 0 0 -8px;
+  opacity: 0;
+}
+
+.gal-sparkle.gold {
+  fill: var(--gold);
+}
+
+.gal-sparkle.rose {
+  fill: var(--rose);
+}
+
+.gallery.arrived:not(.skipped) .gal-sparkle {
+  animation: gal-sparkle 900ms ease-out both;
+}
+
+@keyframes gal-sparkle {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  30% {
+    opacity: 1;
+    transform: translate(calc(var(--dx) * 0.5), calc(var(--dy) * 0.5)) scale(1.1) rotate(30deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(0.4) rotate(90deg);
+  }
+}
+
+/* The painting on its way to its frame. */
+.gal-flyer {
+  position: fixed;
+  z-index: 6;
+  object-fit: cover;
+  box-shadow: 0 18px 40px rgba(20, 47, 64, 0.14);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.gal-flyer.waiting {
+  visibility: hidden;
+}
+
+/* ---- Title and buttons ---- */
+
+.gal-head {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: calc(var(--pad) + env(safe-area-inset-top)) var(--pad) 26px;
+  background: linear-gradient(to bottom, rgba(244, 236, 222, 0.92) 55%, rgba(244, 236, 222, 0));
+  pointer-events: none;
+}
+
+.gal-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gal-title h1 {
+  font-size: clamp(1.5rem, 5vw, 2.2rem);
+}
+
+.gal-title .lede {
+  font-size: 0.85rem;
+  max-width: none;
+}
+
+.gal-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+  pointer-events: auto;
+}
+
+@media (max-width: 599px) {
+  .gal-title .lede {
+    display: none;
+  }
+
+  .gal-actions .btn {
+    min-height: 44px;
+    padding: 0 16px;
+    font-size: 0.92rem;
+  }
+}
+
+.gal-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---- The two painters ----
+   They rest side by side at the bottom, in the middle. Before that: hidden below their corners
+   (loading, fly, land), up in the corners (enter), hopping together (meet), the high five (clap). */
+
+.gal-duo {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  --corner: calc(50vw - var(--char) - 12px);
+}
+
+.gal-char {
+  position: absolute;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  width: var(--char);
+  opacity: 0;
+  transform: translate(var(--dx), 130%);
+  transition: transform 620ms var(--ease), opacity 160ms;
+}
+
+.gal-char.one {
+  left: calc(50% - var(--char));
+  --dx: calc(-1 * var(--corner));
+}
+
+.gal-char.two {
+  left: 50%;
+  --dx: var(--corner);
+}
+
+.gal-char .painter {
+  width: 100%;
+}
+
+.gallery[data-phase='enter'] .gal-char {
+  opacity: 1;
+  transform: translate(var(--dx), 0);
+}
+
+.gallery[data-phase='meet'] .gal-char,
+.gallery.clapped .gal-char {
+  opacity: 1;
+  transform: none;
+  transition-duration: 700ms, 160ms;
+  transition-timing-function: ease-in-out, linear;
+}
+
+.gallery.skipped .gal-char {
+  transition: opacity 200ms;
+}
+
+.gal-hop {
+  transform-origin: 50% 100%;
+}
+
+.gallery[data-phase='enter'] .gal-hop {
+  animation: painter-hop 620ms var(--ease) both;
+}
+
+.gallery[data-phase='meet'] .gal-hop {
+  animation: gal-hops 700ms ease-in-out both;
+}
+
+/* The high five: a quick squash where they touch. */
+.gallery[data-phase='clap'] .gal-hop {
+  animation: gal-squash 340ms ease-out both;
+}
+
+.gal-char.one .gal-hop {
+  transform-origin: 100% 100%;
+}
+
+.gal-char.two .gal-hop {
+  transform-origin: 0 100%;
+}
+
+@keyframes gal-hops {
+  0%,
+  50%,
+  100% {
+    transform: none;
+  }
+  25% {
+    transform: translateY(-26px) scale(0.97, 1.04);
+  }
+  75% {
+    transform: translateY(-18px) scale(0.97, 1.04);
+  }
+}
+
+@keyframes gal-squash {
+  0% {
+    transform: none;
+  }
+  35% {
+    transform: scale(0.84, 1.12);
+  }
+  70% {
+    transform: scale(1.05, 0.96);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* Where their hands meet: a flash, a burst of stars, a little confetti. */
+.gal-clap {
+  position: absolute;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom) + var(--char) * 0.62);
+  width: 0;
+  height: 0;
+}
+
+.gal-flash,
+.gal-clap-star,
+.gal-confetti {
+  position: absolute;
+  opacity: 0;
+}
+
+.gal-flash {
+  left: -34px;
+  top: -34px;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--white), var(--lamp) 55%, rgba(255, 241, 200, 0));
+}
+
+.gal-clap-star {
+  left: -9px;
+  top: -9px;
+  width: 18px;
+  height: 18px;
+  fill: var(--gold);
+}
+
+.gal-confetti {
+  left: -3px;
+  top: -5px;
+  width: 6px;
+  height: 10px;
+  border-radius: 1px;
+}
+
+.gal-confetti.wide {
+  width: 10px;
+  height: 6px;
+}
+
+.gallery.clapped:not(.skipped) .gal-flash {
+  animation: gal-flash 380ms ease-out both;
+}
+
+.gallery.clapped:not(.skipped) .gal-clap-star {
+  animation: gal-star 560ms ease-out both;
+}
+
+.gallery.clapped:not(.skipped) .gal-confetti {
+  animation: gal-confetti 1200ms cubic-bezier(0.2, 0.6, 0.4, 1) both;
+}
+
+@keyframes gal-flash {
+  0% {
+    opacity: 1;
+    transform: scale(0.3);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+@keyframes gal-star {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--a)) translateY(-6px) scale(0.4);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateY(-58px) scale(1.1);
+  }
+}
+
+@keyframes gal-confetti {
+  0% {
+    opacity: 1;
+    transform: none;
+  }
+  45% {
+    opacity: 1;
+    transform: translate(var(--dx), var(--dy)) rotate(var(--spin));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(var(--dx) * 1.15), calc(var(--dy) + 70px)) rotate(calc(var(--spin) * 2));
+  }
+}
+
+/* ---- What they say: the speech cloud, beside them (above them on a phone) ---- */
+
+.gal-say {
+  position: absolute;
+  z-index: 5;
+  left: calc(50% + var(--char) + 40px);
+  bottom: calc(22px + env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.gal-say .speech h1 {
+  white-space: nowrap;
+}
+
+@media (max-width: 599px) {
+  .gal-say {
+    left: 50%;
+    bottom: calc(var(--char) + 12px + env(safe-area-inset-bottom));
+    transform: translateX(calc(-50% + 12px));
+  }
+}
+
+/* ---- A canvas up close ---- */
+
+.gal-focus {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: var(--pad);
+  background: rgba(20, 47, 64, 0.62);
+  animation: gal-in 200ms ease-out both;
+}
+
+.gal-focus-card {
+  margin: 0;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  max-width: 100%;
+  animation: gal-focus-in 300ms var(--ease) both;
+}
+
+.gal-focus .gal-frame {
+  width: min(86vw, 720px, calc(58dvh * var(--ar)));
+  transition: none;
+}
+
+.gal-focus .gal-frame::after {
+  content: none;
+}
+
+.gal-focus .gal-plaque {
+  margin: 0;
+  padding: 10px 22px 12px;
+  opacity: 1;
+}
+
+.gal-focus .gal-plaque > span {
+  white-space: normal;
+}
+
+.gal-focus .gal-plaque-title {
+  font-size: 1.5rem;
+}
+
+.gal-focus-actions {
+  display: flex;
+  gap: 8px;
+}
+
+@keyframes gal-focus-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---- The hand-off's view transition: the painting flies, the room fades in around it ---- */
+
+html.hanging::view-transition-group(hung-painting) {
+  animation-duration: 900ms;
+  animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+html.hanging::view-transition-old(root),
+html.hanging::view-transition-new(root) {
+  animation-duration: 600ms;
+}
+
+/* ---- Reduced motion: the painting is simply there, the painters fade in side by side ---- */
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery > :not(.gal-flyer),
+  .gal-hop,
+  .gal-focus-card,
+  .gallery.arrived .gal-panel.is-new .gal-frame {
+    animation: none !important;
+  }
+
+  .gal-sparkle,
+  .gal-flash,
+  .gal-clap-star,
+  .gal-confetti {
+    display: none;
+  }
+
+  .gal-char {
+    transform: none;
+    animation: gal-in 300ms ease-out both;
+  }
+}

@@ -28,6 +28,11 @@ export interface Character {
    * it; {n} becomes the number of pictures to pick. Leave it out to use the default line.
    */
   pickLine?: string;
+  /**
+   * What this painter says in the gallery room after the high five (*stars* highlight). Leave it
+   * out to use the default line, "We made this together!".
+   */
+  galleryLine?: string;
   /** Renders the artwork at 100% of its container. */
   Sprite: ComponentType;
 }
