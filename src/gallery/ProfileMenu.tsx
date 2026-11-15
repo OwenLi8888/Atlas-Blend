@@ -54,7 +54,10 @@ export function ProfileMenu({ name, painter, onSettings, code, onLogOut }: Props
       className="profile-menu"
       ref={root}
       onBlur={event => {
-        if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+        // Focus moving to something outside the menu closes it. Safari does not focus a button or link
+        // that is pressed, so pressing one inside the menu blurs to nothing: closing then would remove
+        // the item before its click. A press outside is already handled by the pointerdown listener.
+        if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
       }}
     >
       <button
