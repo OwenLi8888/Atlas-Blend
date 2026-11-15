@@ -1,3 +1,4 @@
+import './MuseumSetup.css';
 import { useEffect, useRef, useState } from 'react';
 import { uploadedPainting } from '../paintings';
 import type { Painting } from '../types';

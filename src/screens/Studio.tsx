@@ -1,3 +1,4 @@
+import './Studio.css';
 import { useEffect, useRef, useState } from 'react';
 import type { Character } from '../characters';
 import { Player, type PlayerFrame } from '../engine/player';

@@ -1,0 +1,294 @@
+/* ---- Screen 3: the studio ---- */
+
+.studio {
+  height: 100dvh;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: calc(10px + env(safe-area-inset-top)) var(--pad) calc(14px + env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.studio-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.studio-title {
+  min-width: 0;
+  flex: 1;
+  text-align: right;
+}
+
+.studio-title h1 {
+  font-size: clamp(1.25rem, 4.6vw, 1.9rem);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.studio-title p {
+  font-size: 0.8rem;
+  color: var(--olive);
+}
+
+.studio-stage {
+  container-type: size;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  /* Room for the canvas card's white frame. */
+  padding: 8px;
+}
+
+.easel {
+  position: relative;
+  aspect-ratio: var(--ar);
+  width: min(100cqw, calc(100cqh * var(--ar)));
+}
+
+.canvas-card {
+  position: absolute;
+  inset: 0;
+  /* The 8px white frame is a shadow: 12 + 8 gives the frame the 20px card corner. */
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--ivory);
+  box-shadow: 0 0 0 8px var(--white), 0 0 0 9px var(--hairline), 0 18px 40px rgba(20, 47, 64, 0.14);
+}
+
+.canvas-card canvas,
+.canvas-card .original {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.canvas-card .original {
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 140ms;
+  pointer-events: none;
+}
+
+.canvas-card .original.on {
+  opacity: 1;
+}
+
+.original-tag {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--navy);
+  color: var(--white);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  opacity: 0;
+  transition: opacity 140ms;
+  pointer-events: none;
+}
+
+.original-tag.on {
+  opacity: 1;
+}
+
+.sprite {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 96px;
+  height: 96px;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform;
+  filter: drop-shadow(0 4px 6px rgba(20, 47, 64, 0.22));
+  z-index: 2;
+}
+
+.studio-controls {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 560px);
+  margin: 0 auto;
+}
+
+.progress {
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(20, 47, 64, 0.12);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--rose);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+}
+
+.progress.busy .progress-fill {
+  width: 35%;
+  transform: none !important;
+  animation: busy 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes busy {
+  from {
+    margin-left: 0;
+  }
+  to {
+    margin-left: 65%;
+  }
+}
+
+.status {
+  min-height: 1.45em;
+  font-size: 0.95rem;
+  color: var(--navy-soft);
+  /* Keeps clear of the character when it stands by over the canvas corner. */
+  padding-right: 72px;
+}
+
+/* The style menu: a native select, so a phone or kiosk shows its own picker. */
+.style-picker {
+  display: grid;
+  gap: 6px;
+}
+
+.style-select {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 48px 0 20px;
+  border-radius: 999px;
+  border: 1px solid var(--teal);
+  background-color: var(--white);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1.5l6 6 6-6' fill='none' stroke='%23142F40' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 20px center;
+  color: var(--navy);
+  font: inherit;
+  font-weight: 600;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  text-overflow: ellipsis;
+  transition: border-color 160ms;
+}
+
+.style-select:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Text-only actions: just the words, no shape. */
+.text-btn {
+  min-height: 44px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+  color: var(--navy);
+  white-space: nowrap;
+  transition: color 160ms, opacity 160ms;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.text-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.text-btn.hold {
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+.text-btn.hold.held {
+  color: var(--rose);
+}
+
+@media (hover: hover) {
+  .text-btn:not(:disabled):not(.held):hover {
+    color: var(--teal);
+  }
+  .style-select:not(:disabled):hover {
+    border-color: var(--navy);
+  }
+}
+
+/* Landscape kiosk: the canvas takes the full height, controls sit in a column beside it. */
+@media (orientation: landscape) and (min-width: 800px) {
+  .studio {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+    grid-template-rows: auto minmax(0, 1fr);
+    column-gap: clamp(24px, 4vw, 56px);
+    padding-block: 24px;
+  }
+  .studio-stage {
+    grid-column: 1;
+    grid-row: 1 / -1;
+  }
+  .studio-head {
+    grid-column: 2;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 20px;
+  }
+  .studio-title {
+    text-align: left;
+    flex: none;
+    max-width: 100%;
+  }
+  .studio-title h1 {
+    font-size: clamp(2rem, 3.4vw, 2.8rem);
+    white-space: normal;
+  }
+  .studio-title p {
+    font-size: 0.95rem;
+    margin-top: 6px;
+  }
+  .studio-controls {
+    grid-column: 2;
+    align-self: end;
+    gap: 14px;
+  }
+  .status {
+    padding-right: 0;
+    min-height: 2.9em;
+  }
+  .style-select {
+    min-height: 56px;
+  }
+}
+
+/* Short landscape phones: keep the header compact. */
+@media (orientation: landscape) and (max-width: 799px) {
+  .studio-title p {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress.busy .progress-fill {
+    animation: none;
+    width: 100%;
+    opacity: 0.4;
+  }
+}

@@ -1,0 +1,113 @@
+/* ---- Screen 1: painters ---- */
+
+.home .page-head {
+  justify-items: center;
+  text-align: center;
+  padding-top: clamp(8px, 4vh, 48px);
+}
+
+.character-grid {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(12px, 2.4vw, 20px);
+  margin-block: auto;
+}
+
+.character-card {
+  /* Three across on a phone (3 + 2), so all painters and Continue fit one screen. */
+  flex: 0 1 calc((100% - 2 * clamp(12px, 2.4vw, 20px)) / 3);
+  max-width: 190px;
+  min-width: 96px;
+  padding: 12px 6px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--hairline);
+  background: var(--white);
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  transition: border-color 160ms, box-shadow 160ms;
+}
+
+/* Before .selected, so the selected card keeps its rose border under the pointer. */
+@media (hover: hover) {
+  .character-card:hover {
+    border-color: var(--teal);
+  }
+}
+
+.character-card.selected {
+  border-color: var(--rose);
+  box-shadow: 0 0 0 2px var(--rose), var(--shadow);
+}
+
+.character-art {
+  width: min(100%, 132px);
+  aspect-ratio: 1;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.character-art > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 100%;
+}
+
+.bounce {
+  animation: bounce 520ms cubic-bezier(0.3, 0.6, 0.3, 1) 1;
+}
+
+@keyframes bounce {
+  0% {
+    transform: translateY(0) scale(1, 1);
+  }
+  28% {
+    transform: translateY(-16px) scale(0.96, 1.05);
+  }
+  60% {
+    transform: translateY(0) scale(1.06, 0.93);
+  }
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+}
+
+.character-name {
+  font-family: var(--serif);
+  font-size: clamp(1.3rem, 4.5vw, 1.55rem);
+  line-height: 1.1;
+}
+
+.character-blurb {
+  font-size: clamp(0.68rem, 2.6vw, 0.8rem);
+  line-height: 1.25;
+  color: var(--navy-soft);
+}
+
+.page-foot {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  padding-block: 12px calc(4px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, var(--ivory) 70%, rgba(231, 222, 205, 0));
+}
+
+.page-foot .btn {
+  width: min(100%, 340px);
+}
+
+@media (min-width: 960px) {
+  .character-card {
+    flex-basis: 170px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bounce {
+    animation: none;
+  }
+}

@@ -1,3 +1,4 @@
+import './Home.css';
 import type { Character } from '../characters';
 
 interface Props {

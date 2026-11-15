@@ -1,3 +1,4 @@
+import './Paintings.css';
 import type { Painting } from '../types';
 
 interface Props {
