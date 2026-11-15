@@ -1,4 +1,4 @@
-export type Rgb = [number, number, number];
+﻿export type Rgb = [number, number, number];
 
 /** One planned stroke, as written by strokesToJSON (trimmed to the fields the renderers use). */
 export interface Stroke {
@@ -40,10 +40,10 @@ export interface Painting {
   missing?: boolean;
 }
 
-export type StyleId = 'swirl' | 'shapes' | 'print';
+export type StyleId = 'swirl' | 'shapes' | 'mosaic';
 
 export const STYLES: { id: StyleId; label: string; hint: string }[] = [
   { id: 'swirl', label: 'Swirl', hint: 'Inspired by Van Gogh' },
   { id: 'shapes', label: 'Shapes', hint: "Inspired by Picasso's cubism" },
-  { id: 'print', label: 'Print', hint: 'Linocut printmaking' },
+  { id: 'mosaic', label: 'Mosaic', hint: 'A hand-made broken-tile mosaic' },
 ];

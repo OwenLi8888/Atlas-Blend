@@ -59,7 +59,7 @@ export function buildPalette(plan: StrokePlan, size = PALETTE_SIZE): Rgb[] {
   return centres;
 }
 
-function nearestIndex(palette: Rgb[], c: Rgb): number {
+export function nearestIndex(palette: Rgb[], c: Rgb): number {
   let best = 0;
   let bestD = Infinity;
   for (let i = 0; i < palette.length; i++) {

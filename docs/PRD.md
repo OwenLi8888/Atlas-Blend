@@ -38,7 +38,7 @@ real painting. It is a web app with no install.
    slots for demos.
 3. **The studio.** A canvas card with the selected character beside it. The character paints the
    chosen painting stroke by stroke over about 10 seconds in the default style (Swirl). Under the
-   canvas are three style chips: **Swirl**, **Shapes**, **Print**. Tapping a chip clears the canvas
+   canvas are three style chips: **Swirl**, **Shapes**, **Mosaic**. Tapping a chip clears the canvas
    and the character repaints the same painting in that style. Also: Replay, Back, a press-and-hold
    Compare that shows the original, a thin progress bar and a status line such as
    "Pip is painting in Swirl…".
@@ -66,7 +66,7 @@ The brief listed Cézanne's *The Basket of Apples* in the second slot; the team 
 | M4 | Style player | Any style replays all strokes in 10 s, coarse to fine, at 60 fps on a recent phone |
 | M5 | Swirl renderer | Short thick dashes following a swirling flow field, color jitter, dark edges |
 | M6 | Shapes renderer | Each stroke becomes a flat angular facet in a reduced palette with a thin navy outline |
-| M7 | Print renderer | Three inks by brightness, rough carved edges, paper gouge lines in the key ink, paper grain |
+| M7 | Mosaic renderer | Irregular broken-tile shards in thick grout, small along contours and large in flat areas, about 24 tile colors, glass gems |
 | M8 | Character follows the brush | The character's brush tip sits on the current stroke's point every frame |
 | M9 | Compare | Press and hold to see the original painting |
 | M10 | Museum setup | Staff add a painting with an image plus a JSON entry; a hidden upload panel works for demos |
@@ -127,12 +127,28 @@ instant and the character's path is identical in every style.
   quadrilateral or triangle spanning the stroke's start, end and width) at an angle snapped to 15°
   steps, filled flat with the stroke color snapped to about 10 colors posterized from the painting,
   with a thin navy outline (`#142F40` at 70%). Larger facets occasionally get hatch lines.
-- **Print (linocut).** Three inks: paper (`#E7DECD`), a mid ink (the painting's dominant hue,
-  desaturated) and a key ink (`#142F40`). Each stroke's ink comes from its color's luminance, with
-  the two thresholds set from that painting's own stroke-luminance percentiles (about the 35th and
-  70th), so low-contrast paintings still get three distinct inks. Edges are rough and jittered.
-  Key-ink strokes get thin paper-colored gouge lines along the stroke. A subtle paper grain covers
-  everything and the mid ink is slightly misregistered.
+- **Mosaic (a hand-made broken-tile mosaic).** No grid: the canvas is cut once per painting into
+  irregular, angular shards, and the layout is kept with the plan's renderer.
+  - *Tessellation.* A Voronoi diagram (`d3-delaunay`) over two kinds of seed. Contour seeds run
+    along the strokes of the last three (detail) layers, about one tile apart, in one row on the
+    path or two rows astride it, so tiles line up along edges and flow around shapes
+    ("andamento"). Background seeds are random darts kept only if nothing is closer than the local
+    spacing, which runs from about long side / 36 in flat areas down to about long side / 108
+    where detail strokes are thickest. About 35% of cells are split in two along a diagonal, every
+    corner is nudged by up to 15% of the local tile size, and about 15% of tiles have a corner
+    knocked off.
+  - *Grout.* The ground is `#A89C86`. Each shard is drawn in from its outline toward its centre
+    by about 9% of its size, at least 1.5 device px, so the grout width varies.
+  - *Painting.* As each stroke is drawn, strokes in progress included, every shard whose centre
+    it covers takes its color; the latest stroke wins, as paint would. Only shards that changed
+    are redrawn.
+  - *Color and glaze.* Colors snap to about 24 posterized from the painting (saturation lifted
+    slightly), then each shard shifts ±5% in lightness and ±4° in hue, seeded by tile index. Each
+    has a faint highlight along one edge, and about 20% carry a few sparkle specks.
+  - *Glass gems.* Six to ten round gems (radial gradient, white specular dot, soft shadow, tinted
+    from the tile they replace) are set only where the canvas is flat all round, and come out one
+    by one through the final layer. A painting with no flat areas gets none.
+  - *Finish.* When the replay ends a darker line is drawn round every shard for depth.
 
 **Stack.** Vite, React, TypeScript, Canvas 2D, `tryimpasto` for planning only. No backend: static
 files, `base: './'`. Everything runs on Windows with only Node installed (no bash, no Python). The
@@ -146,7 +162,10 @@ precompute script decodes images in Node with `jpeg-js` and `pngjs` and builds p
 3. Switching styles mid-paint restarts cleanly with no leftover strokes.
 4. The character stays on the brush and never jumps off the canvas.
 5. 60 fps on a recent iPhone (checked in a phone-sized viewport at minimum).
-6. Vermeer's face is still readable in Swirl. Monet shows three distinct inks in Print.
+6. Vermeer's face is still readable in Swirl. In Mosaic, at phone size it reads as a broken-tile
+   mosaic (irregular shards of varied size, visible grout, no grid); tiles get smaller and line up
+   along edges so Vermeer's face and the Wanderer's silhouette are recognizable; big flat areas use
+   larger random shards.
 7. Swapping a painting means editing paintings.json plus one image file, then rerunning the precompute script.
 8. `npm run build` passes with no TypeScript errors.
 9. Every screen, and every style at 50% and 100% for all four paintings, is screenshotted in a headless browser and reviewed.

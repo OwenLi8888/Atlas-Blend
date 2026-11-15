@@ -1,4 +1,4 @@
-// Drives the built app in a headless browser: screenshots every screen and every style at 50% and
+﻿// Drives the built app in a headless browser: screenshots every screen and every style at 50% and
 // 100% for all paintings, and measures the acceptance criteria (taps, timing, frame rate, the
 // character staying on the brush, clean style switches).
 //
@@ -55,7 +55,7 @@ async function launch() {
 }
 
 const paintings = JSON.parse(readFileSync(path.join(dist, 'paintings', 'paintings.json'), 'utf8'));
-const STYLES = ['Swirl', 'Shapes', 'Print'];
+const STYLES = ['Swirl', 'Shapes', 'Mosaic'];
 const PHONE = { width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true };
 const KIOSK = { width: 1180, height: 820, deviceScaleFactor: 2, isMobile: false, hasTouch: true };
 
@@ -175,7 +175,7 @@ async function timed() {
   const run = await page.evaluate(async () => {
     const canvas = document.querySelector('canvas');
     const sprite = document.querySelector('.sprite');
-    const chip = [...document.querySelectorAll('.chip')].find((c) => c.textContent === 'Shapes');
+    const chip = [...document.querySelectorAll('.chip')].find((c) => c.textContent === 'Mosaic');
     const tap = performance.now();
     chip.click();
     let firstPaint = 0;
@@ -217,7 +217,7 @@ async function timed() {
   });
   note('replay starts within 1 s of the tap', run.startMs < 1000, `${run.startMs.toFixed(0)} ms`);
   note('replay takes about 10 s', Math.abs(run.durationMs - 10000) < 800, `${(run.durationMs / 1000).toFixed(2)} s`);
-  note('frame rate (headless desktop browser, phone viewport at 3x)', run.fps > 55, `${run.fps.toFixed(1)} fps mean, p95 frame ${run.p95.toFixed(1)} ms, ${run.slow}/${run.count} frames over 25 ms`);
+  note('frame rate in Mosaic (headless desktop browser, phone viewport at 3x)', run.fps > 55, `${run.fps.toFixed(1)} fps mean, p95 frame ${run.p95.toFixed(1)} ms, ${run.slow}/${run.count} frames over 25 ms`);
   note('character never leaves the canvas while painting', run.offCanvas === 0, `${run.offCanvas} frames off the canvas`);
 
   // Switch styles mid-paint, let it finish, and compare with a clean render of the same style.
@@ -237,20 +237,20 @@ async function timed() {
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     chips.Swirl.click();
     await wait(2500);
-    chips.Print.click(); // mid-paint
+    chips.Mosaic.click(); // mid-paint
     await wait(1200);
     window.__restyle.seek(1);
     await wait(100);
     const switched = hash();
-    chips.Print.click(); // a clean replay of the same style
+    chips.Mosaic.click(); // a clean replay of the same style
     window.__restyle.seek(1);
     await wait(100);
     const clean = hash();
-    chips.Print.click();
+    chips.Mosaic.click();
     window.__restyle.seek(0.5);
     await wait(100);
     const half1 = hash();
-    chips.Print.click();
+    chips.Mosaic.click();
     window.__restyle.seek(0.5);
     await wait(100);
     return { switched, clean, half1, half2: hash() };
@@ -273,7 +273,8 @@ async function tracking() {
     const samples = [];
     for (const p of [0.02, 0.08, 0.2, 0.4, 0.6, 0.8, 0.97]) {
       player.seek(p);
-      await wait(600); // held: the sprite eases onto the point
+      // Held: the sprite eases onto the point. Counted in frames, since a headless page's frames can stall.
+      for (let f = 0; f < 45; f++) await new Promise((r) => requestAnimationFrame(r));
       const style = getComputedStyle(sprite);
       const origin = style.transformOrigin.split(' ').map(parseFloat);
       const m = new DOMMatrix(style.transform);
