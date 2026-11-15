@@ -8,6 +8,7 @@
 //   PUT  /api/picks   body: record          -> record             (one per user per session; saving again replaces it)
 //
 // record = { sessionId, user: 1 | 2, characterId, shown: [25 ids], picks: [5 ids, in pick order], pickedAt: ISO string }
+//          plus optional name, profileId, blendCode: the player's name and their Gallery API profile
 //
 // Stored in data/runtime/picks.json (git-ignored) as { [sessionId]: { "1": record, "2": record } }.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -32,6 +33,8 @@ export function validateRecord(r) {
   if (!distinctIds(r.picks, PICKS)) return `picks must be ${PICKS} different photo ids`;
   if (!r.picks.every((id) => r.shown.includes(id))) return 'Every pick must be one of the shown photos';
   if (typeof r.pickedAt !== 'string' || Number.isNaN(Date.parse(r.pickedAt))) return 'pickedAt must be an ISO timestamp';
+  // Optional: who this is, and their Gallery API profile, so the other device can blend with them.
+  const text = (v, max) => (typeof v === 'string' && v.trim() && v.length <= max ? v.trim() : undefined);
   return {
     sessionId: r.sessionId,
     user: r.user,
@@ -39,6 +42,9 @@ export function validateRecord(r) {
     shown: r.shown,
     picks: r.picks,
     pickedAt: new Date(r.pickedAt).toISOString(),
+    name: text(r.name, 40),
+    profileId: text(r.profileId, 64),
+    blendCode: text(r.blendCode, 12),
   };
 }
 

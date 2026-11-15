@@ -14,8 +14,8 @@ export interface CastMember {
 /** One canvas to paint in paint mode: a 2D canvas the screen draws on, shown on an easel. */
 export interface Work {
   canvas: HTMLCanvasElement;
-  /** Width / height of the picture. */
-  aspect: number;
+  /** Width / height of the picture, if known yet. `setAspect` can set it later. */
+  aspect?: number;
 }
 
 export interface StudioScene {
@@ -29,6 +29,10 @@ export interface StudioScene {
   setBrush(u: number, v: number): void;
   /** The canvas being painted is finished: the painter moves on. Paint mode. */
   workDone(): void;
+  /** Reshape canvas `index` for a picture of this aspect (width / height). Paint mode. */
+  setAspect(index: number, aspect: number): void;
+  /** Bring the camera in on canvas `index` to look at it, or null to step back. Paint mode. */
+  view(index: number | null): void;
   dispose(): void;
 }
 
@@ -43,10 +47,15 @@ export interface StudioSceneOptions {
   mode?: 'pick' | 'paint';
   onPick?: (id: string) => void;
   painterId?: string | null;
+  /** One per easel, left to right. */
   works?: Work[];
+  /** The order the easels are painted in, as indexes into `works`. Default: left to right. */
+  sequence?: number[];
   /** The painter stands at canvas `index` with its brush up: start drawing on `works[index].canvas`. */
   onReady?: (index: number) => void;
   onAllDone?: () => void;
+  /** A canvas was tapped. */
+  onCanvas?: (index: number) => void;
 }
 
 export function createStudioScene(canvas: HTMLCanvasElement, options: StudioSceneOptions): StudioScene;

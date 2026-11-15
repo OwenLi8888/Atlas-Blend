@@ -21,6 +21,11 @@ export interface PicksRecord {
   picks: string[];
   /** ISO timestamp. */
   pickedAt: string;
+  /** The player's name, as typed on page 1. */
+  name?: string;
+  /** Their profile in the Gallery API (server/), when it was reachable: lets the other device blend with them. */
+  profileId?: string;
+  blendCode?: string;
 }
 
 const API = 'api/picks';

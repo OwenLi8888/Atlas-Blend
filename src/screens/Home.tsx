@@ -7,6 +7,11 @@ interface Props {
   characters: Character[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** The player's name, shown to the other player later. */
+  name: string;
+  onName: (name: string) => void;
+  /** Which of the two players this device is. */
+  player: 1 | 2;
   onContinue: () => void;
 }
 
@@ -15,7 +20,7 @@ interface Props {
  * in the scene or on its name. On a phone the text sits above and the choice below the picture; on
  * a wide screen it is a column on the left and the picture moves right to make room.
  */
-export function Home({ characters, selectedId, onSelect, onContinue }: Props) {
+export function Home({ characters, selectedId, onSelect, name, onName, player, onContinue }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<StudioScene | null>(null);
@@ -70,9 +75,22 @@ export function Home({ characters, selectedId, onSelect, onContinue }: Props) {
       <canvas ref={canvasRef} className="home-scene" aria-hidden="true" />
       <div ref={panelRef} className="home-panel">
         <header className="home-head">
-          <p className="eyebrow">Atlas</p>
+          <p className="eyebrow">Atlas · Player {player} of 2</p>
           <h1>Choose your painter</h1>
-          <p className="lede">Tap a painter in the studio. They will repaint a painting from this gallery while you watch.</p>
+          <p className="lede">Tap a painter in the studio. It will paint what you and your friend love.</p>
+          <label className="player-name">
+            <span className="eyebrow">Your name</span>
+            <input
+              type="text"
+              value={name}
+              maxLength={24}
+              placeholder="Type your name"
+              autoComplete="given-name"
+              enterKeyHint="done"
+              onChange={(e) => onName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+            />
+          </label>
         </header>
 
         <div className="home-choice">
@@ -104,7 +122,7 @@ export function Home({ characters, selectedId, onSelect, onContinue }: Props) {
               'Nobody picked yet'
             )}
           </p>
-          <button type="button" className="btn primary" disabled={!selectedId} onClick={onContinue}>
+          <button type="button" className="btn primary" disabled={!selectedId || !name.trim()} onClick={onContinue}>
             Continue
           </button>
         </div>

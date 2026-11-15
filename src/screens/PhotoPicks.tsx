@@ -10,6 +10,8 @@ import type { Session } from '../picks/session';
 interface Props {
   character: Character;
   session: Session;
+  /** Who is picking: saved with the picks so the other device can show the name and blend. */
+  identity?: Pick<PicksRecord, 'name' | 'profileId' | 'blendCode'>;
   onBack: () => void;
   /** Called a moment after the picks are saved, once the character has said so. */
   onDone: (record: PicksRecord) => void;
@@ -25,7 +27,10 @@ const CONFIRM_MS = 1600;
  * gallery wall (src/picks/masonry.ts). Which 25 comes from the session id (src/picks/pool.ts), so
  * the other user's device shows a different 25.
  */
-export function PhotoPicks({ character, session, onBack, onDone }: Props) {
+export function PhotoPicks({ character, session, identity, onBack, onDone }: Props) {
+  // read at save time: the Gallery API profile may arrive while the visitor is still picking
+  const identityRef = useRef(identity);
+  identityRef.current = identity;
   const [photos, setPhotos] = useState<PoolPhoto[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [picks, setPicks] = useState<string[]>([]);
@@ -89,6 +94,7 @@ export function PhotoPicks({ character, session, onBack, onDone }: Props) {
       shown: photos.map((p) => p.id),
       picks,
       pickedAt: new Date().toISOString(),
+      ...identityRef.current,
     };
     const where = await savePicks(record);
     setHint(where === 'device' ? 'Saved on this device only: the picks server did not answer.' : '');
