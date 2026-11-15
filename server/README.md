@@ -1,6 +1,6 @@
 # Gallery API
 
-The backend for Gallery Blend: profiles, hearts, recommendations and blends.
+The backend for Atlas Blend: profiles, hearts, recommendations and blends.
 
 ## Run it
 
