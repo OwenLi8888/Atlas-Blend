@@ -1,0 +1,152 @@
+/* The hand-off over the painting page (HangItUp.tsx): the painter with its speech cloud, the
+   "Hang it up" button with its 10 s ring, and the painting as it lifts off. Phone: above the
+   painting page's progress strip. Wide screen: right of its left column. */
+
+.hang {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(196px + env(safe-area-inset-bottom));
+  z-index: 5;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 0 var(--pad);
+  pointer-events: none;
+}
+
+.hang > * {
+  pointer-events: auto;
+}
+
+.hang-guide {
+  display: flex;
+  align-items: center;
+  /* Room for the cloud's tail of little bubbles. */
+  gap: clamp(30px, 5vw, 42px);
+  padding-top: 10px;
+  max-width: 100%;
+}
+
+.hang-guide .painter {
+  width: clamp(72px, 20vw, 112px);
+}
+
+.hang-actions {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  animation: hang-in 300ms cubic-bezier(0.2, 0.7, 0.2, 1) 500ms both;
+}
+
+.hang-button {
+  position: relative;
+  display: inline-flex;
+}
+
+/* A thin ring just outside the button. It fills clockwise in 10 s. */
+.hang-ring {
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.hang-ring rect {
+  fill: none;
+  stroke-width: 2.5px;
+}
+
+.hang-ring .track {
+  stroke: var(--white);
+  opacity: 0.7;
+}
+
+.hang-ring .fill {
+  stroke: var(--navy);
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+/* The quiet link of the paintings screen (.link in Paintings.css), on a veil so it reads over the studio. */
+.hang-stay {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  font-size: 0.82rem;
+  color: var(--navy);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--navy-soft);
+  text-shadow: 0 0 6px rgba(244, 236, 222, 1), 0 0 2px rgba(244, 236, 222, 1);
+}
+
+@media (hover: hover) {
+  .hang-stay:hover {
+    color: var(--teal);
+  }
+}
+
+.hang.lifting .hang-actions,
+.hang.lifting .hang-guide {
+  opacity: 0;
+  transition: opacity 200ms;
+  pointer-events: none;
+}
+
+/* The finished painting, lifted off its canvas: a slight scale-up and a shadow under it. */
+.hang-lift {
+  position: fixed;
+  left: 50%;
+  top: 46%;
+  max-width: min(72vw, 520px);
+  max-height: 54dvh;
+  translate: -50% -50%;
+  box-shadow: 0 0 0 6px var(--white), 0 30px 60px rgba(20, 47, 64, 0.3);
+  animation: hang-lift 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  pointer-events: none;
+}
+
+@keyframes hang-lift {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+    box-shadow: 0 0 0 6px var(--white), 0 4px 8px rgba(20, 47, 64, 0.1);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes hang-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (min-width: 900px) and (min-aspect-ratio: 1/1) {
+  .hang {
+    left: clamp(320px, 28vw, 420px);
+    bottom: 48px;
+  }
+
+  .hang-lift {
+    left: calc(50% + clamp(160px, 14vw, 210px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hang-actions,
+  .hang-lift {
+    animation: none;
+  }
+}

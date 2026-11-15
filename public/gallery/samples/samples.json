@@ -1,0 +1,79 @@
+[
+  {
+    "id": "sample-01",
+    "file": "sample-01.jpg",
+    "title": "Morning Study",
+    "style": "Swirl",
+    "credit": "Placeholder: replace with a real painting"
+  },
+  {
+    "id": "sample-02",
+    "file": "sample-02.jpg",
+    "title": "Harbour Study",
+    "style": "Shapes",
+    "credit": "Placeholder: replace with a real painting"
+  },
+  {
+    "id": "sample-03",
+    "file": "sample-03.jpg",
+    "title": "Garden Study",
+    "style": "Mosaic",
+    "credit": "Placeholder: replace with a real painting"
+  },
+  {
+    "id": "sample-04",
+    "file": "sample-04.jpg",
+    "title": "Hillside Study",
+    "style": "Swirl",
+    "credit": "Placeholder: replace with a real painting"
+  },
+  {
+    "id": "sample-05",
+    "file": "sample-05.jpg",
+    "title": "Window Study",
+    "style": "Shapes",
+    "credit": "Placeholder: replace with a real painting"
+  },
+  {
+    "id": "sample-06",
+    "file": "sample-06.jpg",
+    "title": "Market Study",
+    "style": "Mosaic",
+    "credit": "Placeholder: replace with a real painting"
+  },
+  {
+    "id": "sample-07",
+    "file": "sample-07.jpg",
+    "title": "River Study",
+    "style": "Swirl",
+    "credit": "Placeholder: replace with a real painting"
+  },
+  {
+    "id": "sample-08",
+    "file": "sample-08.jpg",
+    "title": "Orchard Study",
+    "style": "Shapes",
+    "credit": "Placeholder: replace with a real painting"
+  },
+  {
+    "id": "sample-09",
+    "file": "sample-09.jpg",
+    "title": "Evening Study",
+    "style": "Mosaic",
+    "credit": "Placeholder: replace with a real painting"
+  },
+  {
+    "id": "sample-10",
+    "file": "sample-10.jpg",
+    "title": "Rooftop Study",
+    "style": "Swirl",
+    "credit": "Placeholder: replace with a real painting"
+  },
+  {
+    "id": "sample-11",
+    "file": "sample-11.jpg",
+    "title": "Meadow Study",
+    "style": "Shapes",
+    "credit": "Placeholder: replace with a real painting"
+  }
+]

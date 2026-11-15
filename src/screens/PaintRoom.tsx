@@ -5,6 +5,7 @@ import { createPictures, styleNote, type Slot } from '../blend/pictures';
 import { saveWork, snapshot } from '../blend/works';
 import { studioCast, type Character } from '../characters';
 import { Player } from '../engine/player';
+import type { FinalPainting } from '../gallery/galleryData';
 import { getSessionPicks, type PicksRecord } from '../picks/picksStore';
 import { loadPool, photoUrl, type PoolPhoto } from '../picks/pool';
 import type { Session } from '../picks/session';
@@ -26,6 +27,16 @@ interface Props {
   onGallery: (live: GalleryItem[]) => void;
   /** The gallery is open over the studio: stop drawing the room (the painting itself carries on). */
   paused?: boolean;
+  /**
+   * HAND-OFF TO THE GALLERY ROOM (src/gallery/HangItUp.tsx listens to this through App.tsx).
+   * Called when the last canvas is done with the painting to hang: the piece between the two
+   * players (the centre canvas), or the last canvas painted when that one stayed blank. Called
+   * with null when painting starts again. This is the only thing the gallery room needs from here.
+   * TODO: the no-WebGL fallback (<Studio>) does not report completion.
+   */
+  onPaintingComplete?: (painting: FinalPainting | null) => void;
+  /** A finished canvas is being looked at up close (its card is open), or no longer is. */
+  onReading?: (open: boolean) => void;
 }
 
 /** The three easels, left to right, and what each one is for. */
@@ -75,7 +86,11 @@ export function PaintRoom(props: Props) {
   return <Room {...props} pool={pool} />;
 }
 
-function Room({ character, session, record, player, onBack, onGallery, paused = false, pool }: Props & { pool: PoolPhoto[] }) {
+function Room({ character, session, record, player, onBack, onGallery, paused = false, onPaintingComplete, onReading, pool }: Props & { pool: PoolPhoto[] }) {
+  const completeRef = useRef(onPaintingComplete);
+  completeRef.current = onPaintingComplete;
+  const readingRef = useRef(onReading);
+  readingRef.current = onReading;
   const sceneRef = useRef<HTMLCanvasElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -110,6 +125,9 @@ function Room({ character, session, record, player, onBack, onGallery, paused = 
     let current = -1;
     const players: Player[] = [];
     const objectUrls: string[] = [];
+    /** The easels whose canvas is finished, in the order they were painted, and each one's title. */
+    const finishedAt: number[] = [];
+    const titles: string[] = [];
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const sheets = [0, 1, 2].map(() => {
       const sheet = document.createElement('canvas');
@@ -137,6 +155,7 @@ function Room({ character, session, record, player, onBack, onGallery, paused = 
     setPainted([]);
     setDone(false);
     setViewing(null);
+    completeRef.current?.(null);
     const bar = (progress: number) => {
       if (barRef.current) barRef.current.style.transform = `scaleX(${progress})`;
     };
@@ -204,6 +223,7 @@ function Room({ character, session, record, player, onBack, onGallery, paused = 
         return void scene?.workDone();
       }
       setSlots((s) => s.map((old, k) => (k === i ? slot : old)));
+      titles[i] = slot.painting.title;
       sizeSheet(i, slot.aspect);
       scene?.setAspect(i, slot.aspect);
       setWaiting('plan');
@@ -229,6 +249,7 @@ function Room({ character, session, record, player, onBack, onGallery, paused = 
         onDone: () => {
           player2d.destroy(); // the finished picture stays on its canvas
           players.splice(players.indexOf(player2d), 1);
+          finishedAt.push(i);
           setPainted((p) => [...p, i]);
           saveWork({
             // one copy per round of picks and easel: a room code that comes round again keeps the earlier visit's paintings
@@ -263,6 +284,16 @@ function Room({ character, session, record, player, onBack, onGallery, paused = 
           current = -1;
           bar(1);
           setDone(true);
+          // Hand-off to the gallery room: see onPaintingComplete in Props.
+          const hung = finishedAt.includes(BLEND) ? BLEND : finishedAt.at(-1);
+          if (hung === undefined) return;
+          completeRef.current?.({
+            // a copy small enough to keep on the device, where the gallery room reads it back after a refresh
+            imageUrl: snapshot(sheets[hung], 720),
+            title: titles[hung],
+            style: styleLabel(hung),
+            createdAt: new Date().toISOString(),
+          });
         },
         onCanvas: (i) => setViewing((v) => (v === i ? null : i)),
       });
@@ -290,6 +321,7 @@ function Room({ character, session, record, player, onBack, onGallery, paused = 
   const shown = viewing !== null && painted.includes(viewing) && slots[viewing] ? viewing : null;
   useEffect(() => {
     studio.current?.view(shown);
+    readingRef.current?.(shown !== null);
   }, [shown]);
 
   useEffect(() => {

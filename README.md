@@ -51,6 +51,23 @@ never see the same picture, and a refresh shows the same 25 with the picks made 
 { "sessionId": "abc123", "user": 1, "characterId": "ember", "shown": ["p017", "…25 ids"], "picks": ["p042", "p003", "p091", "p066", "p010"], "pickedAt": "2026-11-15T05:48:19.456Z" }
 ```
 
+## The gallery room (last screen)
+
+When the painter has finished, it offers to hang the painting ("Hang it up", or 10 s without a tap)
+and the painting flies into a round gallery of 12 framed canvases. `?view=gallery` opens the room
+directly: `http://localhost:5173/?session=abc123&user=1&view=gallery`.
+
+- From the painting page: `PaintRoom` calls its `onPaintingComplete(painting | null)` prop. That is
+  the whole interface; `src/gallery/HangItUp.tsx` and `src/App.tsx` do the rest.
+- The painting the room hangs: `getFinalPainting(sessionId)` in `src/gallery/galleryData.ts`. Today
+  it is what this device finished (kept in localStorage), else `public/gallery/placeholder.jpg`.
+- The pictures around it: 11 of the 100 pool photos (`public/pool/`), chosen by the session id, so
+  both devices see the same wall and each session a different one (`loadWall` in the same file).
+  Only if the pool cannot be loaded do the stand-ins in `public/gallery/samples/` hang there.
+- A painter's own line after the high five: `galleryLine` in `src/characters.tsx`.
+- Check it: with `npm run dev -- --port 5199` running, `node scripts/gallery-shots.mjs` plays the
+  whole flow at 1440 and 390 wide, checks the layout and saves `screenshots/gallery-*.png`.
+
 ## Swap a painting
 
 1. Put the image in `public/paintings/`. To shrink a large file to a web-sized JPEG:
