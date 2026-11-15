@@ -10,13 +10,15 @@ interface Props {
   profile: Profile;
   hearts: readonly HeartedWork[];
   onHearts: (hearts: HeartedWork[]) => void;
+  /** Called when the server no longer knows this profile, so the visitor can start again. */
+  onSessionLost: () => void;
 }
 
 /**
  * Your gallery: one wall of works hung from what you have hearted. Hearting a
  * work does not reshuffle anything; the wall only changes when you ask it to.
  */
-export function Wall({ profile, hearts, onHearts }: Props) {
+export function Wall({ profile, hearts, onHearts, onSessionLost }: Props) {
   const [wall, setWall] = useState<Recommendation[] | null>(null);
   const [changes, setChanges] = useState(0);
   const [hanging, setHanging] = useState(false);
@@ -56,6 +58,10 @@ export function Wall({ profile, hearts, onHearts }: Props) {
       }
       setChanges(count => count + 1);
     } catch (failure) {
+      if (failure instanceof ApiFailure && failure.status === 404 && failure.message === 'Profile not found') {
+        onSessionLost();
+        return;
+      }
       setError(messageOf(failure));
     }
   };
@@ -130,6 +136,11 @@ export function Wall({ profile, hearts, onHearts }: Props) {
             <span>{openHeart ? 'Hearted' : 'Heart this work'}</span>
           </div>
           {openHeart && <WhyField key={open.id} saved={openHeart.why} onSave={why => saveWhy(open, why)} />}
+          {error && (
+            <p className="quiet" role="alert">
+              {error}
+            </p>
+          )}
         </Detail>
       )}
     </main>

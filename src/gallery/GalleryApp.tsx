@@ -102,6 +102,10 @@ export function GalleryApp() {
           profile={profile}
           hearts={session.hearts}
           onHearts={hearts => setSession({ state: 'ready', profile, hearts })}
+          onSessionLost={() => {
+            forgetUserId();
+            void load(null);
+          }}
         />
       )}
 

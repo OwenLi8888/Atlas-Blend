@@ -2,6 +2,7 @@
 import type {
   BlendRequest,
   BlendResponse,
+  Commission,
   CreateProfileRequest,
   ErrorResponse,
   HeartRequest,
@@ -61,6 +62,7 @@ export const api = {
   recs: (userId: string) => request<RecsResponse>('GET', '/api/recs/' + userId),
   blend: (userId: string, code: string) =>
     request<BlendResponse>('POST', '/api/blend', { user_id: userId, code } satisfies BlendRequest),
+  commission: (blendId: string) => request<Commission>('GET', '/api/blend/' + blendId + '/commission'),
   /** Same-origin copy of an artwork image, for the canvas (the image host sends no CORS headers). */
   imageUrl: (artId: string) => '/api/image?id=' + encodeURIComponent(artId),
 };

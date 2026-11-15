@@ -583,9 +583,22 @@ button.heart:hover svg {
 
 /* --- The reveal ----------------------------------------------------------- */
 
-.reveal-names {
-  margin: clamp(12px, 3vw, 36px) 0 clamp(28px, 4vw, 56px);
+.reveal-head {
+  margin: clamp(8px, 2vw, 24px) 0 clamp(28px, 4vw, 52px);
   text-align: center;
+}
+
+.reveal-match {
+  margin-top: 10px;
+  font-family: var(--serif);
+  font-size: clamp(1.5rem, 2.6vw, 2rem);
+  line-height: 1.1;
+  color: var(--muted);
+}
+
+.reveal-match strong {
+  font-weight: 400;
+  color: var(--ink);
 }
 
 .reveal-stage {
@@ -595,21 +608,43 @@ button.heart:hover svg {
   align-items: center;
 }
 
-.bridge {
+.leanings {
   animation: rise 1.2s ease both;
 }
 
-.bridge .hung {
-  margin-bottom: 0;
+.leanings ul {
+  display: grid;
+  gap: 16px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
 }
 
-.bridge-why {
-  margin-top: 12px;
+.leaning {
+  display: grid;
+  grid-template-columns: minmax(56px, 38%) minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: none;
+  text-align: left;
+  cursor: zoom-in;
+}
+
+.leaning img {
+  display: block;
+  width: 100%;
+  max-height: 104px;
+  object-fit: cover;
+  background: var(--ground);
+}
+
+.leaning span {
   font-family: var(--serif);
-  font-style: italic;
   font-size: 1.05rem;
-  line-height: 1.35;
-  color: var(--muted);
+  line-height: 1.2;
 }
 
 .painting {
@@ -629,6 +664,43 @@ button.heart:hover svg {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.interlude {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  border: 0;
+  padding: 0;
+  background: var(--ground);
+  box-shadow: var(--shadow);
+  cursor: zoom-in;
+  animation: rise 1.2s ease both;
+}
+
+.interlude img {
+  display: block;
+  width: 100%;
+  max-height: 52dvh;
+  object-fit: contain;
+}
+
+.making {
+  margin-bottom: 8px;
+  color: var(--ink);
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+.reveal-plate em {
+  font-family: var(--serif);
+  font-size: 1.08rem;
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.45;
+  }
 }
 
 .painting-original {
@@ -673,43 +745,13 @@ button.heart:hover svg {
 }
 
 .reveal-story {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: clamp(28px, 6vw, 96px);
-  align-items: center;
-  max-width: 980px;
-  margin: 0 auto;
-  padding-top: clamp(32px, 4vw, 56px);
-  border-top: 1px solid var(--line);
-}
-
-.score {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.score strong {
+  max-width: 38rem;
+  margin: 18px auto 0;
   font-family: var(--serif);
-  font-weight: 400;
-  font-size: clamp(4.5rem, 10vw, 8rem);
-  line-height: 0.9;
-  letter-spacing: -0.02em;
-}
-
-.score span {
-  margin-top: 10px;
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.story {
-  font-family: var(--serif);
-  font-size: clamp(1.25rem, 2.1vw, 1.7rem);
-  line-height: 1.32;
+  font-size: clamp(1.15rem, 1.7vw, 1.4rem);
+  line-height: 1.4;
+  color: var(--ink);
+  animation: rise 0.9s ease 0.2s both;
 }
 
 @keyframes fade {
@@ -734,8 +776,7 @@ button.heart:hover svg {
   }
 
   .detail-inner,
-  .blend-columns,
-  .reveal-story {
+  .blend-columns {
     grid-template-columns: minmax(0, 1fr);
   }
 
