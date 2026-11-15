@@ -8,6 +8,8 @@ interface Props {
   profile: Profile;
   /** Shows a new choice everywhere at once; this page saves it. */
   onPainter: (painter: ChosenPainter) => void;
+  /** Shows the username just saved everywhere at once. */
+  onUsername: (username: string) => void;
 }
 
 /** A name is saved once the typing stops for this long. */
@@ -58,7 +60,7 @@ function usePainterSaving(userId: string) {
 }
 
 /** Things a person sets once: for now, which painter is theirs and what it is called. */
-export function Settings({ profile, onPainter }: Props) {
+export function Settings({ profile, onPainter, onUsername }: Props) {
   const { painter } = painterOf(profile);
   const name = profile.painter?.name ?? '';
   const { status, save } = usePainterSaving(profile.id);
@@ -115,24 +117,28 @@ export function Settings({ profile, onPainter }: Props) {
         </div>
       </section>
 
-      <PasscodeField userId={profile.id} code={profile.blend_code} />
+      <PasscodeField userId={profile.id} code={profile.blend_code} saved={profile.username} onSaved={onUsername} />
     </main>
   );
 }
 
 const MIN_PASSCODE_LENGTH = 4;
+const MIN_USERNAME_LENGTH = 3;
 
-/** Sets the passcode that, with the person's code, opens their gallery on another browser. */
-function PasscodeField({ userId, code }: { userId: string; code: string }) {
+/** Sets the username and passcode that open the person's gallery on another browser. */
+function PasscodeField({ userId, code, saved, onSaved }: { userId: string; code: string; saved: string | null; onSaved: (username: string) => void }) {
   const [passcode, setPasscode] = useState('');
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(saved ?? '');
   const [status, setStatus] = useState<SaveState>({ state: 'idle' });
 
+  /** A username and a passcode go together: neither is saved without the other. */
+  const complete = username.length >= MIN_USERNAME_LENGTH && passcode.length >= MIN_PASSCODE_LENGTH;
+
   const save = async () => {
-    if (passcode.length < MIN_PASSCODE_LENGTH || status.state === 'saving') return;
+    if (!complete || status.state === 'saving') return;
     setStatus({ state: 'saving' });
     try {
-      await api.setPasscode(userId, passcode, username);
+      onSaved((await api.setPasscode(userId, passcode, username)).username);
       setPasscode('');
       setStatus({ state: 'saved' });
     } catch (failure) {
@@ -144,7 +150,7 @@ function PasscodeField({ userId, code }: { userId: string; code: string }) {
     <section className="settings-passcode">
       <h2 className="eyebrow">Getting back in</h2>
       <p>
-        Your code is <strong>{code}</strong>. On another browser, it opens your gallery. Set a username and passcode to sign in with those.
+        {saved ? 'You sign in as ' + saved + '. Change your username or passcode here.' : 'Set a username and passcode to open your gallery on another browser. Without them it can only be opened on this one.'} Your code, <strong>{code}</strong>, is for blending with friends.
       </p>
       <form
         onSubmit={event => {
@@ -158,7 +164,7 @@ function PasscodeField({ userId, code }: { userId: string; code: string }) {
             type="text"
             value={username}
             maxLength={20}
-            placeholder="Optional"
+            placeholder="At least 3 characters"
             autoComplete="username"
             autoCapitalize="none"
             spellCheck={false}
@@ -175,7 +181,7 @@ function PasscodeField({ userId, code }: { userId: string; code: string }) {
             value={passcode}
             minLength={MIN_PASSCODE_LENGTH}
             maxLength={64}
-            placeholder="At least 4 characters"
+            placeholder={saved ? 'New passcode' : 'At least 4 characters'}
             autoComplete="new-password"
             onChange={event => {
               setPasscode(event.target.value);
@@ -183,7 +189,7 @@ function PasscodeField({ userId, code }: { userId: string; code: string }) {
             }}
           />
         </label>
-        <button type="submit" className="button" disabled={passcode.length < MIN_PASSCODE_LENGTH || status.state === 'saving'}>
+        <button type="submit" className="button" disabled={!complete || status.state === 'saving'}>
           {status.state === 'saving' ? 'Saving…' : 'Save'}
         </button>
       </form>

@@ -23,7 +23,7 @@ interface Snapshot {
   blends: StoredBlendRow[];
   /** Passcode hashes by profile ID. Absent in files saved before passcodes. */
   passcodes?: Record<string, string>;
-  /** Usernames by profile ID. */
+  /** Usernames by profile ID, in files saved before they were kept on the profile. */
   usernames?: Record<string, string>;
 }
 
@@ -37,12 +37,11 @@ export function createMemoryDb(options: MemoryDbOptions = {}): MemoryDb {
   const saved = file ? readSnapshot(file) : null;
   // A file saved before painters were kept on the profile has none: those profiles have not chosen.
   const profiles = new Map<string, Profile>(
-    (saved?.profiles ?? []).map(profile => [profile.id, { ...profile, painter: profile.painter ?? null }]),
+    (saved?.profiles ?? []).map(profile => [profile.id, { ...profile, painter: profile.painter ?? null, username: profile.username ?? saved?.usernames?.[profile.id] ?? null }]),
   );
   const hearts = new Map<string, Heart[]>(Object.entries(saved?.hearts ?? {}));
   const blends: StoredBlendRow[] = saved?.blends ?? [];
   const passcodes = new Map<string, string>(Object.entries(saved?.passcodes ?? {}));
-  const usernames = new Map<string, string>(Object.entries(saved?.usernames ?? {}));
 
   // Timestamps always move forward, so "newest first" is well defined even within one millisecond.
   let lastTime = 0;
@@ -53,7 +52,7 @@ export function createMemoryDb(options: MemoryDbOptions = {}): MemoryDb {
 
   const persist = () => {
     if (!file) return;
-    const snapshot: Snapshot = { profiles: [...profiles.values()], hearts: Object.fromEntries(hearts), blends, passcodes: Object.fromEntries(passcodes), usernames: Object.fromEntries(usernames) };
+    const snapshot: Snapshot = { profiles: [...profiles.values()], hearts: Object.fromEntries(hearts), blends, passcodes: Object.fromEntries(passcodes) };
     mkdirSync(path.dirname(file), { recursive: true });
     // Written to a temporary name first, so a crash mid-write never leaves half a file.
     writeFileSync(file + '.tmp', JSON.stringify(snapshot));
@@ -82,6 +81,7 @@ export function createMemoryDb(options: MemoryDbOptions = {}): MemoryDb {
         blend_code: code ?? generateBlendCode(),
         created_at: timestamp(),
         painter: painterId ? { id: painterId, name: '' } : null,
+        username: null,
       };
       profiles.set(profile.id, profile);
       hearts.set(profile.id, [...new Set(artIds)].map(artId => ({ art_id: artId, why: null, created_at: timestamp() })));
@@ -113,14 +113,14 @@ export function createMemoryDb(options: MemoryDbOptions = {}): MemoryDb {
       persist();
     },
     async saveUsername(userId, username) {
-      if (!profiles.has(userId)) throw new ApiError(404, 'Profile not found');
-      if ([...usernames].some(([owner, taken]) => taken === username && owner !== userId)) throw new ApiError(409, 'That username is taken');
-      usernames.set(userId, username);
+      const profile = profiles.get(userId);
+      if (!profile) throw new ApiError(404, 'Profile not found');
+      if ([...profiles.values()].some(other => other.username === username && other.id !== userId)) throw new ApiError(409, 'That username is taken');
+      profiles.set(userId, { ...profile, username });
       persist();
     },
     async findProfileByUsername(username) {
-      const owner = [...usernames].find(([, taken]) => taken === username)?.[0];
-      return (owner !== undefined && profiles.get(owner)) || null;
+      return [...profiles.values()].find(profile => profile.username === username) ?? null;
     },
     async savePasscode(userId, hash) {
       if (!profiles.has(userId)) throw new ApiError(404, 'Profile not found');

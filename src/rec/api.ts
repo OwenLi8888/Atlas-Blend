@@ -35,6 +35,8 @@ export interface Profile {
   created_at: string;
   /** Null for a profile that never chose: one is then picked for it, the same every time. */
   painter: ChosenPainter | null;
+  /** What the person signs in with, once they have set it; null until then. */
+  username: string | null;
 }
 
 export interface Heart {
@@ -67,19 +69,22 @@ export interface CreateProfileRequest {
   painter_id?: PainterId;
 }
 
-/** POST /api/sign-in: opens an existing gallery by its own blend code. Answers 404 when no profile has it. */
+/** POST /api/sign-in: opens an existing gallery with its username and passcode. Answers 401 when they do not match. */
 export interface SignInRequest {
-  /** The person's username, or their gallery's own code. */
-  code: string;
-  /** Needed when the gallery has a passcode (401 without it, or with the wrong one). */
-  passcode?: string;
+  username: string;
+  passcode: string;
 }
 
-/** POST /api/profile/:user_id/passcode: sets or changes the passcode, 4 to 64 characters. Answers 204. */
+/** POST /api/profile/:user_id/passcode: sets or changes what the person signs in with; the passcode is 4 to 64 characters. */
+export interface PasscodeResponse {
+  /** The username as it was saved (lower case). */
+  username: string;
+}
+
 export interface PasscodeRequest {
   passcode: string;
-  /** 3 to 20 letters, numbers or underscores; to sign in with instead of the code. 409 when taken. */
-  username?: string;
+  /** 3 to 20 letters, numbers or underscores. 409 when someone else has it. */
+  username: string;
 }
 
 /** POST /api/profile/:user_id/painter: chooses the person's painter, or renames it. */

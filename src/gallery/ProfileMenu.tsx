@@ -9,14 +9,16 @@ interface Props {
   painter: Painter;
   /** Whether the Settings page is the one open. */
   onSettings: boolean;
-  /** The person's own code: it is also how they get back in after logging out, or on another browser. */
+  /** The person's own code, which they give to friends to blend. */
   code: string;
+  /** What they sign in with; null until they have set it. */
+  username: string | null;
   /** Leaves this gallery on this browser. */
   onLogOut: () => void;
 }
 
 /** The person's picture at the end of the bar; pressing it opens what belongs to them. */
-export function ProfileMenu({ name, painter, onSettings, code, onLogOut }: Props) {
+export function ProfileMenu({ name, painter, onSettings, code, username, onLogOut }: Props) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -86,7 +88,15 @@ export function ProfileMenu({ name, painter, onSettings, code, onLogOut }: Props
             Settings
           </a>
           <p className="profile-code">
-            Your code is <strong>{code}</strong>. Set a username and passcode in Settings to sign in from anywhere.
+            {username ? (
+              <>
+                Signed in as <strong>{username}</strong>. Your code for blending is <strong>{code}</strong>.
+              </>
+            ) : (
+              <>
+                Your code for blending is <strong>{code}</strong>. Set a username and passcode in Settings to sign in from anywhere.
+              </>
+            )}
           </p>
           <button
             type="button"

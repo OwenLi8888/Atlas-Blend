@@ -163,8 +163,8 @@ describe('a painter on a Supabase profile', () => {
     const profile = await db.createProfile({ id: ID, name: 'Ada', artIds: ['a'], painterId: 'dot' });
     expect(profile).toMatchObject({ id: ID, name: 'Ada', painter: null });
     expect(await db.findProfile(ID)).toEqual(profile);
-    // The function is tried once and the columns once; after that every request goes without them.
-    expect(rest.calls).toEqual(['POST /rpc/create_profile', 'POST /profiles', 'POST /profiles', 'POST /hearts', 'GET /profiles']);
+    // The function is tried once and each newer set of columns once; after that every request goes without them.
+    expect(rest.calls).toEqual(['POST /rpc/create_profile', 'POST /profiles', 'POST /profiles', 'POST /profiles', 'POST /hearts', 'GET /profiles']);
     await expect(db.savePainter(ID, { id: 'hue', name: '' })).rejects.toMatchObject({ status: 503 });
   });
 });

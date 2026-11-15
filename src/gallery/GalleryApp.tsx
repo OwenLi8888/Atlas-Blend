@@ -65,6 +65,11 @@ export function GalleryApp() {
     );
   }, []);
 
+  /** Shows the username just set, in the menu and in Settings. */
+  const showUsername = useCallback((username: string) => {
+    setSession(current => (current.state === 'ready' && current.profile ? { ...current, profile: { ...current.profile, username } } : current));
+  }, []);
+
   /**
    * Shows a change of hearts. It only ever changes the hearts of a profile that is still here: an
    * answer that arrives after the profile was lost (see SESSION_LOST) must not bring its gallery back.
@@ -167,6 +172,7 @@ export function GalleryApp() {
             painter={painterOf(profile).painter}
             onSettings={route.page === 'settings'}
             code={profile.blend_code}
+            username={profile.username}
             onLogOut={logOut}
           />
         )}
@@ -198,6 +204,12 @@ export function GalleryApp() {
             setFirstVisit(visit => visit && { ...visit, step: 'works', choice: sofar ?? visit.choice });
           }}
           onEnter={async choice => {
+            // A username and a passcode go together; a visitor may also leave both for later.
+            if ((choice.username === '') !== (choice.passcode === '')) {
+              setFirstVisit(visit => visit && { ...visit, choice });
+              setSignUpError('Choose both a username and a passcode, or leave both empty.');
+              return;
+            }
             const picks = firstVisit.picks;
             setFirstVisit(visit => visit && { ...visit, choice });
             setSigningUp(true);
@@ -206,8 +218,8 @@ export function GalleryApp() {
               const entered = await api.createProfile(signUpId, choice.name || 'Guest', picks, choice.painter.id);
               // A username and passcode are optional; given both, they are set before the gallery opens,
               // so a taken username is said here, where it can be changed. Signing up again is safe.
-              if (choice.username && choice.passcode) await api.setPasscode(entered.profile.id, choice.passcode, choice.username);
-              enter(entered);
+              const signIn = choice.username && choice.passcode ? await api.setPasscode(entered.profile.id, choice.passcode, choice.username) : null;
+              enter(signIn ? { ...entered, profile: { ...entered.profile, username: signIn.username } } : entered);
             } catch (failure) {
               setSignUpError(failure instanceof ApiFailure ? failure.message : 'Something went wrong.');
             } finally {
@@ -254,7 +266,7 @@ export function GalleryApp() {
               }}
             />
           )}
-          {route.page === 'settings' && <Settings profile={profile} onPainter={showPainter} />}
+          {route.page === 'settings' && <Settings profile={profile} onPainter={showPainter} onUsername={showUsername} />}
           {route.page === 'blend' && <BlendPage profile={profile} blendId={route.blendId} fresh={freshBlend} />}
         </>
       )}

@@ -177,9 +177,17 @@ type HeartRow = Database['public']['Tables']['hearts']['Row'];
 type BlendRow = Database['public']['Tables']['blends']['Row'];
 type HeartInsert = Database['public']['Tables']['hearts']['Insert'];
 
+/** What a profiles table has before 004_profile_passcode.sql. */
 const PROFILE_COLUMNS = 'id,name,blend_code,created_at,painter_id,painter_name';
+const PROFILE_COLUMNS_WITH_USERNAME = PROFILE_COLUMNS + ',username';
 /** What a profiles table has before 003_profile_painter.sql. */
 const PROFILE_COLUMNS_WITHOUT_PAINTER = 'id,name,blend_code,created_at';
+/** The profiles table as each migration left it, newest first. */
+const PROFILE_COLUMN_LEVELS = [
+  { columns: PROFILE_COLUMNS_WITH_USERNAME, painter: true, migration: 'supabase/migrations/004_profile_passcode.sql' },
+  { columns: PROFILE_COLUMNS, painter: true, migration: 'supabase/migrations/003_profile_painter.sql' },
+  { columns: PROFILE_COLUMNS_WITHOUT_PAINTER, painter: false, migration: '' },
+] as const;
 const HEART_COLUMNS = 'user_id,art_id,why,created_at';
 const BLEND_COLUMNS = 'id,created_at,user_a,user_b,result';
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -223,7 +231,8 @@ export function createSupabaseDb(url: string, secretKey: string): Db {
   /** False once the database is found not to have the current `create_profile`. */
   let hasCreateProfile = true;
   /** False once the profiles table is found not to have the painter columns. */
-  let hasPainterColumns = true;
+  /** Which generation of the profiles table this project has: an index into PROFILE_COLUMN_LEVELS. */
+  let profileLevel = 0;
 
   /**
    * Runs a request that names the painter columns. Against a table that
@@ -232,12 +241,15 @@ export function createSupabaseDb(url: string, secretKey: string): Db {
   async function withPainterColumns<Result extends { error: RestError | null }>(
     run: (columns: string, painter: boolean) => PromiseLike<Result>,
   ): Promise<Result> {
-    if (!hasPainterColumns) return run(PROFILE_COLUMNS_WITHOUT_PAINTER, false);
-    const result = await run(PROFILE_COLUMNS, true);
-    if (!result.error?.code || !MISSING_COLUMN_CODES.has(result.error.code)) return result;
-    hasPainterColumns = false;
-    console.warn('profiles.painter_id is missing: run supabase/migrations/003_profile_painter.sql so painters are kept on the profile.');
-    return run(PROFILE_COLUMNS_WITHOUT_PAINTER, false);
+    // Newest table first; a table that predates a migration is read with the columns it has, from then on.
+    for (;;) {
+      const level = PROFILE_COLUMN_LEVELS[profileLevel];
+      const result = await run(level.columns, level.painter);
+      const older = profileLevel + 1 < PROFILE_COLUMN_LEVELS.length;
+      if (!older || !result.error?.code || !MISSING_COLUMN_CODES.has(result.error.code)) return result;
+      console.warn('profiles is missing columns: run ' + level.migration + '.');
+      profileLevel += 1;
+    }
   }
 
   /** Saves a profile and its first hearts, all or nothing, or answers with what Postgres refused. */
@@ -463,6 +475,7 @@ function toProfile(row: ProfileRow): Profile {
     blend_code: row.blend_code,
     created_at: row.created_at ?? new Date().toISOString(),
     painter: isPainterId(row.painter_id) ? { id: row.painter_id, name: row.painter_name ?? '' } : null,
+    username: row.username ?? null,
   };
 }
 

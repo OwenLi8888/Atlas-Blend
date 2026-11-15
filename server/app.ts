@@ -330,38 +330,34 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
     res.status(201).json(await profileResponse(await db.createProfile({ id, name, artIds: picks, painterId })));
   });
 
-  // Coming back on another browser: a person's own code opens their gallery again. The code is
-  // the one they share to blend, so this is a way back in, not a lock.
+  // Coming back on another browser: a username and its passcode open the gallery again. The blend
+  // code never does: it is the one a person hands to friends.
   app.post('/api/sign-in', async (req, res: Response<ProfileResponse>) => {
-    const entered = text(bodyField(req, 'code'), 'code', MAX_USERNAME_LENGTH);
-    const given = bodyField(req, 'passcode');
-    // What was typed is a username, or the gallery's own code.
-    const found = (await db.findProfileByUsername(entered.toLowerCase())) ?? (await db.findProfileByCode(entered.toUpperCase()));
-    if (!found) throw new ApiError(404, 'No gallery has that username or code');
-    // A gallery with a passcode opens only with it; one without opens with its code alone.
-    const stored = await db.passcodeOf(found.id);
-    if (stored !== null && !(typeof given === 'string' && passcodeMatches(given, stored))) {
-      throw new ApiError(401, given === undefined || given === '' ? 'This gallery needs its passcode' : 'That passcode is not right');
+    const username = text(bodyField(req, 'username'), 'username', MAX_USERNAME_LENGTH).toLowerCase();
+    const passcode = bodyField(req, 'passcode');
+    const found = await db.findProfileByUsername(username);
+    const stored = found ? await db.passcodeOf(found.id) : null;
+    // One answer for an unknown username and a wrong passcode, so neither can be told from the other.
+    if (!found || stored === null || typeof passcode !== 'string' || !passcodeMatches(passcode, stored)) {
+      throw new ApiError(401, 'That username and passcode do not match');
     }
     res.json(await profileResponse(found));
   });
 
-  // Sets or changes the person's passcode. Only its hash is kept.
+  // Sets or changes what the person signs in with: a username and a passcode. Only the passcode's hash is kept.
   app.post('/api/profile/:user_id/passcode', async (req, res) => {
     const userId = uuid(req.params.user_id);
     const passcode = bodyField(req, 'passcode');
     if (typeof passcode !== 'string' || passcode.length < MIN_PASSCODE_LENGTH || passcode.length > MAX_PASSCODE_LENGTH) {
       throw new ApiError(400, 'A passcode is ' + MIN_PASSCODE_LENGTH + ' to ' + MAX_PASSCODE_LENGTH + ' characters');
     }
-    // A username is optional: with one, the person signs in by it instead of their code.
+    // The two go together: a passcode is always for a username.
     const wanted = bodyField(req, 'username');
-    if (wanted !== undefined && wanted !== null && wanted !== '') {
-      const username = typeof wanted === 'string' ? wanted.trim().toLowerCase() : '';
-      if (!USERNAME.test(username)) throw new ApiError(400, 'A username is 3 to 20 letters, numbers or underscores');
-      await db.saveUsername(userId, username);
-    }
+    const username = typeof wanted === 'string' ? wanted.trim().toLowerCase() : '';
+    if (!USERNAME.test(username)) throw new ApiError(400, 'A username is 3 to 20 letters, numbers or underscores');
+    await db.saveUsername(userId, username);
     await db.savePasscode(userId, hashPasscode(passcode));
-    res.status(204).end();
+    res.json({ username });
   });
 
   // The person's painter: which one, and what they call it. An empty name means the painter's own.

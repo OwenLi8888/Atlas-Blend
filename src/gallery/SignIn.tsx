@@ -3,21 +3,24 @@ import type { ProfileResponse } from '../rec/api';
 import { api, ApiFailure } from './api';
 
 interface Props {
-  /** Called with the gallery the code opened. */
+  /** Called with the gallery that was opened. */
   onDone: (entered: ProfileResponse) => void;
 }
 
-const CODE_LENGTH = { min: 3, max: 20 };
+const USERNAME_LENGTH = { min: 3, max: 20 };
+const MIN_PASSCODE_LENGTH = 4;
 
-/** For someone who already has a gallery: their own code opens it on this browser. */
+/** For someone who already has a gallery: their username and passcode open it on this browser. */
 export function SignIn({ onDone }: Props) {
   const [code, setCode] = useState('');
   const [passcode, setPasscode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const complete = code.length >= USERNAME_LENGTH.min && passcode.length >= MIN_PASSCODE_LENGTH;
+
   const open = async () => {
-    if (code.length < CODE_LENGTH.min || busy) return;
+    if (!complete || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -41,20 +44,20 @@ export function SignIn({ onDone }: Props) {
         <input
           type="text"
           value={code}
-          maxLength={CODE_LENGTH.max}
-          placeholder="Username or code"
-          autoComplete="off"
+          maxLength={USERNAME_LENGTH.max}
+          placeholder="Username"
+          autoComplete="username"
           autoCapitalize="none"
           spellCheck={false}
           aria-invalid={error !== null}
           onChange={event => {
             setError(null);
-            setCode(event.target.value.replace(/[^A-Za-z0-9_]/g, ''));
+            setCode(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''));
           }}
         />
       </label>
       <label>
-        <span className="visually-hidden">Passcode, if you set one</span>
+        <span className="visually-hidden">Passcode</span>
         <input
           type="password"
           value={passcode}
@@ -67,7 +70,7 @@ export function SignIn({ onDone }: Props) {
           }}
         />
       </label>
-      <button type="submit" className="text-link" disabled={code.length < CODE_LENGTH.min || busy}>
+      <button type="submit" className="text-link" disabled={!complete || busy}>
         {busy ? 'Opening…' : 'Open it'}
       </button>
     </form>

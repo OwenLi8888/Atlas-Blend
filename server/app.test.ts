@@ -86,31 +86,30 @@ describe('profiles', () => {
     expect(saved.body.hearts).toHaveLength(3);
   });
 
-  it('opens a gallery again by its own code, in either case', async () => {
-    const ada = await newProfile('Ada', ['a:1']);
-    const { status, body } = await call<ProfileResponse>('POST', '/api/sign-in', { code: ada.blend_code.toLowerCase() });
-    expect(status).toBe(200);
-    expect(body.profile.id).toBe(ada.id);
-    expect(body.hearts.map(heart => heart.work.id)).toEqual(['a:1']);
-    expect((await call('POST', '/api/sign-in', { code: 'ZZZZZZ' })).status).toBe(404);
-    expect((await call('POST', '/api/sign-in', {})).status).toBe(400);
-  });
-
-  it('asks for the passcode once one is set, and keeps only its hash', async () => {
+  it('signs in with a username and its passcode, never the blend code, and keeps only a hash', async () => {
     const ada = await newProfile('Ada', ['a:1']);
     const route = '/api/profile/' + ada.id + '/passcode';
-    expect((await call('POST', route, { passcode: 'abc' })).status).toBe(400);
+    expect((await call('POST', route, { passcode: 'abc', username: 'ada' })).status).toBe(400);
+    // A passcode is never set without a username.
+    expect((await call('POST', route, { passcode: 'open sesame' })).status).toBe(400);
+    expect(await db.passcodeOf(ada.id)).toBeNull();
     expect((await call('POST', route, {})).status).toBe(400);
-    expect((await call('POST', '/api/profile/' + MISSING_USER + '/passcode', { passcode: 'open sesame' })).status).toBe(404);
-    expect((await call('POST', route, { passcode: 'open sesame' })).status).toBe(204);
+    expect((await call('POST', '/api/profile/' + MISSING_USER + '/passcode', { passcode: 'open sesame', username: 'ghost' })).status).toBe(404);
+    expect((await call('POST', route, { passcode: 'open sesame', username: 'Ada_1' })).body).toEqual({ username: 'ada_1' });
+    expect((await call<ProfileResponse>('GET', '/api/profile/' + ada.id)).body.profile.username).toBe('ada_1');
+    const other = await newProfile('Bea', ['a:1']);
+    expect((await call('POST', '/api/profile/' + other.id + '/passcode', { passcode: 'open sesame', username: 'ada_1' })).status).toBe(409);
     expect(await db.passcodeOf(ada.id)).not.toContain('open sesame');
 
-    expect((await call('POST', '/api/sign-in', { code: ada.blend_code })).status).toBe(401);
-    expect((await call('POST', '/api/sign-in', { code: ada.blend_code, passcode: 'Open Sesame' })).status).toBe(401);
-    const opened = await call<ProfileResponse>('POST', '/api/sign-in', { code: ada.blend_code, passcode: 'open sesame' });
+    expect((await call('POST', '/api/sign-in', { username: ada.blend_code, passcode: 'open sesame' })).status).toBe(401);
+    expect((await call('POST', '/api/sign-in', { username: 'ada_1', passcode: 'Open Sesame' })).status).toBe(401);
+    expect((await call('POST', '/api/sign-in', { username: 'nobody', passcode: 'open sesame' })).status).toBe(401);
+    expect((await call('POST', '/api/sign-in', { username: 'ada_1' })).status).toBe(401);
+    expect((await call('POST', '/api/sign-in', {})).status).toBe(400);
+    const opened = await call<ProfileResponse>('POST', '/api/sign-in', { username: 'ADA_1', passcode: 'open sesame' });
     expect(opened.status).toBe(200);
     expect(opened.body.profile.id).toBe(ada.id);
-    // Blending with the code alone still works: the passcode guards the gallery, not the blend.
+    expect(opened.body.hearts.map(heart => heart.work.id)).toEqual(['a:1']);
   });
 
   it('rejects a missing, empty or oversized name', async () => {
