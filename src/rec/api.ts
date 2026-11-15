@@ -67,6 +67,21 @@ export interface CreateProfileRequest {
   painter_id?: PainterId;
 }
 
+/** POST /api/sign-in: opens an existing gallery by its own blend code. Answers 404 when no profile has it. */
+export interface SignInRequest {
+  /** The person's username, or their gallery's own code. */
+  code: string;
+  /** Needed when the gallery has a passcode (401 without it, or with the wrong one). */
+  passcode?: string;
+}
+
+/** POST /api/profile/:user_id/passcode: sets or changes the passcode, 4 to 64 characters. Answers 204. */
+export interface PasscodeRequest {
+  passcode: string;
+  /** 3 to 20 letters, numbers or underscores; to sign in with instead of the code. 409 when taken. */
+  username?: string;
+}
+
 /** POST /api/profile/:user_id/painter: chooses the person's painter, or renames it. */
 export type PainterRequest = ChosenPainter;
 

@@ -114,6 +114,83 @@ export function Settings({ profile, onPainter }: Props) {
           </p>
         </div>
       </section>
+
+      <PasscodeField userId={profile.id} code={profile.blend_code} />
     </main>
+  );
+}
+
+const MIN_PASSCODE_LENGTH = 4;
+
+/** Sets the passcode that, with the person's code, opens their gallery on another browser. */
+function PasscodeField({ userId, code }: { userId: string; code: string }) {
+  const [passcode, setPasscode] = useState('');
+  const [username, setUsername] = useState('');
+  const [status, setStatus] = useState<SaveState>({ state: 'idle' });
+
+  const save = async () => {
+    if (passcode.length < MIN_PASSCODE_LENGTH || status.state === 'saving') return;
+    setStatus({ state: 'saving' });
+    try {
+      await api.setPasscode(userId, passcode, username);
+      setPasscode('');
+      setStatus({ state: 'saved' });
+    } catch (failure) {
+      setStatus({ state: 'failed', message: failure instanceof ApiFailure ? failure.message : 'Something went wrong.' });
+    }
+  };
+
+  return (
+    <section className="settings-passcode">
+      <h2 className="eyebrow">Getting back in</h2>
+      <p>
+        Your code is <strong>{code}</strong>. On another browser, it opens your gallery. Set a username and passcode to sign in with those.
+      </p>
+      <form
+        onSubmit={event => {
+          event.preventDefault();
+          void save();
+        }}
+      >
+        <label className="settings-name">
+          <span className="eyebrow">Username</span>
+          <input
+            type="text"
+            value={username}
+            maxLength={20}
+            placeholder="Optional"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            onChange={event => {
+              setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+              setStatus({ state: 'idle' });
+            }}
+          />
+        </label>
+        <label className="settings-name">
+          <span className="eyebrow">Passcode</span>
+          <input
+            type="password"
+            value={passcode}
+            minLength={MIN_PASSCODE_LENGTH}
+            maxLength={64}
+            placeholder="At least 4 characters"
+            autoComplete="new-password"
+            onChange={event => {
+              setPasscode(event.target.value);
+              setStatus({ state: 'idle' });
+            }}
+          />
+        </label>
+        <button type="submit" className="button" disabled={passcode.length < MIN_PASSCODE_LENGTH || status.state === 'saving'}>
+          {status.state === 'saving' ? 'Saving…' : 'Save'}
+        </button>
+      </form>
+      <p className="quiet" role="status">
+        {status.state === 'saved' && 'Saved. Use them to sign in.'}
+        {status.state === 'failed' && 'Not set: ' + status.message}
+      </p>
+    </section>
   );
 }

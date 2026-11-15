@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>What you know about a friend</title>
+    <link rel="stylesheet" href="./card.css" />
+    <style>
+      /* What you know about your best friend: their song, their artist... and then the art. */
+      main {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        gap: 34px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 132px 760px 120px;
+        align-items: center;
+        gap: 44px;
+        opacity: 0;
+        transform: translateY(26px);
+        transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+      }
+      .row.in {
+        opacity: 1;
+        transform: none;
+      }
+      .tile {
+        width: 132px;
+        height: 132px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }
+      .tile.song {
+        background: linear-gradient(140deg, #e2337f, #ef5a26 70%);
+      }
+      .tile.artist {
+        border-radius: 50%;
+        background: linear-gradient(160deg, #2f55d8, #1f9e6e);
+      }
+      .tile.art {
+        border-radius: 0;
+        background: #1c1813;
+        border: 5px solid #8a7a5f;
+        outline: 1px solid rgba(243, 236, 223, 0.14);
+        outline-offset: 8px;
+      }
+      /* three bars keeping time */
+      .bars {
+        display: flex;
+        align-items: flex-end;
+        gap: 9px;
+        height: 62px;
+      }
+      .bars i {
+        width: 13px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.94);
+        animation: beat 0.9s ease-in-out infinite alternate;
+      }
+      .bars i:nth-child(1) { height: 40%; animation-delay: -0.2s; }
+      .bars i:nth-child(2) { height: 100%; animation-delay: -0.55s; }
+      .bars i:nth-child(3) { height: 62%; animation-delay: -0.1s; }
+      .bars i:nth-child(4) { height: 82%; animation-delay: -0.7s; }
+      @keyframes beat {
+        to { height: 22%; }
+      }
+      .tile svg {
+        width: 66px;
+        height: 66px;
+      }
+      .label {
+        font-family: var(--serif);
+        font-size: 62px;
+        line-height: 1.1;
+        letter-spacing: -0.01em;
+      }
+      .label small {
+        display: block;
+        margin-bottom: 10px;
+        font-family: var(--sans);
+        font-size: 21px;
+        font-weight: 500;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: rgba(243, 236, 223, 0.55);
+      }
+      .answer {
+        justify-self: end;
+        width: 84px;
+        height: 84px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-family: var(--serif);
+        font-size: 58px;
+        transform: scale(0.4);
+        opacity: 0;
+        transition: opacity 0.35s ease, transform 0.5s cubic-bezier(0.2, 1.5, 0.4, 1);
+      }
+      .row.answered .answer {
+        opacity: 1;
+        transform: none;
+      }
+      .answer.yes {
+        background: #1f9e6e;
+      }
+      .answer.yes svg {
+        width: 44px;
+        height: 44px;
+      }
+      .answer.no {
+        border: 2px solid rgba(243, 236, 223, 0.5);
+        color: #f3ecdf;
+        font-style: italic;
+        padding-bottom: 6px;
+      }
+      .rule {
+        height: 1px;
+        background: rgba(243, 236, 223, 0.16);
+        transform-origin: left;
+        transform: scaleX(0);
+        transition: transform 0.9s ease;
+      }
+      .rule.in {
+        transform: none;
+      }
+    </style>
+  </head>
+  <body class="night">
+    <main>
+      <div class="row" id="song">
+        <div class="tile song"><div class="bars"><i></i><i></i><i></i><i></i></div></div>
+        <p class="label"><small>Your best friend’s</small>Favorite song</p>
+        <div class="answer yes"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></div>
+      </div>
+      <div class="row" id="artist">
+        <div class="tile artist">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3" /></svg>
+        </div>
+        <p class="label"><small>Their</small>Top artist</p>
+        <div class="answer yes"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></div>
+      </div>
+      <div class="rule" id="rule"></div>
+      <div class="row" id="theirs">
+        <div class="tile art"></div>
+        <p class="label"><small>Their</small>Favorite art</p>
+        <div class="answer no">?</div>
+      </div>
+      <div class="row" id="yours">
+        <div class="tile art"></div>
+        <p class="label"><small>Your own</small>Favorite art</p>
+        <div class="answer no">?</div>
+      </div>
+    </main>
+    <script>
+      // ?cues=song,songYes,artist,artistYes,theirs,theirsNo,yours,yoursNo : seconds from the start
+      const cues = (new URLSearchParams(location.search).get('cues') ?? '0.3,1.9,2.7,4.2,5.4,6.6,7.2,8.2').split(',').map(Number);
+      const at = (seconds, run) => setTimeout(run, seconds * 1000);
+      const el = id => document.getElementById(id);
+      window.play = () => {
+        at(cues[0], () => el('song').classList.add('in'));
+        at(cues[1], () => el('song').classList.add('answered'));
+        at(cues[2], () => el('artist').classList.add('in'));
+        at(cues[3], () => el('artist').classList.add('answered'));
+        at(cues[4], () => (el('rule').classList.add('in'), el('theirs').classList.add('in')));
+        at(cues[5], () => el('theirs').classList.add('answered'));
+        at(cues[6], () => el('yours').classList.add('in'));
+        at(cues[7], () => el('yours').classList.add('answered'));
+      };
+    </script>
+  </body>
+</html>

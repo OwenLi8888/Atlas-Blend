@@ -8,6 +8,9 @@ import { PAINTERS, type Painter } from './painter';
 export interface StudioChoice {
   painter: Painter;
   name: string;
+  /** To sign back in with, when both are given. */
+  username: string;
+  passcode: string;
 }
 
 interface Props {
@@ -57,6 +60,8 @@ export function StudioEntrance({ initial, onEnter, onBack, busy, error }: Props)
   const sceneRef = useRef<StudioScene | null>(null);
   const [painterId, setPainterId] = useState<string | null>(initial?.painter.id ?? null);
   const [name, setName] = useState(initial?.name ?? '');
+  const [username, setUsername] = useState(initial?.username ?? '');
+  const [passcode, setPasscode] = useState(initial?.passcode ?? '');
   const chosenRef = useRef(painterId);
   chosenRef.current = painterId;
   const painter = PAINTERS.find(p => p.id === painterId) ?? null;
@@ -98,7 +103,7 @@ export function StudioEntrance({ initial, onEnter, onBack, busy, error }: Props)
   }, [painterId]);
 
   const enter = () => {
-    if (painter && !busy) onEnter({ painter, name: name.trim() });
+    if (painter && !busy) onEnter({ painter, name: name.trim(), username, passcode });
   };
 
   return (
@@ -106,7 +111,7 @@ export function StudioEntrance({ initial, onEnter, onBack, busy, error }: Props)
       <canvas ref={canvasRef} className="studio-entrance-scene" aria-hidden="true" />
       <div ref={panelRef} className="studio-entrance-panel">
         <header className="studio-entrance-head">
-          <button type="button" className="text-link studio-entrance-back" onClick={() => onBack(painter && { painter, name: name.trim() })}>
+          <button type="button" className="text-link studio-entrance-back" onClick={() => onBack(painter && { painter, name: name.trim(), username, passcode })}>
             ← Back to the works
           </button>
           <h1>Choose your painter</h1>
@@ -147,6 +152,32 @@ export function StudioEntrance({ initial, onEnter, onBack, busy, error }: Props)
               'Nobody chosen yet'
             )}
           </p>
+          <div className="studio-entrance-go">
+            <label className="studio-entrance-name">
+              <span className="visually-hidden">Username, to sign back in</span>
+              <input
+                type="text"
+                value={username}
+                maxLength={20}
+                placeholder="Username"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                onChange={event => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+              />
+            </label>
+            <label className="studio-entrance-name">
+              <span className="visually-hidden">Passcode, to sign back in</span>
+              <input
+                type="password"
+                value={passcode}
+                maxLength={64}
+                placeholder="Passcode"
+                autoComplete="new-password"
+                onChange={event => setPasscode(event.target.value)}
+              />
+            </label>
+          </div>
           <div className="studio-entrance-go">
             <label className="studio-entrance-name">
               <span className="visually-hidden">Your name</span>

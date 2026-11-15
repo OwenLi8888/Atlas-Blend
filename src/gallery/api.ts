@@ -20,6 +20,8 @@ import type {
   PicksRequest,
   ProfileResponse,
   RecsResponse,
+  SignInRequest,
+  PasscodeRequest,
   SimilarResponse,
 } from '../rec/api';
 
@@ -82,6 +84,12 @@ export const api = {
   /** Signs up with the works chosen at the entrance; the profile and its hearts are made together. Safe to repeat with the same `id`. */
   createProfile: (id: string, name: string, picks: string[], painterId: PainterId) =>
     request<ProfileResponse>('POST', '/api/profile', { id, name, picks, painter_id: painterId } satisfies CreateProfileRequest),
+  /** Opens a gallery made earlier, by its own code. */
+  signIn: (code: string, passcode: string) =>
+    request<ProfileResponse>('POST', '/api/sign-in', { code, passcode: passcode || undefined } satisfies SignInRequest),
+  /** Sets or changes the passcode that the person's code needs to open their gallery. */
+  setPasscode: (userId: string, passcode: string, username?: string) =>
+    request<void>('POST', '/api/profile/' + userId + '/passcode', { passcode, username: username || undefined } satisfies PasscodeRequest),
   /** Keeps the person's painter and what they call it on their profile. */
   savePainter: (userId: string, painter: PainterRequest) =>
     request<PainterResponse>('POST', '/api/profile/' + userId + '/painter', painter),

@@ -36,11 +36,16 @@ import {
 } from '../src/rec/scoring';
 import type { Catalog } from './catalog';
 import { noCommissions, type Commissions } from './commission';
+import { hashPasscode, passcodeMatches } from './passcode';
 import { ROOMS_MIN_SAVED, type Curator, type CuratorPerson } from './curator';
 import { MAX_PAINTER_NAME_LENGTH, isPainterId, type BlendRecord, type Db, type StoredBlend, type StoredTrend } from './db';
 import { ApiError } from './errors';
 import { resizedImages } from './images';
 
+const MAX_USERNAME_LENGTH = 20;
+const USERNAME = /^[a-z0-9_]{3,20}$/;
+const MIN_PASSCODE_LENGTH = 4;
+const MAX_PASSCODE_LENGTH = 64;
 const MIN_ONBOARDING_PICKS = 3;
 /** Far more than the entrance shows; only stops a request from hearting the whole collection at once. */
 const MAX_ONBOARDING_PICKS = 100;
@@ -323,6 +328,40 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
       return;
     }
     res.status(201).json(await profileResponse(await db.createProfile({ id, name, artIds: picks, painterId })));
+  });
+
+  // Coming back on another browser: a person's own code opens their gallery again. The code is
+  // the one they share to blend, so this is a way back in, not a lock.
+  app.post('/api/sign-in', async (req, res: Response<ProfileResponse>) => {
+    const entered = text(bodyField(req, 'code'), 'code', MAX_USERNAME_LENGTH);
+    const given = bodyField(req, 'passcode');
+    // What was typed is a username, or the gallery's own code.
+    const found = (await db.findProfileByUsername(entered.toLowerCase())) ?? (await db.findProfileByCode(entered.toUpperCase()));
+    if (!found) throw new ApiError(404, 'No gallery has that username or code');
+    // A gallery with a passcode opens only with it; one without opens with its code alone.
+    const stored = await db.passcodeOf(found.id);
+    if (stored !== null && !(typeof given === 'string' && passcodeMatches(given, stored))) {
+      throw new ApiError(401, given === undefined || given === '' ? 'This gallery needs its passcode' : 'That passcode is not right');
+    }
+    res.json(await profileResponse(found));
+  });
+
+  // Sets or changes the person's passcode. Only its hash is kept.
+  app.post('/api/profile/:user_id/passcode', async (req, res) => {
+    const userId = uuid(req.params.user_id);
+    const passcode = bodyField(req, 'passcode');
+    if (typeof passcode !== 'string' || passcode.length < MIN_PASSCODE_LENGTH || passcode.length > MAX_PASSCODE_LENGTH) {
+      throw new ApiError(400, 'A passcode is ' + MIN_PASSCODE_LENGTH + ' to ' + MAX_PASSCODE_LENGTH + ' characters');
+    }
+    // A username is optional: with one, the person signs in by it instead of their code.
+    const wanted = bodyField(req, 'username');
+    if (wanted !== undefined && wanted !== null && wanted !== '') {
+      const username = typeof wanted === 'string' ? wanted.trim().toLowerCase() : '';
+      if (!USERNAME.test(username)) throw new ApiError(400, 'A username is 3 to 20 letters, numbers or underscores');
+      await db.saveUsername(userId, username);
+    }
+    await db.savePasscode(userId, hashPasscode(passcode));
+    res.status(204).end();
   });
 
   // The person's painter: which one, and what they call it. An empty name means the painter's own.

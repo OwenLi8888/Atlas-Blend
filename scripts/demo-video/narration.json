@@ -1,0 +1,15 @@
+[
+  { "id": "01-song", "text": "You know your best friend’s favorite song. You could probably guess their top artist." },
+  { "id": "02-question", "text": "Now: what art do they like? What art do you like?" },
+  { "id": "03-scattered", "text": "Most of us have no idea. The world’s art is scattered across museums on every continent, and when we do visit one, we walk past hundreds of works that were never chosen for us." },
+  { "id": "04-title", "text": "This is Atlas Blend. A new way to experience art: starting from your taste, and shared with your friends." },
+  { "id": "05-taps", "text": "It starts with a few taps. Pick what pulls you in. Maybe you’re drawn to the rich textures of oil paintings, the dramatic lighting of the Renaissance, the bold colours of abstract expressionism." },
+  { "id": "06-wall", "text": "Behind the scenes, Atlas maps your taste with AI vector embeddings, finding the visual threads that connect what you chose. Then it hangs a wall for you, drawn from nearly seven thousand works in 42 museums and galleries. Every piece tells you which of your picks it came from." },
+  { "id": "07-curator", "text": "Your curator, an AI agent that remembers you, writes a portrait of your taste and curates entire rooms just for you." },
+  { "id": "08-friend", "text": "Meanwhile, your friend gravitates toward delicate watercolours, Japanese woodblock prints, and minimalist compositions." },
+  { "id": "09-blend", "text": "Like Spotify Blend, Atlas finds where your tastes meet: a match score, a shared wall, and art neither of you would have found alone." },
+  { "id": "10-commission", "text": "But it doesn’t stop at finding art you’d both like. A team of AI agents studies both your tastes and commissions one original painting, made from the two of you, and paints it in front of you." },
+  { "id": "11-piece", "text": "The thick textures you love, in the soft washes they love. A piece and style that didn’t exist until you two met." },
+  { "id": "12-collision", "text": "The most exciting ideas don’t always come from what we already know. Sometimes they come from the collision of two different perspectives." },
+  { "id": "13-outro", "text": "Atlas Blend. Discover art together, and discover each other along the way." }
+]

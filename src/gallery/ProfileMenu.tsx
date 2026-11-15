@@ -9,10 +9,14 @@ interface Props {
   painter: Painter;
   /** Whether the Settings page is the one open. */
   onSettings: boolean;
+  /** The person's own code: it is also how they get back in after logging out, or on another browser. */
+  code: string;
+  /** Leaves this gallery on this browser. */
+  onLogOut: () => void;
 }
 
 /** The person's picture at the end of the bar; pressing it opens what belongs to them. */
-export function ProfileMenu({ name, painter, onSettings }: Props) {
+export function ProfileMenu({ name, painter, onSettings, code, onLogOut }: Props) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -78,6 +82,19 @@ export function ProfileMenu({ name, painter, onSettings }: Props) {
           >
             Settings
           </a>
+          <p className="profile-code">
+            Your code is <strong>{code}</strong>. It gets you back in.
+          </p>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onLogOut();
+            }}
+          >
+            Log out
+          </button>
         </div>
       )}
     </div>

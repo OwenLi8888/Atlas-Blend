@@ -80,6 +80,13 @@ export interface Db {
   deleteProfile(id: string): Promise<void>;
   /** Keeps a person's choice of painter. Answers 404 when there is no such profile. */
   savePainter(userId: string, painter: ChosenPainter): Promise<void>;
+  /** Gives a person a username to sign in with. Answers 409 when someone else has it. */
+  saveUsername(userId: string, username: string): Promise<void>;
+  findProfileByUsername(username: string): Promise<Profile | null>;
+  /** Keeps the hash of a person's passcode. Answers 404 when there is no such profile. */
+  savePasscode(userId: string, hash: string): Promise<void>;
+  /** The hash of a person's passcode; null when they have set none. */
+  passcodeOf(userId: string): Promise<string | null>;
   /** Newest first. */
   listHearts(userId: string, limit: number): Promise<Heart[]>;
   /** Saves a heart. When `why` is undefined an existing reason is kept. */
@@ -153,6 +160,8 @@ type ProfileRow = {
   created_at: string | null;
   painter_id?: string | null;
   painter_name?: string | null;
+  passcode_hash?: string | null;
+  username?: string | null;
 };
 type ProfileWrite = {
   id?: string;
@@ -161,6 +170,8 @@ type ProfileWrite = {
   created_at?: string | null;
   painter_id?: string | null;
   painter_name?: string | null;
+  passcode_hash?: string | null;
+  username?: string | null;
 };
 type HeartRow = Database['public']['Tables']['hearts']['Row'];
 type BlendRow = Database['public']['Tables']['blends']['Row'];
@@ -320,6 +331,44 @@ export function createSupabaseDb(url: string, secretKey: string): Db {
       }
       if (error) throw storageError(error);
       if (data.length === 0) throw new ApiError(404, 'Profile not found');
+    },
+
+    async saveUsername(userId, username) {
+      const { data, error } = await client.from('profiles').update({ username }).eq('id', userId).select('id');
+      if (error?.code && MISSING_COLUMN_CODES.has(error.code)) {
+        throw new ApiError(503, 'Usernames cannot be set yet. Run supabase/migrations/004_profile_passcode.sql first.');
+      }
+      if (error?.code === POSTGRES_UNIQUE_VIOLATION) throw new ApiError(409, 'That username is taken');
+      if (error) throw storageError(error);
+      if (data.length === 0) throw new ApiError(404, 'Profile not found');
+    },
+
+    async findProfileByUsername(username) {
+      const { data, error } = await withPainterColumns(columns =>
+        client.from('profiles').select(columns).eq('username', username).maybeSingle<ProfileRow>(),
+      );
+      // Before 004_profile_passcode.sql nobody has a username.
+      if (error?.code && MISSING_COLUMN_CODES.has(error.code)) return null;
+      if (error) throw storageError(error);
+      return data ? toProfile(data) : null;
+    },
+
+    async savePasscode(userId, hash) {
+      const { data, error } = await client.from('profiles').update({ passcode_hash: hash }).eq('id', userId).select('id');
+      if (error?.code && MISSING_COLUMN_CODES.has(error.code)) {
+        console.warn('profiles.passcode_hash is missing: run supabase/migrations/004_profile_passcode.sql so passcodes can be set.');
+        throw new ApiError(503, 'Passcodes cannot be set yet. Run supabase/migrations/004_profile_passcode.sql first.');
+      }
+      if (error) throw storageError(error);
+      if (data.length === 0) throw new ApiError(404, 'Profile not found');
+    },
+
+    async passcodeOf(userId) {
+      const { data, error } = await client.from('profiles').select('passcode_hash').eq('id', userId).maybeSingle();
+      // Before 004_profile_passcode.sql nobody has a passcode.
+      if (error?.code && MISSING_COLUMN_CODES.has(error.code)) return null;
+      if (error) throw storageError(error);
+      return data?.passcode_hash ?? null;
     },
 
     async deleteProfile(id) {

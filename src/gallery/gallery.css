@@ -170,6 +170,84 @@ a {
   text-decoration: none;
 }
 
+.profile-dropdown button {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+}
+
+.profile-code {
+  margin: 6px 0;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.profile-code strong {
+  color: var(--ink);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.settings-passcode {
+  max-width: 34rem;
+  margin-top: 56px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-passcode > p {
+  margin: 10px 0 18px;
+}
+
+.settings-passcode strong {
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.settings-passcode form {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  margin-bottom: 10px;
+}
+
+/* The way back in, at the end of the bar, for someone who already has a gallery. */
+.sign-in {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.sign-in label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sign-in input {
+  width: 9.5em;
+  padding: 6px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+}
+
+.sign-in input:focus {
+  outline: none;
+  border-bottom-color: var(--ink);
+}
+
+.profile-dropdown button:hover,
+.profile-dropdown button:focus-visible,
 .profile-dropdown a:hover,
 .profile-dropdown a:focus-visible {
   background: var(--ground);

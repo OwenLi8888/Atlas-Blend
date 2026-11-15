@@ -21,6 +21,10 @@ interface Snapshot {
   profiles: Profile[];
   hearts: Record<string, Heart[]>;
   blends: StoredBlendRow[];
+  /** Passcode hashes by profile ID. Absent in files saved before passcodes. */
+  passcodes?: Record<string, string>;
+  /** Usernames by profile ID. */
+  usernames?: Record<string, string>;
 }
 
 export interface MemoryDbOptions {
@@ -37,6 +41,8 @@ export function createMemoryDb(options: MemoryDbOptions = {}): MemoryDb {
   );
   const hearts = new Map<string, Heart[]>(Object.entries(saved?.hearts ?? {}));
   const blends: StoredBlendRow[] = saved?.blends ?? [];
+  const passcodes = new Map<string, string>(Object.entries(saved?.passcodes ?? {}));
+  const usernames = new Map<string, string>(Object.entries(saved?.usernames ?? {}));
 
   // Timestamps always move forward, so "newest first" is well defined even within one millisecond.
   let lastTime = 0;
@@ -47,7 +53,7 @@ export function createMemoryDb(options: MemoryDbOptions = {}): MemoryDb {
 
   const persist = () => {
     if (!file) return;
-    const snapshot: Snapshot = { profiles: [...profiles.values()], hearts: Object.fromEntries(hearts), blends };
+    const snapshot: Snapshot = { profiles: [...profiles.values()], hearts: Object.fromEntries(hearts), blends, passcodes: Object.fromEntries(passcodes), usernames: Object.fromEntries(usernames) };
     mkdirSync(path.dirname(file), { recursive: true });
     // Written to a temporary name first, so a crash mid-write never leaves half a file.
     writeFileSync(file + '.tmp', JSON.stringify(snapshot));
@@ -105,6 +111,24 @@ export function createMemoryDb(options: MemoryDbOptions = {}): MemoryDb {
       // A new object: profiles already handed out stay as they were when read.
       profiles.set(userId, { ...profile, painter: { ...painter } });
       persist();
+    },
+    async saveUsername(userId, username) {
+      if (!profiles.has(userId)) throw new ApiError(404, 'Profile not found');
+      if ([...usernames].some(([owner, taken]) => taken === username && owner !== userId)) throw new ApiError(409, 'That username is taken');
+      usernames.set(userId, username);
+      persist();
+    },
+    async findProfileByUsername(username) {
+      const owner = [...usernames].find(([, taken]) => taken === username)?.[0];
+      return (owner !== undefined && profiles.get(owner)) || null;
+    },
+    async savePasscode(userId, hash) {
+      if (!profiles.has(userId)) throw new ApiError(404, 'Profile not found');
+      passcodes.set(userId, hash);
+      persist();
+    },
+    async passcodeOf(userId) {
+      return passcodes.get(userId) ?? null;
     },
     async listHearts(userId, limit) {
       const list = hearts.get(userId) ?? [];

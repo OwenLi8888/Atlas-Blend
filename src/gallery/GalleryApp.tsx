@@ -8,6 +8,7 @@ import { Onboarding } from './Onboarding';
 import { painterOf } from './painter';
 import { ProfileMenu } from './ProfileMenu';
 import { Settings } from './Settings';
+import { SignIn } from './SignIn';
 import { forgetUserId, newUserId, rememberedUserId, rememberUserId } from './session';
 import { canOpenStudio } from './PaintStudio';
 import { StudioEntrance, type StudioChoice } from './StudioEntrance';
@@ -126,6 +127,16 @@ export function GalleryApp() {
     setSession({ state: 'ready', profile, hearts });
   }, []);
 
+  // Logging out only forgets which gallery this browser opens; the gallery is kept, and its code opens it again.
+  const logOut = useCallback(() => {
+    forgetUserId();
+    setFirstVisit(canOpenStudio() ? { step: 'works', picks: [], choice: null } : null);
+    setFreshBlend(null);
+    window.location.hash = '#/';
+    window.scrollTo({ top: 0 });
+    setSession({ state: 'ready', profile: null, hearts: [] });
+  }, []);
+
   const profile = session.state === 'ready' ? session.profile : null;
   const hasGallery = session.state === 'ready' && profile !== null && session.hearts.length > 0;
   const inGallery = route.page === 'for-you' || route.page === 'saved' || route.page === 'rooms';
@@ -155,8 +166,11 @@ export function GalleryApp() {
             name={profile.name}
             painter={painterOf(profile).painter}
             onSettings={route.page === 'settings'}
+            code={profile.blend_code}
+            onLogOut={logOut}
           />
         )}
+        {session.state === 'ready' && !profile && <SignIn onDone={enter} />}
       </header>
 
       {session.state === 'loading' && <p className="page quiet">Opening the gallery…</p>}
@@ -189,7 +203,11 @@ export function GalleryApp() {
             setSigningUp(true);
             setSignUpError(null);
             try {
-              enter(await api.createProfile(signUpId, choice.name || 'Guest', picks, choice.painter.id));
+              const entered = await api.createProfile(signUpId, choice.name || 'Guest', picks, choice.painter.id);
+              // A username and passcode are optional; given both, they are set before the gallery opens,
+              // so a taken username is said here, where it can be changed. Signing up again is safe.
+              if (choice.username && choice.passcode) await api.setPasscode(entered.profile.id, choice.passcode, choice.username);
+              enter(entered);
             } catch (failure) {
               setSignUpError(failure instanceof ApiFailure ? failure.message : 'Something went wrong.');
             } finally {
