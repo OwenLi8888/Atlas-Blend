@@ -37,9 +37,23 @@ export interface HeartedWork {
   hearted_at: string;
 }
 
-/** POST /api/profile */
+/**
+ * POST /api/profile: signs someone up with the works they chose at the
+ * entrance, in one step. Answers with a `ProfileResponse`.
+ */
 export interface CreateProfileRequest {
   name: string;
+  /** Artwork IDs; at least `min_picks` different ones. */
+  picks: string[];
+}
+
+/**
+ * POST /api/profile/:user_id/picks: someone who removed every heart choosing
+ * again. Answers with a `ProfileResponse`.
+ */
+export interface PicksRequest {
+  /** Artwork IDs; at least `min_picks` different ones. */
+  picks: string[];
 }
 
 /** GET /api/profile/:user_id */

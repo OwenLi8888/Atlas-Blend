@@ -154,8 +154,9 @@ describe('commission endpoints', () => {
     { id: 'other', vector: [0, 0, 1] },
   ]);
   const start = (commissions?: ReturnType<typeof createCommissions>) => {
-    const server = createApp(catalog, createMemoryDb(), { commissions }).listen(0, '127.0.0.1');
-    return { server, base: () => 'http://127.0.0.1:' + (server.address() as AddressInfo).port };
+    const db = createMemoryDb();
+    const server = createApp(catalog, db, { commissions }).listen(0, '127.0.0.1');
+    return { server, db, base: () => 'http://127.0.0.1:' + (server.address() as AddressInfo).port };
   };
   const made = start(createCommissions({ makeImage: async () => jpeg([7, 7]), fetchImage: referenceHost }));
   const plain = start();
@@ -164,18 +165,19 @@ describe('commission endpoints', () => {
     plain.server.close();
   });
 
-  async function blend(base: string): Promise<BlendResponse> {
+  async function blend({ db, base: baseOf }: ReturnType<typeof start>): Promise<BlendResponse> {
+    const base = baseOf();
     const post = (path: string, body: unknown) =>
       fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
-    const me = (await post('/api/profile', { name: 'Ada' })) as Profile;
-    const friend = (await post('/api/profile', { name: 'Bo' })) as Profile;
+    const me = await db.createProfile('Ada');
+    const friend = await db.createProfile('Bo');
     await post('/api/heart', { user_id: me.id, art_id: 'a' });
     await post('/api/heart', { user_id: friend.id, art_id: 'b' });
     return (await post('/api/blend', { user_id: me.id, code: friend.blend_code })) as BlendResponse;
   }
 
   it('starts a piece with the blend and serves it when ready', async () => {
-    const result = await blend(made.base());
+    const result = await blend(made);
     expect(result.commission).toMatchObject({ status: 'pending', title: 'For Ada and Bo' });
 
     let commission = result.commission;
@@ -198,7 +200,7 @@ describe('commission endpoints', () => {
   });
 
   it('marks the piece unavailable when no image model is configured', async () => {
-    const result = await blend(plain.base());
+    const result = await blend(plain);
     expect(result.commission).toEqual({ status: 'unavailable', image_url: null, title: null, label_status: 'unavailable', label: null });
     expect(result.top_artwork.id).toBe('mid');
   });

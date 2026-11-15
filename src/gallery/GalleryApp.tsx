@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { BlendResponse, HeartedWork, Profile } from '../rec/api';
+import type { BlendResponse, HeartedWork, Profile, ProfileResponse } from '../rec/api';
 import { api, ApiFailure, SESSION_LOST } from './api';
 import { BlendPage, Blends } from './Blends';
 import { Explore } from './Explore';
@@ -88,15 +88,13 @@ export function GalleryApp() {
     return () => window.removeEventListener(SESSION_LOST, onLost);
   }, [load]);
 
-  const enter = useCallback(
-    (profile: Profile) => {
-      rememberUserId(profile.id);
-      window.location.hash = '#/';
-      window.scrollTo({ top: 0 });
-      void load(profile.id);
-    },
-    [load],
-  );
+  // Signing up answers with the profile and its hearts, so the gallery opens without asking again.
+  const enter = useCallback(({ profile, hearts }: ProfileResponse) => {
+    rememberUserId(profile.id);
+    window.location.hash = '#/';
+    window.scrollTo({ top: 0 });
+    setSession({ state: 'ready', profile, hearts });
+  }, []);
 
   const profile = session.state === 'ready' ? session.profile : null;
   const hasGallery = session.state === 'ready' && profile !== null && session.hearts.length > 0;

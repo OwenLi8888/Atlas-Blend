@@ -1,5 +1,5 @@
 import type { AddressInfo } from 'node:net';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type {
   BlendResponse,
   HeartResponse,
@@ -59,8 +59,9 @@ async function call<T>(method: string, path: string, body?: unknown, headers: Re
   return { status: response.status, body: (text ? JSON.parse(text) : null) as T };
 }
 
+/** A profile with exactly these hearts, made directly so tests can start from fewer than sign-up allows. */
 async function newProfile(name: string, artIds: string[] = []): Promise<Profile> {
-  const { body: profile } = await call<Profile>('POST', '/api/profile', { name });
+  const profile = await db.createProfile(name);
   for (const art_id of artIds) await call('POST', '/api/heart', { user_id: profile.id, art_id });
   return profile;
 }
@@ -68,17 +69,56 @@ async function newProfile(name: string, artIds: string[] = []): Promise<Profile>
 const MISSING_USER = '00000000-0000-4000-8000-000000000000';
 
 describe('profiles', () => {
-  it('creates a profile with a six-letter blend code', async () => {
-    const { status, body } = await call<Profile>('POST', '/api/profile', { name: '  Ada  ' });
+  const PICKS = ['a:1', 'b:1', 'c:1'];
+
+  it('signs up with a six-letter blend code and the chosen works already hearted', async () => {
+    const { status, body } = await call<ProfileResponse>('POST', '/api/profile', { name: '  Ada  ', picks: [...PICKS, 'a:1'] });
     expect(status).toBe(201);
-    expect(body.name).toBe('Ada');
-    expect(body.blend_code).toMatch(new RegExp('^[A-Z]{' + BLEND_CODE_LENGTH + '}$'));
+    expect(body.profile.name).toBe('Ada');
+    expect(body.profile.blend_code).toMatch(new RegExp('^[A-Z]{' + BLEND_CODE_LENGTH + '}$'));
+    expect(body.hearts.map(heart => heart.work.id).sort()).toEqual(PICKS);
+
+    const saved = await call<ProfileResponse>('GET', '/api/profile/' + body.profile.id);
+    expect(saved.body.hearts).toHaveLength(3);
   });
 
   it('rejects a missing, empty or oversized name', async () => {
-    expect((await call('POST', '/api/profile', {})).status).toBe(400);
-    expect((await call('POST', '/api/profile', { name: '   ' })).status).toBe(400);
-    expect((await call('POST', '/api/profile', { name: 'x'.repeat(81) })).status).toBe(400);
+    expect((await call('POST', '/api/profile', { picks: PICKS })).status).toBe(400);
+    expect((await call('POST', '/api/profile', { name: '   ', picks: PICKS })).status).toBe(400);
+    expect((await call('POST', '/api/profile', { name: 'x'.repeat(81), picks: PICKS })).status).toBe(400);
+  });
+
+  it('makes no profile when the picks are too few, unknown or malformed', async () => {
+    const createProfile = vi.spyOn(db, 'createProfile');
+    expect((await call('POST', '/api/profile', { name: 'Flo' })).status).toBe(400);
+    expect((await call('POST', '/api/profile', { name: 'Flo', picks: 'a:1' })).status).toBe(400);
+    expect((await call('POST', '/api/profile', { name: 'Flo', picks: ['a:1', 'b:1'] })).status).toBe(400);
+    // The same work three times is one pick.
+    expect((await call('POST', '/api/profile', { name: 'Flo', picks: ['a:1', 'a:1', 'a:1'] })).status).toBe(400);
+    expect((await call('POST', '/api/profile', { name: 'Flo', picks: ['a:1', 'b:1', 7] })).status).toBe(400);
+    expect((await call('POST', '/api/profile', { name: 'Flo', picks: ['a:1', 'b:1', 'nope'] })).status).toBe(404);
+    expect(createProfile).not.toHaveBeenCalled();
+    createProfile.mockRestore();
+  });
+
+  it('lets someone with no hearts choose again, under the same minimum', async () => {
+    const profile = await newProfile('Gus');
+    const route = '/api/profile/' + profile.id + '/picks';
+    expect((await call('POST', route, { picks: ['a:1', 'b:1'] })).status).toBe(400);
+    expect((await call<ProfileResponse>('GET', '/api/profile/' + profile.id)).body.hearts).toHaveLength(0);
+
+    const { status, body } = await call<ProfileResponse>('POST', route, { picks: PICKS });
+    expect(status).toBe(200);
+    expect(body.hearts.map(heart => heart.work.id).sort()).toEqual(PICKS);
+    expect((await call('POST', '/api/profile/' + MISSING_USER + '/picks', { picks: PICKS })).status).toBe(404);
+  });
+
+  it('keeps the reason on a work that was already hearted when choosing again', async () => {
+    const profile = await newProfile('Hal');
+    await call('POST', '/api/heart', { user_id: profile.id, art_id: 'a:1', why: 'the light' });
+    const { body } = await call<ProfileResponse>('POST', '/api/profile/' + profile.id + '/picks', { picks: PICKS });
+    expect(body.hearts).toHaveLength(3);
+    expect(body.hearts.find(heart => heart.work.id === 'a:1')?.why).toBe('the light');
   });
 
   it('returns a profile with its hearts, newest first', async () => {

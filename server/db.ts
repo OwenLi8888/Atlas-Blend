@@ -53,8 +53,12 @@ export interface SavedBlend {
 }
 
 export interface Db {
-  /** Creates a profile. `code` fixes its blend code; otherwise a free one is generated. */
-  createProfile(name: string, code?: string): Promise<Profile>;
+  /**
+   * Creates a profile with `artIds` already hearted: either the profile exists
+   * with all of them or it does not exist. `code` fixes its blend code;
+   * otherwise a free one is generated.
+   */
+  createProfile(name: string, code?: string, artIds?: readonly string[]): Promise<Profile>;
   findProfile(id: string): Promise<Profile | null>;
   findProfiles(ids: readonly string[]): Promise<Profile[]>;
   findProfileByCode(code: string): Promise<Profile | null>;
@@ -63,6 +67,8 @@ export interface Db {
   listHearts(userId: string, limit: number): Promise<Heart[]>;
   /** Saves a heart. When `why` is undefined an existing reason is kept. */
   saveHeart(userId: string, artId: string, why: string | undefined): Promise<Heart>;
+  /** Hearts several works at once, all or none. A work already hearted keeps its reason and date. */
+  saveHearts(userId: string, artIds: readonly string[]): Promise<void>;
   removeHeart(userId: string, artId: string): Promise<void>;
   saveBlend(blend: NewBlend): Promise<SavedBlend>;
   findBlend(id: string): Promise<BlendRecord | null>;
@@ -152,7 +158,7 @@ export function createSupabaseDb(url: string, secretKey: string): Db {
   });
 
   return {
-    async createProfile(name, code) {
+    async createProfile(name, code, artIds = []) {
       const attempts = code === undefined ? BLEND_CODE_ATTEMPTS : 1;
       for (let attempt = 0; attempt < attempts; attempt++) {
         const { data, error } = await client
@@ -162,7 +168,20 @@ export function createSupabaseDb(url: string, secretKey: string): Db {
           .single();
         if (error?.code === POSTGRES_UNIQUE_VIOLATION) continue;
         if (error) throw storageError(error);
-        return toProfile(data);
+
+        const profile = toProfile(data);
+        if (artIds.length > 0) {
+          // One insert, so the hearts are saved together or not at all. PostgREST
+          // has no transaction across two tables, so if they fail the profile is
+          // taken back; nobody has been told its ID yet.
+          const hearts = await client.from('hearts').insert(artIds.map(artId => ({ user_id: profile.id, art_id: artId })));
+          if (hearts.error) {
+            const undo = await client.from('profiles').delete().eq('id', profile.id);
+            if (undo.error) console.error('Could not remove half-made profile ' + profile.id + ': ' + undo.error.message);
+            throw storageError(hearts.error);
+          }
+        }
+        return profile;
       }
       if (code !== undefined) throw new ApiError(409, 'That blend code is already taken');
       throw new ApiError(503, 'Could not create a blend code. Please try again.');
@@ -215,6 +234,15 @@ export function createSupabaseDb(url: string, secretKey: string): Db {
       if (error?.code === POSTGRES_FOREIGN_KEY_VIOLATION) throw new ApiError(404, 'Profile not found');
       if (error) throw storageError(error);
       return toHeart(data);
+    },
+
+    async saveHearts(userId, artIds) {
+      if (artIds.length === 0) return;
+      const { error } = await client
+        .from('hearts')
+        .upsert(artIds.map(artId => ({ user_id: userId, art_id: artId })), { onConflict: 'user_id,art_id', ignoreDuplicates: true });
+      if (error?.code === POSTGRES_FOREIGN_KEY_VIOLATION) throw new ApiError(404, 'Profile not found');
+      if (error) throw storageError(error);
     },
 
     async removeHeart(userId, artId) {

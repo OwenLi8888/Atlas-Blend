@@ -57,8 +57,9 @@ describe('curator endpoints', () => {
     },
   };
   const start = (curator?: Curator) => {
-    const server = createApp(catalog, createMemoryDb(), { curator }).listen(0, '127.0.0.1');
-    return { server, base: () => 'http://127.0.0.1:' + (server.address() as AddressInfo).port };
+    const db = createMemoryDb();
+    const server = createApp(catalog, db, { curator }).listen(0, '127.0.0.1');
+    return { server, db, base: () => 'http://127.0.0.1:' + (server.address() as AddressInfo).port };
   };
   const withCurator = start(stub);
   const without = start();
@@ -75,14 +76,14 @@ describe('curator endpoints', () => {
     });
     return { status: response.status, body: (await response.json()) as T };
   }
-  async function person(base: string): Promise<Profile> {
-    const { body: profile } = await call<Profile>(base, 'POST', '/api/profile', { name: 'Ada' });
-    await call(base, 'POST', '/api/heart', { user_id: profile.id, art_id: 'rose', why: 'the pink' });
+  async function person({ db, base }: ReturnType<typeof start>): Promise<Profile> {
+    const profile = await db.createProfile('Ada');
+    await call(base(), 'POST', '/api/heart', { user_id: profile.id, art_id: 'rose', why: 'the pink' });
     return profile;
   }
 
   it('returns the portrait and rooms, with artworks looked up and missing ones dropped', async () => {
-    const ada = await person(withCurator.base());
+    const ada = await person(withCurator);
     const { body } = await call<CuratorResponse>(withCurator.base(), 'GET', '/api/curator/' + ada.id);
     expect(body.status).toBe('ready');
     expect(body.portrait).toBe('You are drawn to harbours.');
@@ -95,7 +96,7 @@ describe('curator endpoints', () => {
   });
 
   it('passes a note to the curator and returns its answer', async () => {
-    const ada = await person(withCurator.base());
+    const ada = await person(withCurator);
     const route = '/api/curator/' + ada.id + '/note';
     const { status, body } = await call<CuratorNoteResponse>(withCurator.base(), 'POST', route, { text: '  early mornings  ' });
     expect(status).toBe(200);
@@ -108,7 +109,7 @@ describe('curator endpoints', () => {
   });
 
   it('says so when there is no curator, and still counts saves', async () => {
-    const ada = await person(without.base());
+    const ada = await person(without);
     const { body } = await call<CuratorResponse>(without.base(), 'GET', '/api/curator/' + ada.id);
     expect(body).toEqual({ status: 'unavailable', portrait: null, question: null, rooms: [], saves_until_rooms: ROOMS_MIN_SAVED - 1 });
     expect((await call(without.base(), 'POST', '/api/curator/' + ada.id + '/note', { text: 'hello' })).status).toBe(503);

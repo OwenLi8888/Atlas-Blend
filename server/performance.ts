@@ -35,9 +35,10 @@ for (let i = 0; i < 6; i++) {
     (rows[name] ??= []).push(result.ms);
     return result.data;
   };
-  const p = await measure('create profile', '/profile', { name: 'Audit' });
   await measure('onboarding', '/onboarding');
-  for (const row of catalog.onboarding.slice(0, 3)) await measure('heart', '/heart', { user_id: p.id, art_id: catalog.works[row].id });
+  const picks = catalog.onboarding.slice(0, 3).map(row => catalog.works[row].id);
+  const { profile: p } = await measure('sign up', '/profile', { name: 'Audit', picks });
+  await measure('heart', '/heart', { user_id: p.id, art_id: catalog.works[catalog.onboarding[3]].id });
   await measure('profile', '/profile/' + p.id);
   await measure('recs', '/recs/' + p.id);
   const blend = await measure('blend', '/blend', { user_id: p.id, code: 'CANVAS' });

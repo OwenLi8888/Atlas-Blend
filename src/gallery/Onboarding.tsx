@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Artwork, Profile } from '../rec/api';
+import type { Artwork, Profile, ProfileResponse } from '../rec/api';
 import { api, ApiFailure } from './api';
 import { Hung } from './Hung';
 import { Salon } from './Salon';
@@ -7,7 +7,8 @@ import { Salon } from './Salon';
 interface Props {
   /** Set when someone with a profile has no hearts left and is choosing again. */
   profile: Profile | null;
-  onDone: (profile: Profile) => void;
+  /** Called with the profile and the hearts just saved for it. */
+  onDone: (entered: ProfileResponse) => void;
 }
 
 const MAX_NAME_LENGTH = 80;
@@ -50,9 +51,8 @@ export function Onboarding({ profile, onDone }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const owner = profile ?? (await api.createProfile(name.trim() || 'Guest'));
-      await Promise.all([...chosen].map(id => api.heart(owner.id, id)));
-      onDone(owner);
+      const picks = [...chosen];
+      onDone(profile ? await api.choosePicks(profile.id, picks) : await api.createProfile(name.trim() || 'Guest', picks));
     } catch (failure) {
       setError(messageOf(failure));
       setBusy(false);

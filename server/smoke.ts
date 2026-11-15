@@ -54,15 +54,16 @@ try {
   const families = new Set(onboarding.works.map(work => work.cluster_id));
   assert.equal(families.size, onboarding.works.length, 'onboarding tiles should each be a different family');
 
-  const a = await request<Profile>('POST', '/api/profile', { name: 'TEMP smoke A' });
-  temporaryProfiles.push(a.id);
-  const b = await request<Profile>('POST', '/api/profile', { name: 'TEMP smoke B' });
-  temporaryProfiles.push(b.id);
-
   const picksA = onboarding.works.slice(0, 3);
   const picksB = onboarding.works.slice(3, 6);
+  const signUp = async (name: string, picks: readonly { id: string }[]) => {
+    const { profile } = await request<ProfileResponse>('POST', '/api/profile', { name, picks: picks.map(work => work.id) });
+    temporaryProfiles.push(profile.id);
+    return profile;
+  };
+  const a = await signUp('TEMP smoke A', picksA);
+  const b = await signUp('TEMP smoke B', picksB);
   for (const work of picksA) await request('POST', '/api/heart', { user_id: a.id, art_id: work.id, why: 'smoke test' });
-  for (const work of picksB) await request('POST', '/api/heart', { user_id: b.id, art_id: work.id });
 
   // Hearting again without a reason keeps the saved reason.
   await request('POST', '/api/heart', { user_id: a.id, art_id: picksA[0].id });

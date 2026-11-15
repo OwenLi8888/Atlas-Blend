@@ -12,6 +12,7 @@ import type { Artwork } from '../src/rec/api';
 import { assignFamilies, readFamilies, type Families } from './families';
 import {
   calibrate,
+  SAME_TASTE_SIMILARITY,
   similarity,
   type Calibration,
   type Corpus,
@@ -22,7 +23,7 @@ export interface Catalog {
   readonly corpus: Corpus;
   /** Row of a work in `works` and `corpus`, or undefined for an unknown ID. */
   indexOf(id: string): number | undefined;
-  /** Onboarding tiles: one typical work from each distinct visual family. */
+  /** Onboarding tiles: one typical work from each visual family, no two alike enough to be one taste. */
   readonly onboarding: readonly number[];
   readonly calibration: Calibration;
 }
@@ -52,7 +53,10 @@ const CACHE_VERSION = 2;
 /** Upper bound on visual families, for the one request that counts works per family. */
 const MAX_FAMILIES = 1000;
 
-const MAX_ONBOARDING_TILES = 24;
+/** Six rows of five: more tiles than this is more than anyone looks through. */
+const MAX_ONBOARDING_TILES = 30;
+/** How far down a family's most typical works to look for a tile unlike those already shown. */
+const TILE_CANDIDATES_PER_FAMILY = 10;
 /** A family smaller than this share of the collection is too thin to recommend from. */
 const MIN_FAMILY_SHARE = 0.015;
 
@@ -152,20 +156,23 @@ export function buildCatalog(data: CatalogData): Catalog {
     works,
     corpus,
     indexOf: id => rows.get(id),
-    // Two tiles as alike as a work and its nearest neighbour would be the same choice twice.
-    onboarding: chooseOnboarding(corpus, works, calibration.kindred),
+    onboarding: chooseOnboarding(corpus, works, SAME_TASTE_SIMILARITY),
     calibration,
   };
 }
 
 /**
- * Picks the onboarding grid from the visual families already assigned to each
- * work. Each family is shown by its most typical work. Families are added most
- * different first, up to the grid size, and one is left out when its tile is at
- * least `duplicateSimilarity` to a tile already on the grid, so every tile
- * tells us something new about the person.
+ * Picks the onboarding grid: one tile from each visual family, every tile a
+ * different taste from every other.
+ *
+ * A family is shown by one of its most typical works. Families are added
+ * most-different first; each puts forward its most typical work that is less
+ * than `sameTaste` alike to every tile already on the grid, looking no deeper
+ * than `TILE_CANDIDATES_PER_FAMILY`. Two tiles that alike would be grouped as
+ * one taste if both were chosen, so the second would tell us nothing new. A
+ * family with no such work is left out.
  */
-export function chooseOnboarding(corpus: Corpus, works: readonly Artwork[], duplicateSimilarity: number): number[] {
+export function chooseOnboarding(corpus: Corpus, works: readonly Artwork[], sameTaste: number): number[] {
   const families = new Map<number, number[]>();
   works.forEach((work, index) => {
     const family = families.get(work.cluster_id);
@@ -174,50 +181,74 @@ export function chooseOnboarding(corpus: Corpus, works: readonly Artwork[], dupl
   });
 
   const minSize = Math.max(1, Math.ceil(works.length * MIN_FAMILY_SHARE));
-  const tiles = [...families.values()]
+  const collectionMean = meanVector(corpus);
+  const remaining = [...families.values()]
     .filter(members => members.length >= minSize)
     .sort((a, b) => b.length - a.length)
-    .map(members => mostTypical(corpus, members));
-  if (tiles.length === 0) return [];
+    .map(members => mostTypical(corpus, members, collectionMean, TILE_CANDIDATES_PER_FAMILY));
+  const first = remaining.shift();
+  if (!first) return [];
 
-  const chosen = [tiles[0]];
-  const remaining = tiles.slice(1);
+  const chosen = [first[0]];
   while (remaining.length > 0 && chosen.length < MAX_ONBOARDING_TILES) {
-    let pick = 0;
-    let pickSameness = Infinity;
-    remaining.forEach((tile, position) => {
-      const sameness = Math.max(...chosen.map(shown => similarity(corpus, tile, shown)));
-      if (sameness < pickSameness) {
-        pick = position;
-        pickSameness = sameness;
+    let pick: { family: number; tile: number; sameness: number } | null = null;
+    remaining.forEach((candidates, family) => {
+      for (const tile of candidates) {
+        const sameness = Math.max(...chosen.map(shown => similarity(corpus, tile, shown)));
+        if (sameness >= sameTaste) continue;
+        if (pick === null || sameness < pick.sameness) pick = { family, tile, sameness };
+        break;
       }
     });
-    if (pickSameness >= duplicateSimilarity) break;
-    chosen.push(remaining.splice(pick, 1)[0]);
+    if (pick === null) break;
+    const { family, tile }: { family: number; tile: number } = pick;
+    chosen.push(tile);
+    remaining.splice(family, 1);
   }
   return chosen;
 }
 
-/** The member closest to the average of its family. */
-function mostTypical(corpus: Corpus, members: readonly number[]): number {
-  const { dim, vectors } = corpus;
+/** The average of every vector in the corpus. */
+function meanVector(corpus: Corpus): Float64Array {
+  const { count, dim, vectors } = corpus;
   const mean = new Float64Array(dim);
+  for (let row = 0; row < count; row++) {
+    const offset = row * dim;
+    for (let d = 0; d < dim; d++) mean[d] += vectors[offset + d];
+  }
+  for (let d = 0; d < dim; d++) mean[d] /= count;
+  return mean;
+}
+
+/**
+ * The `limit` members most like their family's average, most typical first.
+ * Likeness is the cosine measured after taking away the collection average, as
+ * the families themselves are made (see `recluster.ts`): what every artwork
+ * shares says nothing about which family a work typifies, and measured with it
+ * the most generic-looking member wins.
+ */
+function mostTypical(corpus: Corpus, members: readonly number[], collectionMean: Float64Array, limit: number): number[] {
+  const { dim, vectors } = corpus;
+  const familyMean = new Float64Array(dim);
   for (const member of members) {
     const row = member * dim;
-    for (let d = 0; d < dim; d++) mean[d] += vectors[row + d];
+    for (let d = 0; d < dim; d++) familyMean[d] += vectors[row + d] - collectionMean[d];
   }
-  let best = members[0];
-  let bestScore = -Infinity;
-  for (const member of members) {
-    const row = member * dim;
-    let score = 0;
-    for (let d = 0; d < dim; d++) score += vectors[row + d] * mean[d];
-    if (score > bestScore) {
-      best = member;
-      bestScore = score;
-    }
-  }
-  return best;
+  return members
+    .map(member => {
+      const row = member * dim;
+      let dot = 0;
+      let squared = 0;
+      for (let d = 0; d < dim; d++) {
+        const x = vectors[row + d] - collectionMean[d];
+        dot += x * familyMean[d];
+        squared += x * x;
+      }
+      return { member, likeness: squared === 0 ? 0 : dot / Math.sqrt(squared) };
+    })
+    .sort((a, b) => b.likeness - a.likeness)
+    .slice(0, limit)
+    .map(entry => entry.member);
 }
 
 // --- Typesense -------------------------------------------------------------

@@ -43,7 +43,13 @@ export interface Pick {
 
 /** Two hearts at least this similar count as the same taste. */
 export const SAME_TASTE_SIMILARITY = 0.77;
-export const MAX_TASTES = 3;
+/**
+ * The most tastes one person is given. A heart unlike every centre is still
+ * put with the nearest one, where it no longer shapes what is recommended, so
+ * the cap is kept high: a dozen unrelated picks each stay a taste of their
+ * own, and each still gets two places on a wall of 24.
+ */
+export const MAX_TASTES = 12;
 
 /**
  * How the overlap is shown. People read a match score against the ones they

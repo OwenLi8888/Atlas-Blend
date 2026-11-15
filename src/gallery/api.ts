@@ -14,7 +14,7 @@ import type {
   HeartRequest,
   HeartResponse,
   OnboardingResponse,
-  Profile,
+  PicksRequest,
   ProfileResponse,
   RecsResponse,
   SimilarResponse,
@@ -76,7 +76,12 @@ function request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unkn
 
 export const api = {
   onboarding: () => request<OnboardingResponse>('GET', '/api/onboarding'),
-  createProfile: (name: string) => request<Profile>('POST', '/api/profile', { name } satisfies CreateProfileRequest),
+  /** Signs up with the works chosen at the entrance; the profile and its hearts are made together. */
+  createProfile: (name: string, picks: string[]) =>
+    request<ProfileResponse>('POST', '/api/profile', { name, picks } satisfies CreateProfileRequest),
+  /** Chooses again for a profile left with no hearts. */
+  choosePicks: (userId: string, picks: string[]) =>
+    request<ProfileResponse>('POST', '/api/profile/' + userId + '/picks', { picks } satisfies PicksRequest),
   profile: (userId: string) => request<ProfileResponse>('GET', '/api/profile/' + userId),
   heart: (userId: string, artId: string, why?: string) =>
     request<HeartResponse>('POST', '/api/heart', { user_id: userId, art_id: artId, why } satisfies HeartRequest),

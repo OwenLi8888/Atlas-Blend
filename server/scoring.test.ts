@@ -84,7 +84,13 @@ describe('findTastes', () => {
   it('ignores duplicate hearts and never exceeds the maximum', () => {
     const corpus = corpusOf([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]);
     expect(findTastes(corpus, [0, 0, 0])).toHaveLength(1);
-    expect(findTastes(corpus, [0, 1, 2, 3])).toHaveLength(3);
+    expect(findTastes(corpus, [0, 1, 2, 3], 3)).toHaveLength(3);
+  });
+
+  it('keeps every unrelated heart as a taste of its own', () => {
+    const axes = Array.from({ length: 6 }, (_, axis) => Array.from({ length: 6 }, (_, d) => (d === axis ? 1 : 0)));
+    const tastes = findTastes(corpusOf(axes), [0, 1, 2, 3, 4, 5]);
+    expect(tastes.map(taste => taste.medoid).sort()).toEqual([0, 1, 2, 3, 4, 5]);
   });
 });
 

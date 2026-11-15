@@ -39,6 +39,8 @@ import { ApiError } from './errors';
 import { resizedImages } from './images';
 
 const MIN_ONBOARDING_PICKS = 3;
+/** Far more than the entrance shows; only stops a request from hearting the whole collection at once. */
+const MAX_ONBOARDING_PICKS = 100;
 /** Works on the recommended wall: the default, and the most a request may ask for. */
 const WALL_SIZE = 24;
 const MAX_WALL_SIZE = 48;
@@ -48,6 +50,12 @@ const MAX_HEARTS = 300;
 const WALL_HEARTS_EACH = 3;
 const WALL_NEW_WORKS = 6;
 const BLEND_CANDIDATES = 200;
+/**
+ * How many of a person's tastes a blend names as their leanings, largest
+ * first. Scoring uses every taste; the page and the commissioned piece only
+ * have room for the main ones.
+ */
+const LEANINGS_SHOWN = 3;
 /** How many hearts illustrate each of a person's leanings. */
 const TREND_EXAMPLES = 4;
 const IMAGE_TIMEOUT_MS = 20_000;
@@ -123,10 +131,10 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
     return rows;
   }
 
-  /** A person's tastes summed up for keeping: the family, a few hearts by ID, and a reason they gave. */
+  /** A person's main tastes summed up for keeping: the family, a few hearts by ID, and a reason they gave. */
   function storedTrends(tastes: readonly Taste[], hearts: readonly HeartedRow[]): StoredTrend[] {
     const reasons = new Map(hearts.map(heart => [heart.index, heart.why]));
-    return tastes.map(taste => {
+    return tastes.slice(0, LEANINGS_SHOWN).map(taste => {
       const others = taste.members
         .filter(member => member !== taste.medoid)
         .map(member => ({ member, score: similarity(corpus, member, taste.medoid) }))
@@ -277,18 +285,40 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
     res.json({ ok: true, works: works.length });
   });
 
-  app.post('/api/profile', async (req, res: Response<Profile>) => {
+  /** A profile with its hearts, as every profile route answers. */
+  async function profileResponse(profile: Profile): Promise<ProfileResponse> {
+    const hearts = await heartsOf(profile.id);
+    return {
+      profile,
+      hearts: hearts.map(heart => ({ work: works[heart.index], why: heart.why, hearted_at: heart.heartedAt })),
+    };
+  }
+
+  /** The works chosen at the entrance: known artworks, each counted once, and enough of them to start a gallery. */
+  function onboardingPicks(value: unknown): string[] {
+    if (!Array.isArray(value) || value.length > MAX_ONBOARDING_PICKS) throw new ApiError(400, 'Invalid picks');
+    const picks = [...new Set(value.map(pick => text(pick, 'picks', MAX_ART_ID_LENGTH)))];
+    if (picks.some(pick => catalog.indexOf(pick) === undefined)) throw new ApiError(404, 'Artwork not found');
+    if (picks.length < MIN_ONBOARDING_PICKS) throw new ApiError(400, 'Choose at least ' + MIN_ONBOARDING_PICKS + ' works');
+    return picks;
+  }
+
+  // Signing up is one step: the profile is made with its first hearts or not at all.
+  app.post('/api/profile', async (req, res: Response<ProfileResponse>) => {
     const name = text(bodyField(req, 'name'), 'name', MAX_NAME_LENGTH);
-    res.status(201).json(await db.createProfile(name));
+    const picks = onboardingPicks(bodyField(req, 'picks'));
+    res.status(201).json(await profileResponse(await db.createProfile(name, undefined, picks)));
+  });
+
+  // Someone who removed every heart chooses again, under the same rule as signing up.
+  app.post('/api/profile/:user_id/picks', async (req, res: Response<ProfileResponse>) => {
+    const profile = await requireProfile(uuid(req.params.user_id));
+    await db.saveHearts(profile.id, onboardingPicks(bodyField(req, 'picks')));
+    res.json(await profileResponse(profile));
   });
 
   app.get('/api/profile/:user_id', async (req, res: Response<ProfileResponse>) => {
-    const userId = uuid(req.params.user_id);
-    const [profile, hearts] = await Promise.all([requireProfile(userId), heartsOf(userId)]);
-    res.json({
-      profile,
-      hearts: hearts.map(heart => ({ work: works[heart.index], why: heart.why, hearted_at: heart.heartedAt })),
-    });
+    res.json(await profileResponse(await requireProfile(uuid(req.params.user_id))));
   });
 
   app.get('/api/onboarding', (_req, res: Response<OnboardingResponse>) => {

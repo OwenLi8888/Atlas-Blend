@@ -46,7 +46,7 @@ At 6,757 works the collection is about 30 MB of vectors, so every request is sco
 
 **Visual families.** The works on the walls are grouped into 31 families. They drive the onboarding tiles (one typical work per family), the order of Explore (families take turns) and the family names in leanings and the closer look; recommendations, blends and the curator do not use them. The groups are made by `npm run recluster` and saved in `families.json`, so they are reviewed and committed like code. The script runs k-means on the image vectors after subtracting the collection average (without that, every family average looks about 95% alike, and large groups swallow small ones). It then merges families whose averages are at least 0.78 alike, unless the merged family would hold more than 7% of the collection. Works added since the last recluster join the family they are most like when the server starts. Each name in `families.ts` is tied to one typical artwork, not to a family number, so a recluster cannot attach a name to the wrong family; the script lists any family left without a name. A work that hardly resembles its family (under 0.25 likeness to the family's average, about 1% of works, such as a Belle Époque poster among prints) stays in the family but is shown without its name.
 
-**Taste.** A person's newest 300 hearts are grouped into at most three tastes. Each taste is represented by the heart at its centre (its medoid), not by an average: averaged vectors drift toward the middle of the whole collection, which made any two people look about 93% alike. Hearts with similarity of 0.77 or more count as the same taste.
+**Taste.** A person's newest 300 hearts are grouped into at most twelve tastes, so a heart is not folded into a taste it does not resemble. A blend names each person's three largest as their leanings; scoring uses all of them. Each taste is represented by the heart at its centre (its medoid), not by an average: averaged vectors drift toward the middle of the whole collection, which made any two people look about 93% alike. Hearts with similarity of 0.77 or more count as the same taste.
 
 **Recommendations.** The 12 slots are shared between tastes by the square root of their share of the hearts, so a small taste still gets room (each taste keeps at least one slot). Tastes take turns picking; each pick trades closeness to its taste against sameness with the wall so far, with at most two works per known artist. Closeness stops counting above 0.85, the level of a near copy, so the wall is not the next five prints from the same series. Every recommendation names the heart it is closest to.
 
@@ -76,7 +76,9 @@ Measured in one session: a note answered in 3 to 4 s; rooms hung in 10 to 16 s. 
 
 **Match score.** Each taste is matched to the other person's closest taste, weighted by share of hearts, in both directions. The raw similarity is rescaled between two anchors measured from the catalog at startup: two unrelated works (about 0.55) and a work next to its nearest neighbour (about 0.85). That 0 to 1 overlap is then lifted onto 50 to 100 and curved, so it reads like a familiar match score: most pairs land between 65 and 95, and a closer pair always scores higher.
 
-**Onboarding.** One tile per visual family (`cluster_id`), shown by the family's most typical work. Families holding under 1.5% of the collection are skipped. Tiles are added most-different first, up to 24, and a family is left out when its tile would nearly duplicate one already shown.
+**Onboarding.** One tile per visual family (`cluster_id`), and no two tiles alike enough to count as one taste (similarity under 0.77, the same rule that groups hearts), so every pick starts a taste of its own. Families holding under 1.5% of the collection are skipped. Families are added most-different first, up to 30. Each is shown by its most typical work, measured as the families are made (after subtracting the collection average); when that work repeats a tile already shown, the next most typical is tried, ten deep, and a family with none is left out. Today that gives 29 tiles covering 95% of the collection.
+
+**Signing up.** `POST /api/profile` takes the name and the picks together and makes the profile with its first hearts in one step; with fewer than three different known artworks it makes nothing. With Supabase the hearts go in as one insert and the profile is removed again if that insert fails (PostgREST has no transaction across two tables).
 
 ## Endpoints
 
@@ -85,7 +87,8 @@ Types for every request and response are in `src/rec/api.ts`. Artworks never inc
 | Request | Returns |
 | --- | --- |
 | `GET /api/health` | `{ok, works}` |
-| `POST /api/profile` `{name}` | The profile, with a six-letter `blend_code` (201) |
+| `POST /api/profile` `{name, picks}` | Signs up: `{profile, hearts}` with a six-letter `blend_code` and the picks hearted (201). 400 with fewer than `min_picks` different works |
+| `POST /api/profile/:user_id/picks` `{picks}` | `{profile, hearts}`: someone left with no hearts choosing again, under the same minimum |
 | `GET /api/profile/:user_id` | `{profile, hearts}`, hearts newest first with their artwork and reason |
 | `GET /api/onboarding` | `{works, min_picks}` |
 | `POST /api/heart` `{user_id, art_id, why?}` | `{heart}`. Hearting again without `why` keeps the saved reason |

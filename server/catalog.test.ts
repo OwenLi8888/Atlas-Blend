@@ -5,6 +5,8 @@ import path from 'node:path';
 import type { Artwork } from '../src/rec/api';
 import { curate, loadCatalog } from './catalog';
 import { assignFamilies, FAMILY_NAMES, parseFamilies, readFamilies, type Families } from './families';
+import { SAME_TASTE_SIMILARITY, similarity } from '../src/rec/scoring';
+import { testCatalog } from './testing';
 
 function work(id: string, cluster_id: number, medium: string | null): Artwork {
   return {
@@ -132,4 +134,37 @@ it('serves the last cache when a changed catalog cannot be downloaded', async ()
     const catalog=await loadCatalog({cacheDir,collection:'art_v1',host:'https://example.test',apiKey:'test'});
     expect(catalog.works[0].id).toBe('cached');
   } finally { vi.unstubAllGlobals(); await rm(cacheDir,{recursive:true,force:true}); }
+});
+
+describe('chooseOnboarding', () => {
+  /** Unit vectors at the given angles (degrees) in a plane, one family per group. */
+  const plane = (families: readonly (readonly number[])[]) => {
+    const entries = families.flatMap((angles, family) =>
+      angles.map((angle, n) => ({ id: family + '-' + n, vector: [Math.cos((angle * Math.PI) / 180), Math.sin((angle * Math.PI) / 180), 0.2], cluster_id: family })),
+    );
+    const catalog = testCatalog(entries);
+    return { catalog, ids: (rows: readonly number[]) => rows.map(row => catalog.works[row].id) };
+  };
+
+  it('shows each family by the work at its centre, not at its edge', () => {
+    const { catalog, ids } = plane([[0, 10, 20], [120, 130, 140], [240, 250, 260]]);
+    expect(ids(catalog.onboarding).sort()).toEqual(['0-1', '1-1', '2-1']);
+  });
+
+  it('never shows two tiles alike enough to count as one taste', () => {
+    // Family 1 sits right beside family 0; family 2 is far from both.
+    const { catalog } = plane([[0, 4, 8, 12], [14, 16, 18], [180, 184, 188]]);
+    const tiles = catalog.onboarding;
+    expect(tiles.length).toBeGreaterThan(0);
+    for (const a of tiles) for (const b of tiles) if (a !== b) expect(similarity(catalog.corpus, a, b)).toBeLessThan(SAME_TASTE_SIMILARITY);
+    expect(new Set(tiles.map(row => catalog.works[row].cluster_id)).size).toBe(tiles.length);
+  });
+
+  it('passes over a typical work that repeats a tile for a less typical one that does not', () => {
+    // Most of family 1 lies inside family 0, so its typical works repeat that tile; its far end (70°) does not.
+    const { catalog, ids } = plane([[0, 5, 10, 15, 20], [10, 12, 14, 70], [200, 210, 220]]);
+    const shown = ids(catalog.onboarding);
+    expect(shown).toHaveLength(3);
+    expect(shown).toContain('1-3');
+  });
 });

@@ -28,7 +28,8 @@ const WORKS: TestWork[] = [
   { id: 'mid-b', vector: [1, 0.9, 0], cluster_id: 1 },
 ];
 
-const server = createApp(testCatalog(WORKS), createMemoryDb()).listen(0, '127.0.0.1');
+const db = createMemoryDb();
+const server = createApp(testCatalog(WORKS), db).listen(0, '127.0.0.1');
 let base = '';
 beforeAll(async () => {
   if (!server.listening) await new Promise<void>(resolve => server.once('listening', resolve));
@@ -49,7 +50,7 @@ async function call<T>(method: string, route: string, body?: unknown) {
 }
 
 async function person(name: string, artIds: string[]): Promise<Profile> {
-  const { body: profile } = await call<Profile>('POST', '/api/profile', { name });
+  const profile = await db.createProfile(name);
   for (const art_id of artIds) await call('POST', '/api/heart', { user_id: profile.id, art_id });
   return profile;
 }
