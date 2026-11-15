@@ -33,6 +33,7 @@ import type { Catalog } from './catalog';
 import { noCommissions, type Commissions } from './commission';
 import type { BlendRecord, Db, StoredBlend, StoredTrend } from './db';
 import { ApiError } from './errors';
+import { resizedImages } from './images';
 
 const MIN_ONBOARDING_PICKS = 3;
 /** Works on the recommended wall: the default, and the most a request may ask for. */
@@ -247,6 +248,7 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
   // The painting animation reads an image's pixels, which a browser only allows
   // for same-origin images. The image host sends no CORS headers, so the image
   // is passed through here.
+  app.get('/api/image', resizedImages(catalog, fetchImage));
   app.get('/api/image', async (req, res) => {
     const index = catalog.indexOf(text(req.query.id, 'id', MAX_ART_ID_LENGTH));
     if (index === undefined) throw new ApiError(404, 'Artwork not found');

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import type { Artwork } from '../rec/api';
+import { thumbnailUrl } from './images';
 import { byline } from './format';
 
 interface Props {
@@ -21,7 +22,8 @@ export function Hung({ work, note, tag, kept = false, onToggleKeep, onOpen, chil
   const image = (
     <img
       className={loaded ? 'loaded' : ''}
-      src={work.image_url}
+      src={thumbnailUrl(work.id)}
+      decoding="async"
       alt={work.title + ' by ' + (work.artist || 'an unknown artist')}
       loading="lazy"
       draggable={false}
