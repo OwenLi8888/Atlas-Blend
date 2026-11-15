@@ -1,0 +1,48 @@
+/* The question asked before the only saved work is removed. */
+
+.last-heart {
+  width: min(440px, calc(100vw - 2 * var(--pad)));
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: var(--wall);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  animation: fade 0.2s ease;
+}
+
+.last-heart::backdrop {
+  background: rgba(28, 27, 24, 0.42);
+}
+
+.last-heart-body {
+  padding: clamp(24px, 4vw, 36px);
+}
+
+.last-heart h2 {
+  margin: 0 0 12px;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.7rem;
+  line-height: 1.15;
+}
+
+.last-heart p {
+  margin: 0 0 28px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.last-heart-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .last-heart {
+    animation: none;
+  }
+}

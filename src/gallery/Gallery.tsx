@@ -8,6 +8,7 @@ import { Hung } from './Hung';
 import { Salon } from './Salon';
 import { useCurator } from './useCurator';
 import { useHearts } from './useHearts';
+import { LastHeartDialog } from './LastHeartDialog';
 import { WhyField } from './WhyField';
 
 export type GalleryTab = 'for-you' | 'saved' | 'rooms';
@@ -149,6 +150,7 @@ export function Gallery({ profile, hearts, onHearts, tab }: Props) {
       )}
 
       {open && <HeartableDetail work={open} hearts={actions} onClose={closeDetail} onNavigate={setOpen} />}
+      {actions.lastHeart && <LastHeartDialog ask={actions.lastHeart} />}
     </main>
   );
 }

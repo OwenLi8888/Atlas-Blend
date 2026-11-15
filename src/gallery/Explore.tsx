@@ -5,6 +5,7 @@ import { HeartableDetail } from './Detail';
 import { Hung } from './Hung';
 import { Salon } from './Salon';
 import { useHearts } from './useHearts';
+import { LastHeartDialog } from './LastHeartDialog';
 
 interface Props {
   profile: Profile;
@@ -89,6 +90,7 @@ export function Explore({ profile, hearts, onHearts }: Props) {
       {nextOffset !== null ? <div ref={sentinel} className="more" aria-hidden="true" /> : <p className="quiet">That is the whole collection.</p>}
 
       {open && <HeartableDetail work={open} hearts={actions} onClose={closeDetail} onNavigate={setOpen} />}
+      {actions.lastHeart && <LastHeartDialog ask={actions.lastHeart} />}
     </main>
   );
 }

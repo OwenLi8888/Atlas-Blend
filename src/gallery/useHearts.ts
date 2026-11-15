@@ -9,15 +9,29 @@ export interface Hearts {
   saveWhy: (work: Artwork, why: string) => Promise<void>;
   /** What went wrong with the last change, if anything. */
   error: string | null;
+  /**
+   * Set while the person is being asked whether to remove their only heart:
+   * without one there is nothing to hang a wall or make a blend from.
+   */
+  lastHeart: LastHeart | null;
   /** Hearts added or removed since `settle` was last called. */
   changes: number;
   settle: () => void;
+}
+
+/** The question asked before the only heart left is removed. */
+export interface LastHeart {
+  work: Artwork;
+  /** Remove it anyway. */
+  remove: () => void;
+  keep: () => void;
 }
 
 /** Hearting, unhearting and giving reasons, shared by every screen that shows works. */
 export function useHearts(profile: Profile, hearts: readonly HeartedWork[], onHearts: (hearts: HeartedWork[]) => void): Hearts {
   const [error, setError] = useState<string | null>(null);
   const [changes, setChanges] = useState(0);
+  const [asking, setAsking] = useState<Artwork | null>(null);
   const current = useRef(hearts);
   current.current = hearts;
   const pending = useRef(new Set<string>());
@@ -25,8 +39,13 @@ export function useHearts(profile: Profile, hearts: readonly HeartedWork[], onHe
 
   const of = (work: Artwork) => hearts.find(heart => heart.work.id === work.id);
 
-  const toggle = async (work: Artwork) => {
+  const change = async (work: Artwork, confirmed: boolean) => {
     if (pending.current.has(work.id)) return;
+    const only = current.current.length === 1 && current.current[0].work.id === work.id;
+    if (only && !confirmed) {
+      setAsking(work);
+      return;
+    }
     pending.current.add(work.id);
     setError(null);
     const previous = current.current.find(heart => heart.work.id === work.id);
@@ -55,6 +74,16 @@ export function useHearts(profile: Profile, hearts: readonly HeartedWork[], onHe
     publish(current.current.map(existing => (existing.work.id === work.id ? { ...existing, why: heart.why } : existing)));
   };
 
+  const toggle = (work: Artwork) => change(work, false);
+  const lastHeart: LastHeart | null = asking && {
+    work: asking,
+    remove: () => {
+      setAsking(null);
+      void change(asking, true);
+    },
+    keep: () => setAsking(null),
+  };
+
   const settle = useCallback(() => setChanges(0), []);
-  return { of, toggle, saveWhy, error, changes, settle };
+  return { of, toggle, saveWhy, error, lastHeart, changes, settle };
 }
