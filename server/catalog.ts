@@ -40,11 +40,17 @@ export interface CatalogData {
   vectors: Float32Array;
 }
 
+/** What the collection looks like from outside: how many works, and how many in each family. */
+type Fingerprint = string;
+
 const PAGE_SIZE = 250;
 const PAGE_CONCURRENCY = 6;
 const FETCH_TIMEOUT_MS = 60_000;
-const COUNT_TIMEOUT_MS = 4_000;
-const CACHE_VERSION = 1;
+const FINGERPRINT_TIMEOUT_MS = 4_000;
+const CACHE_VERSION = 2;
+
+/** Upper bound on visual families, for the one request that counts works per family. */
+const MAX_FAMILIES = 1000;
 
 const MAX_ONBOARDING_TILES = 24;
 /** A family smaller than this share of the collection is too thin to recommend from. */
@@ -52,18 +58,20 @@ const MIN_FAMILY_SHARE = 0.015;
 
 export async function loadCatalog(source: CatalogSource): Promise<Catalog> {
   const cached = await readCache(source);
-  let liveCount: number | null = null;
+  let live: Fingerprint | null = null;
   try {
-    liveCount = await fetchCount(source);
+    live = await fetchFingerprint(source);
   } catch (error) {
     if (!cached) throw new Error('Art catalog unavailable and no local cache: ' + describe(error));
     console.warn('Typesense unreachable, using cached catalog: ' + describe(error));
   }
 
-  if (cached && (liveCount === null || liveCount === cached.works.length)) return buildCatalog(curate(cached));
+  // The cache is reused only while the collection is unchanged. Works being
+  // added or the families being reassigned both change the fingerprint.
+  if (cached && (live === null || live === cached.fingerprint)) return buildCatalog(curate(cached.data));
 
-  const fresh = await fetchAll(source, liveCount ?? 0);
-  await writeCache(source, fresh);
+  const fresh = await fetchAll(source);
+  await writeCache(source, fresh, live ?? fingerprintOf(fresh.works));
   return buildCatalog(curate(fresh));
 }
 
@@ -87,11 +95,18 @@ export function curate(data: CatalogData): CatalogData {
     if (!monochrome) kept.push(index);
   });
 
+  const familyOf = new Map(data.works.map(work => [work.id, work.cluster_id]));
+  const names = new Map<number, string>();
+  for (const { anchor, name } of FAMILY_NAMES) {
+    const family = familyOf.get(anchor);
+    if (family !== undefined && !names.has(family)) names.set(family, name);
+  }
+
   const vectors = new Float32Array(kept.length * data.dim);
   const works = kept.map((index, row) => {
     vectors.set(data.vectors.subarray(index * data.dim, (index + 1) * data.dim), row * data.dim);
     const work = data.works[index];
-    return { ...work, cluster: FAMILY_NAMES[work.cluster_id] ?? work.cluster };
+    return { ...work, cluster: names.get(work.cluster_id) ?? work.cluster };
   });
   return { works, dim: data.dim, vectors };
 }
@@ -182,6 +197,8 @@ function mostTypical(corpus: Corpus, members: readonly number[]): number {
 interface SearchResult {
   found: number;
   hits: { document: unknown }[];
+  /** Number of works per value of each faceted field, when facets were asked for. */
+  facets: Map<string, number>;
 }
 
 async function search(source: CatalogSource, params: Record<string, unknown>, timeoutMs: number): Promise<SearchResult> {
@@ -203,15 +220,45 @@ async function search(source: CatalogSource, params: Record<string, unknown>, ti
     if (!isRecord(hit)) throw new Error('Unexpected Typesense hit');
     return { document: hit.document };
   });
-  return { found: result.found, hits };
+  const facets = new Map<string, number>();
+  const facetCounts = Array.isArray(result.facet_counts) ? result.facet_counts : [];
+  for (const facet of facetCounts) {
+    if (!isRecord(facet) || !Array.isArray(facet.counts)) continue;
+    for (const entry of facet.counts) {
+      if (isRecord(entry) && typeof entry.value === 'string' && typeof entry.count === 'number') {
+        facets.set(entry.value, entry.count);
+      }
+    }
+  }
+  return { found: result.found, hits, facets };
 }
 
-async function fetchCount(source: CatalogSource): Promise<number> {
-  return (await search(source, { per_page: 0 }, COUNT_TIMEOUT_MS)).found;
+/** One cheap request: the number of works and how they are spread over the families. */
+async function fetchFingerprint(source: CatalogSource): Promise<Fingerprint> {
+  const result = await search(
+    source,
+    { per_page: 0, facet_by: 'cluster_id', max_facet_values: MAX_FAMILIES },
+    FINGERPRINT_TIMEOUT_MS,
+  );
+  return fingerprint(result.found, result.facets);
 }
 
-async function fetchAll(source: CatalogSource, expected: number): Promise<CatalogData> {
-  const total = expected > 0 ? expected : await fetchCount(source);
+function fingerprintOf(works: readonly Artwork[]): Fingerprint {
+  const sizes = new Map<string, number>();
+  for (const work of works) {
+    const family = String(work.cluster_id);
+    sizes.set(family, (sizes.get(family) ?? 0) + 1);
+  }
+  return fingerprint(works.length, sizes);
+}
+
+function fingerprint(total: number, familySizes: ReadonlyMap<string, number>): Fingerprint {
+  const sizes = [...familySizes].sort(([a], [b]) => Number(a) - Number(b)).map(([family, size]) => family + ':' + size);
+  return total + '|' + sizes.join(',');
+}
+
+async function fetchAll(source: CatalogSource): Promise<CatalogData> {
+  const total = (await search(source, { per_page: 0 }, FINGERPRINT_TIMEOUT_MS)).found;
   if (total === 0) throw new Error('Art collection is empty');
 
   const pageCount = Math.ceil(total / PAGE_SIZE);
@@ -281,6 +328,7 @@ function unitVector(vector: readonly number[], id: string): Float32Array {
 interface CacheManifest {
   version: number;
   collection: string;
+  fingerprint: Fingerprint;
   dim: number;
   works: Artwork[];
 }
@@ -290,7 +338,7 @@ function cachePaths(source: CatalogSource) {
   return { manifest: base + '.json', vectors: base + '.f32' };
 }
 
-async function readCache(source: CatalogSource): Promise<CatalogData | null> {
+async function readCache(source: CatalogSource): Promise<{ data: CatalogData; fingerprint: Fingerprint } | null> {
   const paths = cachePaths(source);
   try {
     const manifest = JSON.parse(await readFile(paths.manifest, 'utf8')) as CacheManifest;
@@ -304,18 +352,19 @@ async function readCache(source: CatalogSource): Promise<CatalogData | null> {
     // Copy into a fresh buffer: a file Buffer may sit at an offset Float32Array cannot view.
     const vectors = new Float32Array(manifest.works.length * manifest.dim);
     new Uint8Array(vectors.buffer).set(bytes);
-    return { works: manifest.works, dim: manifest.dim, vectors };
+    return { data: { works: manifest.works, dim: manifest.dim, vectors }, fingerprint: manifest.fingerprint };
   } catch {
     // A missing or unreadable cache is rebuilt from Typesense.
     return null;
   }
 }
 
-async function writeCache(source: CatalogSource, data: CatalogData): Promise<void> {
+async function writeCache(source: CatalogSource, data: CatalogData, fingerprint: Fingerprint): Promise<void> {
   const paths = cachePaths(source);
   const manifest: CacheManifest = {
     version: CACHE_VERSION,
     collection: source.collection,
+    fingerprint,
     dim: data.dim,
     works: data.works,
   };

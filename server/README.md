@@ -16,7 +16,7 @@ To run without Supabase (profiles and hearts kept in memory until the server sto
 
 The API listens on `127.0.0.1:43871`. The screens are at `/gallery.html` on the Vite dev server. Run the normal Vite dev server from the repo root; its `/api` proxy forwards here. For deployment, put a same-origin `/api` reverse proxy in front of it (the Vite proxy only exists in development).
 
-**Startup.** The server loads the whole art catalog into memory before it accepts requests. The first start reads it from Typesense (about 15 seconds) and saves a copy in `server/.cache/` (git-ignored, about 36 MB). Every later start reads that copy in under 2 seconds, and still works if Typesense is unreachable. The copy is rebuilt automatically when the number of works in Typesense changes; delete `server/.cache/` to force a rebuild.
+**Startup.** The server loads the whole art catalog into memory before it accepts requests. The first start reads it from Typesense (about 15 seconds) and saves a copy in `server/.cache/` (git-ignored, about 36 MB). Every later start reads that copy in under 2 seconds, and still works if Typesense is unreachable. The copy is rebuilt automatically when works are added or removed, or when works move between visual families (a recluster); delete `server/.cache/` to force a rebuild.
 
 ## How it works
 
@@ -32,7 +32,7 @@ The API listens on `127.0.0.1:43871`. The screens are at `/gallery.html` on the 
 
 At 6,674 works the collection is about 30 MB of vectors, so every request is scored exactly against all of it in memory. A recommendation wall takes about 0.1 s and a blend about 0.2 s. Typesense is only used to fill the cache.
 
-**Curation.** Monochrome works on paper (pencil, ink, etching and the like, about one work in six) are left out when the catalog loads, because they read as pale sketches on a wall of paintings. The cache keeps the full collection, so the rule in `catalog.ts` can change without refetching. Each visual family gets its display name from `families.ts`.
+**Curation.** Monochrome works on paper (pencil, ink, etching and the like, about one work in six) are left out when the catalog loads, because they read as pale sketches on a wall of paintings. The cache keeps the full collection, so the rule in `catalog.ts` can change without refetching. Each visual family gets its display name from `families.ts`, where every name is tied to one typical artwork, not to a cluster number, so a recluster cannot attach a name to the wrong family.
 
 **Taste.** A person's newest 300 hearts are grouped into at most three tastes. Each taste is represented by the heart at its centre (its medoid), not by an average: averaged vectors drift toward the middle of the whole collection, which made any two people look about 93% alike. Hearts with similarity of 0.77 or more count as the same taste.
 
