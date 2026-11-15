@@ -607,3 +607,91 @@ body:has(.picks) {
     opacity: 1;
   }
 }
+
+/* ---- The painter's trip: it hops to a picked picture and paints a check on it ---- */
+
+.picks-flyer {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+  will-change: transform;
+}
+
+.picks-flyer > img:not(.picks-flyer-brush) {
+  position: relative;
+  z-index: 1;
+}
+
+/* held in the left hand, reaching up and left toward the check */
+.picks-flyer-brush {
+  position: absolute;
+  width: 78%;
+  left: -55%;
+  top: 30%;
+  transform: rotate(28deg);
+  transform-origin: 100% 50%;
+}
+
+.pick-check {
+  position: absolute;
+  inset: 16% 18% 20% 14%;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+}
+
+.pick-check svg {
+  width: min(100%, 120px);
+  height: auto;
+  overflow: visible;
+}
+
+.pick-check path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+.pick-check .under {
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 19;
+}
+
+.pick-check .paint {
+  stroke-width: 13;
+}
+
+.pick-check .ridge {
+  stroke: rgba(255, 255, 255, 0.45);
+  stroke-width: 3;
+  transform: translate(-2px, -2px);
+}
+
+.pick-check.drawing path {
+  animation: check-draw 560ms cubic-bezier(0.4, 0.1, 0.3, 1) both;
+}
+
+.pick-check.drawing .ridge {
+  animation-delay: 60ms;
+}
+
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pick-check.drawing path {
+    animation: none;
+  }
+}

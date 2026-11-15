@@ -70,11 +70,97 @@ export function PhotoPicks({ character, session, onBack, onDone }: Props) {
     return () => window.clearTimeout(t);
   }, [shaking]);
 
+  // ---- The painter's trips: on each pick it hops to the picture and paints a check on it ----
+  const mainRef = useRef<HTMLElement>(null);
+  const flyerRef = useRef<HTMLDivElement>(null);
+  const tiles = useRef(new Map<string, HTMLButtonElement>());
+  /** Pictures that already carry a painted check. */
+  const [checked, setChecked] = useState<Set<string>>(() => new Set());
+  /** The check being painted right now: it draws itself in step with the brush. */
+  const [painting, setPainting] = useState<string | null>(null);
+  const queue = useRef<string[]>([]);
+  const busy = useRef(false);
+  const alive = useRef(true);
+  const picksRef = useRef(picks);
+  picksRef.current = picks;
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  // A restored draft arrives already checked.
+  useEffect(() => {
+    setChecked((c) => (c.size || !picks.length ? c : new Set(picks)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photos]);
+
+  const tripTo = async (id: string) => {
+    const flyer = flyerRef.current;
+    const sprite = mainRef.current?.querySelector<HTMLElement>('.picks-sprite');
+    const tile = tiles.current.get(id);
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!flyer || !sprite || !tile || calm) {
+      setChecked((c) => new Set(c).add(id));
+      return;
+    }
+    const home = sprite.getBoundingClientRect();
+    const box = tile.getBoundingClientRect();
+    const size = home.width;
+    // Lands on the picture's lower right corner, brush reaching over to the check.
+    const land = { x: box.right - size * 0.7, y: box.bottom - size * 0.95 };
+    const arc = (from: { x: number; y: number }, to: { x: number; y: number }, lift: number) =>
+      Array.from({ length: 9 }, (_, i) => {
+        const k = i / 8;
+        const x = from.x + (to.x - from.x) * k;
+        const y = from.y + (to.y - from.y) * k - Math.sin(Math.PI * k) * lift;
+        const squash = i === 0 || i === 8 ? 'scale(1.08, 0.9)' : 'scale(0.96, 1.05)';
+        return { transform: `translate(${x}px, ${y}px) ${squash}` };
+      });
+    const start = { x: home.left, y: home.top };
+    Object.assign(flyer.style, { width: `${size}px`, height: `${size}px`, opacity: '1' });
+    sprite.style.visibility = 'hidden';
+    const lift = Math.max(70, Math.abs(land.y - start.y) * 0.35);
+    await flyer.animate(arc(start, land, lift), { duration: 560, easing: 'ease-in-out', fill: 'forwards' }).finished;
+    if (!alive.current) return;
+    if (picksRef.current.includes(id)) {
+      setPainting(id);
+      setChecked((c) => new Set(c).add(id));
+      // brushing: a little sway while the check draws itself
+      await flyer.animate(
+        [0, -10, 6, -8, 4, 0].map((r) => ({ transform: `translate(${land.x}px, ${land.y}px) rotate(${r}deg)` })),
+        { duration: 620, easing: 'ease-in-out', fill: 'forwards' },
+      ).finished;
+      if (!alive.current) return;
+      setPainting(null);
+    }
+    const back = sprite.getBoundingClientRect();
+    await flyer.animate(arc(land, { x: back.left, y: back.top }, lift * 0.8), { duration: 480, easing: 'ease-in-out', fill: 'forwards' }).finished;
+    if (!alive.current) return;
+    sprite.style.visibility = '';
+    flyer.style.opacity = '0';
+  };
+  const runTrips = async () => {
+    if (busy.current) return;
+    busy.current = true;
+    while (queue.current.length && alive.current) {
+      const id = queue.current.shift()!;
+      if (picksRef.current.includes(id)) await tripTo(id);
+    }
+    busy.current = false;
+  };
+
   const toggle = (id: string) => {
     if (phase !== 'picking') return;
     let next = picks;
     if (picks.includes(id)) {
       next = picks.filter((p) => p !== id);
+      queue.current = queue.current.filter((q) => q !== id);
+      setChecked((c) => {
+        const n = new Set(c);
+        n.delete(id);
+        return n;
+      });
       setHint('');
     } else if (picks.length >= PICKS) {
       setShaking(id);
@@ -83,6 +169,9 @@ export function PhotoPicks({ character, session, onBack, onDone }: Props) {
     } else {
       next = [...picks, id];
       setHint('');
+      queue.current.push(id);
+      picksRef.current = next;
+      void runTrips();
     }
     setPicks(next);
     saveDraft(session, next);
@@ -149,7 +238,7 @@ export function PhotoPicks({ character, session, onBack, onDone }: Props) {
   const saved = phase === 'saved';
 
   return (
-    <main className="picks">
+    <main className="picks" ref={mainRef}>
       <header className="picks-head">
         <div className="picks-top">
           <button type="button" className="btn ghost back" onClick={onBack} disabled={phase !== 'picking'}>
@@ -182,12 +271,17 @@ export function PhotoPicks({ character, session, onBack, onDone }: Props) {
                 <li key={photo.id} style={{ left: box.x, top: box.y, width: box.w, height: box.h }}>
                   <button
                     type="button"
+                    ref={(el) => {
+                      if (el) tiles.current.set(photo.id, el);
+                      else tiles.current.delete(photo.id);
+                    }}
                     className={`pick-tile${n ? ' selected' : ''}${shaking === photo.id ? ' shake' : ''}`}
                     aria-pressed={!!n}
                     disabled={phase !== 'picking'}
                     onClick={() => toggle(photo.id)}
                   >
                     <WallImage photo={photo} box={box} />
+                    {n && checked.has(photo.id) && <PaintedCheck color={character.color} drawing={painting === photo.id} />}
                     {n && (
                       <span className="pick-badge">
                         <span className="sr-only">Pick </span>
@@ -199,6 +293,16 @@ export function PhotoPicks({ character, session, onBack, onDone }: Props) {
               );
             })}
         </ul>
+      )}
+
+      {/* The painter on its trips to the wall, with a brush in its colour. In <body> for the same
+          reason as the bar below. */}
+      {createPortal(
+        <div ref={flyerRef} className="picks-flyer" style={{ ['--tint' as string]: character.color }} aria-hidden="true">
+          <img className="picks-flyer-brush" src="./studio/brush.webp" alt="" draggable={false} />
+          <character.Sprite />
+        </div>,
+        document.body,
       )}
 
       {/* In <body>, not in the screen: the screen wrapper is animated with a transform, and a
@@ -223,6 +327,30 @@ export function PhotoPicks({ character, session, onBack, onDone }: Props) {
         document.body,
       )}
     </main>
+  );
+}
+
+/**
+ * A check painted with a loaded brush in the painter's colour: a white underlay so it reads on any
+ * picture, the colour stroke with a ragged paint edge, and a lighter ridge on top. `drawing` makes
+ * it paint itself in.
+ */
+function PaintedCheck({ color, drawing }: { color: string; drawing: boolean }) {
+  const d = 'M20 55 C 28 62, 34 70, 41 77 C 52 60, 66 42, 83 24';
+  return (
+    <span className={`pick-check${drawing ? ' drawing' : ''}`} aria-hidden="true">
+      <svg viewBox="0 0 100 100">
+        <defs>
+          <filter id="paint-edge" x="-10%" y="-10%" width="120%" height="120%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4" />
+            <feDisplacementMap in="SourceGraphic" scale="5" />
+          </filter>
+        </defs>
+        <path className="under" d={d} pathLength={1} />
+        <path className="paint" d={d} pathLength={1} style={{ stroke: color }} filter="url(#paint-edge)" />
+        <path className="ridge" d={d} pathLength={1} />
+      </svg>
+    </span>
   );
 }
 
