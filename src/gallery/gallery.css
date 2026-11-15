@@ -1119,3 +1119,9 @@ button.heart:hover svg {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* From the works back to the studio, above the entrance's question. */
+.entrance-back {
+  display: inline-block;
+  margin-bottom: 18px;
+}

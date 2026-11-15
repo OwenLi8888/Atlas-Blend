@@ -1,0 +1,165 @@
+/* The way in: the painted studio fills the screen. Phone: the words over the top of the picture and
+   the choice over the palette at the bottom. Wide screen: one column on the left, the studio moved right. */
+
+.studio-entrance {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  background: #e8d6b8;
+}
+
+.studio-entrance-scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: manipulation;
+}
+
+.studio-entrance-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none; /* taps reach the painters in the scene, except on the controls */
+}
+
+.studio-entrance-panel > * {
+  pointer-events: auto;
+}
+
+.studio-entrance-head {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  text-align: center;
+  padding: calc(18px + env(safe-area-inset-top)) var(--pad) 34px;
+  background: linear-gradient(to bottom, rgba(233, 225, 210, 0.94) 62%, rgba(233, 225, 210, 0));
+}
+
+.studio-entrance-head h1 {
+  font-size: clamp(2.1rem, 9vw, 3.4rem);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+}
+
+.studio-entrance-lede {
+  max-width: 28ch;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.studio-entrance-choice {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 18px var(--pad) calc(16px + env(safe-area-inset-bottom));
+  border-top: 3px solid var(--frame);
+  background: var(--grain) var(--mat);
+  box-shadow: 0 -14px 24px -18px rgba(31, 26, 20, 0.45);
+}
+
+.studio-entrance-painters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 420px;
+}
+
+.studio-entrance-painter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 13px 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: transparent;
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.studio-entrance-painter.chosen {
+  border-color: var(--ink);
+  background: var(--wall);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.studio-entrance-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--paint);
+  box-shadow: inset 0 0 0 1px rgba(31, 26, 20, 0.25);
+}
+
+.studio-entrance-note {
+  min-height: 1.4em;
+  font-family: var(--serif);
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.studio-entrance-note em {
+  color: var(--ink);
+}
+
+.studio-entrance-go {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: min(100%, 420px);
+}
+
+.studio-entrance-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.studio-entrance-name input {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 8px 0;
+  background: none;
+  font-size: 16px; /* 16px keeps iOS from zooming in on focus */
+}
+
+/* Wide screens (laptop, tablet landscape): a column on the left over the studio. */
+@media (min-width: 900px) and (min-aspect-ratio: 1/1) {
+  .studio-entrance-panel {
+    right: auto;
+    width: clamp(340px, 30vw, 440px);
+    justify-content: center;
+    gap: 36px;
+    padding: 48px 40px;
+    background: linear-gradient(to right, rgba(233, 225, 210, 0.97) 80%, rgba(233, 225, 210, 0));
+  }
+
+  .studio-entrance-head,
+  .studio-entrance-choice {
+    justify-items: start;
+    text-align: left;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .studio-entrance-painters {
+    justify-content: flex-start;
+  }
+}
+
+/* Short landscape phones: keep the controls compact. */
+@media (max-height: 520px) and (min-aspect-ratio: 1/1) {
+  .studio-entrance-lede {
+    display: none;
+  }
+}

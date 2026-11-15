@@ -9,6 +9,8 @@ import { painterOf } from './painter';
 import { ProfileMenu } from './ProfileMenu';
 import { Settings } from './Settings';
 import { forgetUserId, rememberedUserId, rememberUserId } from './session';
+import { canOpenStudio } from './PaintStudio';
+import { StudioEntrance, type StudioChoice } from './StudioEntrance';
 
 type Route =
   | { page: 'for-you' }
@@ -43,6 +45,10 @@ export function GalleryApp() {
   const [route, setRoute] = useState<Route>(routeFromHash);
   /** The blend made a moment ago, kept so it can be revealed without asking the server again. */
   const [freshBlend, setFreshBlend] = useState<BlendResponse | null>(null);
+  /** A first visit: 'open' while the visitor is in the painted studio choosing a painter, 'done' after; 'skipped' without WebGL2. */
+  const [studio, setStudio] = useState<'open' | 'done' | 'skipped'>(() => (canOpenStudio() ? 'open' : 'skipped'));
+  /** The painter and name chosen in the studio. */
+  const [chosen, setChosen] = useState<StudioChoice | null>(null);
   /** Shows a new choice of painter at once, in the bar and everywhere else; Settings saves it to the profile. */
   const showPainter = useCallback((painter: ChosenPainter) => {
     setSession(current =>
@@ -159,7 +165,25 @@ export function GalleryApp() {
         </main>
       )}
 
-      {session.state === 'ready' && !hasGallery && <Onboarding profile={profile} onDone={enter} />}
+      {/* A first visit starts in the painted studio (when the browser can draw it), then the works. */}
+      {session.state === 'ready' && !hasGallery && !profile && studio === 'open' && (
+        <StudioEntrance
+          initial={chosen}
+          onEnter={choice => {
+            setChosen(choice);
+            setStudio('done');
+            window.scrollTo({ top: 0 });
+          }}
+        />
+      )}
+      {session.state === 'ready' && !hasGallery && (profile || studio !== 'open') && (
+        <Onboarding
+          profile={profile}
+          onDone={enter}
+          chosen={profile ? null : chosen}
+          onBack={!profile && studio === 'done' ? () => setStudio('open') : undefined}
+        />
+      )}
 
       {session.state === 'ready' && hasGallery && profile && (
         <>
