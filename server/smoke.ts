@@ -71,7 +71,7 @@ try {
   assert.ok(!hearted.has(blend.top_artwork.id), 'the reveal should be new to both people');
   assert.ok(blend.wall.some(item => item.from === 'you') && blend.wall.some(item => item.from === 'friend'));
   assert.ok(blend.wall.every(item => item.work.id !== blend.top_artwork.id));
-  assert.equal(blend.bridge.a.why, 'smoke test');
+  assert.equal(blend.trends.you[0].why, 'smoke test');
   assert.ok(blend.score >= 0 && blend.score <= 100);
 
   await request('DELETE', '/api/heart?user_id=' + a.id + '&art_id=' + encodeURIComponent(picksA[0].id));

@@ -87,9 +87,39 @@ export interface BlendRequest {
   code: string;
 }
 
-export interface BridgeHeart {
-  work: Artwork;
+/** One of a person's leanings: a group of similar hearts, summed up. */
+export interface Trend {
+  /** Name of the visual family most of the group belongs to. */
+  family: string;
+  /** Share of the person's hearts in this group, 0 to 1. */
+  share: number;
+  /** A few hearts from the group, the most central first. */
+  works: Artwork[];
+  /** A reason the person gave for one of these hearts, if they gave any. */
   why: string | null;
+}
+
+/**
+ * The piece made for the two people. `pending` while it is being made,
+ * `unavailable` when this server has no image model, in which case the blend
+ * reveals `top_artwork` instead.
+ */
+export interface Commission {
+  status: 'pending' | 'ready' | 'failed' | 'unavailable';
+  /** Same-origin address of the finished image; null until it is ready. */
+  image_url: string | null;
+  /** A plain title, there from the start; the label's title replaces it once written. */
+  title: string | null;
+  /** Whether the wall label has been written. It can arrive after the image. */
+  label_status: 'pending' | 'ready' | 'failed' | 'unavailable';
+  label: CommissionLabel | null;
+}
+
+/** The wall label written for a commissioned piece. */
+export interface CommissionLabel {
+  title: string;
+  /** Wall text describing the piece, with both people's loves woven through it. */
+  story: string;
 }
 
 /** Whose work a piece on the shared wall is. */
@@ -112,17 +142,19 @@ export interface BlendResponse {
   id: string;
   created_at: string;
   friend: { name: string };
-  /** Taste overlap, 0 to 100. */
+  /** Taste match, 50 to 100: lifted and curved from the raw overlap so it reads like a familiar match score. */
   score: number;
-  /** The reveal: the work both people are closest to. */
+  /** A new artwork made for the two of them: the centrepiece. Poll GET /api/blend/:id/commission. */
+  commission: Commission;
+  /** The work in the collection that best fits both people's whole taste. */
   top_artwork: Artwork;
   /**
    * The shared wall, in hanging order: works you both hearted, each person's
    * hearts the other is closest to, and new works for both. Never the reveal.
    */
   wall: WallItem[];
-  /** The heart from each person that sits closest to the reveal. */
-  bridge: { a: BridgeHeart; b: BridgeHeart };
+  /** What each person leans toward, largest leaning first. */
+  trends: { you: Trend[]; friend: Trend[] };
   story: string;
 }
 

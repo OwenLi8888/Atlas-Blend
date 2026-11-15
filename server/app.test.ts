@@ -166,10 +166,11 @@ describe('blend', () => {
     // "mid-foil" scores highest, but "foil" must not count as oil paint.
     expect(body.top_artwork.id).toBe('mid-oil');
     expect(body.friend.name).toBe('Ivy');
-    expect(body.bridge.a).toMatchObject({ work: { id: 'a:1' }, why: 'so calm' });
-    expect(body.bridge.b).toMatchObject({ work: { id: 'b:1' }, why: null });
-    expect(body.story).toContain('so calm');
-    expect(body.story).toContain('Ivy');
+    expect(body.trends.you).toEqual([
+      expect.objectContaining({ family: 'Family 0', share: 1, why: 'so calm', works: [expect.objectContaining({ id: 'a:1' })] }),
+    ]);
+    expect(body.trends.friend[0]).toMatchObject({ family: 'Family 1', why: null });
+    expect(body.story).toBe('You lean toward family 0. Ivy leans toward family 1. “Title of mid-oil” is where the two of you meet.');
 
     const wallIds = body.wall.map(item => item.work.id);
     expect(wallIds).not.toContain('mid-oil');
@@ -247,8 +248,22 @@ describe('request handling', () => {
 describe('blendStory', () => {
   const work = (title: string) => testCatalog([{ id: title, vector: [1, 0] }]).works[0];
 
+  const trend = (family: string) => ({ family, share: 0.5, works: [], why: null });
+
   it('falls back to a neutral name when the friend has none', () => {
-    const story = blendStory(work('r'), { work: work('m'), why: null }, { work: work('t'), why: null }, '  ');
-    expect(story).toContain('Your friend hearted');
+    expect(blendStory(work('r'), [trend('Flower still lifes')], [trend('Hard-edge abstraction')], '  ')).toContain(
+      'Your friend leans toward hard-edge abstraction',
+    );
+  });
+
+  it('lists each family once and keeps proper names capitalised', () => {
+    const story = blendStory(
+      work('r'),
+      [trend('Japanese folding screens'), trend('Flower still lifes'), trend('Japanese folding screens')],
+      [trend('Portrait paintings'), trend('Harbour and coastal views'), trend('Indian miniature paintings')],
+      'Juno',
+    );
+    expect(story).toContain('You lean toward Japanese folding screens and flower still lifes.');
+    expect(story).toContain('Juno leans toward portrait paintings, harbour and coastal views and Indian miniature paintings.');
   });
 });

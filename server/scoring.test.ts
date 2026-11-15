@@ -177,6 +177,26 @@ describe('blend', () => {
     expect(topIndices(scores, 1, new Set([0, 1]))).toEqual([2]);
   });
 
+  it('weighs the whole of each taste, so a main interest counts for more than a side one', () => {
+    // A mostly likes work 0 and a little likes work 2; B likes work 1.
+    const three = corpusOf([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [0, 1, 1]]);
+    const mixed: Taste[] = [
+      { medoid: 0, members: [0], weight: 0.75 },
+      { medoid: 2, members: [2], weight: 0.25 },
+    ];
+    const scores = blendScores(three, mixed, [single(1)]);
+    // Works 3 and 4 are equally between B and one of A's tastes; the main taste wins.
+    expect(scores[3]).toBeGreaterThan(scores[4]);
+    expect(scores[3]).toBeCloseTo(0.75 * Math.SQRT1_2);
+  });
+
+  it('gives a near copy of a heart no credit over a merely close work', () => {
+    const near = corpusOf([[1, 0], [1, 0.02], [1, 0.3]]);
+    const scores = blendScores(near, [single(0)], [single(0)]);
+    expect(scores[1]).toBeCloseTo(0.85);
+    expect(scores[2]).toBeCloseTo(0.85);
+  });
+
   it('is the same whichever person asks', () => {
     expect([...blendScores(corpus, a, b)]).toEqual([...blendScores(corpus, b, a)]);
   });
@@ -191,16 +211,25 @@ describe('overlapPercent', () => {
   const corpus = corpusOf([[1, 0], [0, 1], [1, 1], [1, 0.2]]);
   const calibration = { stranger: 0.2, kindred: 0.9 };
 
-  it('is 100 for identical tastes and 0 for unrelated or missing ones', () => {
+  it('is 100 for identical tastes, 50 for unrelated ones and 0 when someone has no hearts', () => {
     expect(overlapPercent(corpus, [single(0)], [single(0)], calibration)).toBe(100);
-    expect(overlapPercent(corpus, [single(0)], [single(1)], calibration)).toBe(0);
+    expect(overlapPercent(corpus, [single(0)], [single(1)], calibration)).toBe(50);
     expect(overlapPercent(corpus, [single(0)], [], calibration)).toBe(0);
   });
 
   it('rescales between the two anchors and is symmetric', () => {
     const score = overlapPercent(corpus, [single(0)], [single(2)], calibration);
-    expect(score).toBe(Math.round(((Math.SQRT1_2 - 0.2) / 0.7) * 100));
+    const overlap = (Math.SQRT1_2 - 0.2) / 0.7;
+    expect(score).toBe(Math.round(100 * (0.5 + 0.5 * Math.pow(overlap, 0.6))));
     expect(overlapPercent(corpus, [single(2)], [single(0)], calibration)).toBe(score);
+  });
+
+  it('keeps the order of pairs: a closer pair never scores lower', () => {
+    const near = overlapPercent(corpus, [single(0)], [single(3)], calibration);
+    const mid = overlapPercent(corpus, [single(0)], [single(2)], calibration);
+    const far = overlapPercent(corpus, [single(0)], [single(1)], calibration);
+    expect(near).toBeGreaterThan(mid);
+    expect(mid).toBeGreaterThan(far);
   });
 
   it('does not divide by zero on a degenerate calibration', () => {

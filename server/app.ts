@@ -2,12 +2,13 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import type {
   Artwork,
   BlendResponse,
-  BridgeHeart,
+  Commission,
   HeartResponse,
   OnboardingResponse,
   Profile,
   ProfileResponse,
   RecsResponse,
+  Trend,
   WallItem,
 } from '../src/rec/api';
 import {
@@ -18,9 +19,12 @@ import {
   overlapPercent,
   recommend,
   selectDiverse,
+  similarity,
   topIndices,
+  type Taste,
 } from '../src/rec/scoring';
 import type { Catalog } from './catalog';
+import { noCommissions, type Commissions } from './commission';
 import type { Db } from './db';
 import { ApiError } from './errors';
 
@@ -32,6 +36,8 @@ const MAX_HEARTS = 300;
 const WALL_HEARTS_EACH = 3;
 const WALL_NEW_WORKS = 6;
 const BLEND_CANDIDATES = 200;
+/** How many hearts illustrate each of a person's leanings. */
+const TREND_EXAMPLES = 4;
 const IMAGE_TIMEOUT_MS = 20_000;
 /** The reveal may be any painterly work among this many best shared matches. */
 const REVEAL_SEARCH_DEPTH = 20;
@@ -56,10 +62,13 @@ interface HeartedRow {
 export interface AppOptions {
   /** Fetches an artwork image from where it is hosted. Replaceable for tests. */
   fetchImage?: (url: string, init: { signal: AbortSignal }) => Promise<globalThis.Response>;
+  /** Makes the commissioned piece for each blend. Without it, blends reveal a work from the collection. */
+  commissions?: Commissions;
 }
 
 export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
   const fetchImage = options.fetchImage ?? ((url, init) => fetch(url, init));
+  const commissions = options.commissions ?? noCommissions;
   const { corpus, works } = catalog;
   const artistKeys = works.map(artistKey);
   const artistOf = (index: number) => artistKeys[index];
@@ -82,12 +91,22 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
     return rows;
   }
 
-  /** The heart closest to the reveal, with the reason its owner gave for it. */
-  function bridgeHeart(reveal: number, hearts: readonly HeartedRow[]): BridgeHeart {
-    const index = nearest(corpus, reveal, hearts.map(heart => heart.index));
-    const heart = hearts.find(row => row.index === index);
-    if (!heart) throw new ApiError(409, 'Both people need at least one heart');
-    return { work: works[heart.index], why: heart.why };
+  /** A person's tastes summed up for display: the family, a few hearts, and a reason they gave. */
+  function trendsOf(tastes: readonly Taste[], hearts: readonly HeartedRow[]): Trend[] {
+    const reasons = new Map(hearts.map(heart => [heart.index, heart.why]));
+    return tastes.map(taste => {
+      const others = taste.members
+        .filter(member => member !== taste.medoid)
+        .map(member => ({ member, score: similarity(corpus, member, taste.medoid) }))
+        .sort((a, b) => b.score - a.score || a.member - b.member)
+        .map(entry => entry.member);
+      return {
+        family: commonFamily(taste.members.map(member => works[member].cluster), works[taste.medoid].cluster),
+        share: taste.weight,
+        works: [taste.medoid, ...others].slice(0, TREND_EXAMPLES).map(index => works[index]),
+        why: taste.members.map(member => reasons.get(member)).find(why => why) ?? null,
+      };
+    });
   }
 
   const app = express();
@@ -231,8 +250,8 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
       discoveries,
     );
 
-    const bridge = { a: bridgeHeart(reveal, mine), b: bridgeHeart(reveal, theirs) };
-    const story = blendStory(works[reveal], bridge.a, bridge.b, friend.name);
+    const trends = { you: trendsOf(myTastes, mine), friend: trendsOf(theirTastes, theirs) };
+    const story = blendStory(works[reveal], trends.you, trends.friend, friend.name);
     const saved = await db.saveBlend({
       userA: me.id,
       userB: friend.id,
@@ -241,16 +260,37 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
       story,
     });
 
+    const commission = commissions.start({
+      blendId: saved.id,
+      you: { name: me.name, trends: trends.you },
+      friend: { name: friend.name, trends: trends.friend },
+    });
+
     res.json({
       id: saved.id,
       created_at: saved.created_at,
       friend: { name: friend.name },
+      commission,
       score: overlapPercent(corpus, myTastes, theirTastes, catalog.calibration),
       top_artwork: works[reveal],
       wall: wall.map((item): WallItem => ({ work: works[item.index], from: item.from })),
-      bridge,
+      trends,
       story,
     });
+  });
+
+  app.get('/api/blend/:blend_id/commission', (req, res: Response<Commission>) => {
+    const commission = commissions.status(uuid(req.params.blend_id, 'blend_id'));
+    if (!commission) throw new ApiError(404, 'No piece is being made for this blend');
+    res.json(commission);
+  });
+
+  app.get('/api/blend/:blend_id/commission/image', (req, res) => {
+    const image = commissions.image(uuid(req.params.blend_id, 'blend_id'));
+    if (!image) throw new ApiError(404, 'The piece is not ready');
+    res.set('Content-Type', image.mimeType);
+    res.set('Cache-Control', 'private, max-age=3600');
+    res.send(image.bytes);
   });
 
   app.use((_req, res) => {
@@ -276,18 +316,35 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
 }
 
 /**
- * The instant, fact-only story shown with the reveal. It names both people's
- * closest hearts and quotes the reasons they gave.
+ * The instant, fact-only story shown with the reveal: what each person leans
+ * toward, and the work where those leanings meet.
  */
-export function blendStory(reveal: Artwork, mine: BridgeHeart, theirs: BridgeHeart, friendName: string): string {
-  const quoted = (heart: BridgeHeart) =>
-    '“' + heart.work.title + '”' + (heart.why ? ' (“' + heart.why + '”)' : '');
+export function blendStory(reveal: Artwork, mine: readonly Trend[], theirs: readonly Trend[], friendName: string): string {
   const friend = friendName.trim() || 'Your friend';
   return (
-    'You hearted ' + quoted(mine) + '. ' +
-    friend + ' hearted ' + quoted(theirs) + '. ' +
-    '“' + reveal.title + '” is the work closest to both.'
+    'You lean toward ' + listFamilies(mine) + '. ' +
+    friend + ' leans toward ' + listFamilies(theirs) + '. ' +
+    '“' + reveal.title + '” is where the two of you meet.'
   );
+}
+
+/** Family names that start with a proper adjective keep their capital mid-sentence. */
+const PROPER_START = /^(Japanese|Indian|Barbizon|Italianate|Cubist|Romantic|Impressionist|Baroque)\b/;
+
+function listFamilies(trends: readonly Trend[]): string {
+  const names = [...new Set(trends.map(trend => trend.family))].map(name =>
+    PROPER_START.test(name) ? name : name.charAt(0).toLowerCase() + name.slice(1),
+  );
+  if (names.length <= 1) return names[0] ?? 'a little of everything';
+  return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+}
+
+/** The family most of a group belongs to; on a tie, the family of its central work. */
+function commonFamily(families: readonly string[], central: string): string {
+  const counts = new Map<string, number>();
+  for (const family of families) counts.set(family, (counts.get(family) ?? 0) + 1);
+  const most = Math.max(...counts.values());
+  return counts.get(central) === most ? central : [...counts].find(([, count]) => count === most)![0];
 }
 
 /**
@@ -334,8 +391,8 @@ function text(value: unknown, label: string, maxLength: number): string {
   return trimmed;
 }
 
-function uuid(value: unknown): string {
-  if (typeof value !== 'string' || !UUID.test(value)) throw new ApiError(400, 'Invalid user_id');
+function uuid(value: unknown, label = 'user_id'): string {
+  if (typeof value !== 'string' || !UUID.test(value)) throw new ApiError(400, 'Invalid ' + label);
   return value.toLowerCase();
 }
 

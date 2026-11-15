@@ -45,6 +45,15 @@ export interface Pick {
 export const SAME_TASTE_SIMILARITY = 0.77;
 export const MAX_TASTES = 3;
 
+/**
+ * How the overlap is shown. People read a match score against the ones they
+ * know, where even a loose match sits well above half, so the raw 0 to 1
+ * overlap is lifted onto 50 to 100 and curved so most pairs land between 65
+ * and 95. The order of scores is unchanged: a higher overlap is always a higher score.
+ */
+const MATCH_FLOOR = 0.5;
+const MATCH_CURVE = 0.6;
+
 const CANDIDATES_PER_TASTE = 200;
 /**
  * Closeness to a heart stops counting above this, the level of a typical
@@ -216,21 +225,30 @@ export function recommend(
 }
 
 /**
- * How well every work suits both people: the lower of its closeness to A and
- * its closeness to B, so a work one person loves and the other does not scores low.
+ * How well every work suits two people, judged on the whole of each person's
+ * taste. Every pairing of one of A's tastes with one of B's is scored as the
+ * lower of the work's closeness to each, so a work only one of them would love
+ * scores low; pairings count in proportion to how much of each person's hearts
+ * the two tastes hold. Scoring only the closest pair instead finds a work in
+ * whatever the two already share, which is not a mix of them.
  */
 export function blendScores(corpus: Corpus, a: readonly Taste[], b: readonly Taste[]): Float32Array {
-  const closeness = (tastes: readonly Taste[]) => {
-    const best = new Float32Array(corpus.count).fill(-1);
-    for (const taste of tastes) {
-      const scores = similaritiesTo(corpus, taste.medoid);
-      for (let i = 0; i < best.length; i++) if (scores[i] > best[i]) best[i] = scores[i];
-    }
-    return best;
-  };
-  const toA = closeness(a);
-  const toB = closeness(b);
-  return toA.map((score, i) => Math.min(score, toB[i]));
+  const capped = (taste: Taste) => similaritiesTo(corpus, taste.medoid).map(s => Math.min(s, NEAR_COPY_SIMILARITY));
+  const toA = a.map(capped);
+  const toB = b.map(capped);
+  const totalWeight = sum(a.map(t => t.weight)) * sum(b.map(t => t.weight));
+
+  const scores = new Float32Array(corpus.count);
+  if (totalWeight <= 0) return scores;
+  a.forEach((tasteA, i) => {
+    b.forEach((tasteB, j) => {
+      const weight = (tasteA.weight * tasteB.weight) / totalWeight;
+      const simA = toA[i];
+      const simB = toB[j];
+      for (let w = 0; w < scores.length; w++) scores[w] += weight * Math.min(simA[w], simB[w]);
+    });
+  });
+  return scores;
 }
 
 /** How close one work is to a person: its similarity to their nearest taste. */
@@ -277,7 +295,7 @@ export function nearest(corpus: Corpus, target: number, among: readonly number[]
 }
 
 /**
- * Taste overlap from 0 to 100. Each taste is matched to the other person's
+ * Taste match from 50 to 100 (0 when either person has no hearts). Each taste is matched to the other person's
  * closest taste, weighted by how much of that person's hearts it holds, and
  * the result is averaged over both directions so the score is symmetric.
  */
@@ -296,8 +314,8 @@ export function overlapPercent(
   const raw = (matched(a, b) + matched(b, a)) / 2;
   const range = calibration.kindred - calibration.stranger;
   if (range <= 0) return 0;
-  const scaled = (raw - calibration.stranger) / range;
-  return Math.round(Math.min(1, Math.max(0, scaled)) * 100);
+  const scaled = Math.min(1, Math.max(0, (raw - calibration.stranger) / range));
+  return Math.round(100 * (MATCH_FLOOR + (1 - MATCH_FLOOR) * Math.pow(scaled, MATCH_CURVE)));
 }
 
 /**
@@ -389,6 +407,10 @@ function argMax(length: number, value: (index: number) => number): number {
     }
   }
   return best;
+}
+
+function sum(values: readonly number[]): number {
+  return values.reduce((total, value) => total + value, 0);
 }
 
 function median(values: number[]): number {

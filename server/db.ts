@@ -22,7 +22,8 @@ export interface SavedBlend {
 }
 
 export interface Db {
-  createProfile(name: string): Promise<Profile>;
+  /** Creates a profile. `code` fixes its blend code; otherwise a free one is generated. */
+  createProfile(name: string, code?: string): Promise<Profile>;
   findProfile(id: string): Promise<Profile | null>;
   findProfileByCode(code: string): Promise<Profile | null>;
   deleteProfile(id: string): Promise<void>;
@@ -110,17 +111,19 @@ export function createSupabaseDb(url: string, secretKey: string): Db {
   });
 
   return {
-    async createProfile(name) {
-      for (let attempt = 0; attempt < BLEND_CODE_ATTEMPTS; attempt++) {
+    async createProfile(name, code) {
+      const attempts = code === undefined ? BLEND_CODE_ATTEMPTS : 1;
+      for (let attempt = 0; attempt < attempts; attempt++) {
         const { data, error } = await client
           .from('profiles')
-          .insert({ name, blend_code: generateBlendCode() })
+          .insert({ name, blend_code: code ?? generateBlendCode() })
           .select(PROFILE_COLUMNS)
           .single();
         if (error?.code === POSTGRES_UNIQUE_VIOLATION) continue;
         if (error) throw storageError(error);
         return toProfile(data);
       }
+      if (code !== undefined) throw new ApiError(409, 'That blend code is already taken');
       throw new ApiError(503, 'Could not create a blend code. Please try again.');
     },
 

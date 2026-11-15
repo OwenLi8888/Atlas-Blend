@@ -21,8 +21,11 @@ export function createMemoryDb(): MemoryDb {
 
   return {
     blends,
-    async createProfile(name) {
-      const profile: Profile = { id: randomUUID(), name, blend_code: generateBlendCode(), created_at: timestamp() };
+    async createProfile(name, code) {
+      if (code !== undefined && [...profiles.values()].some(profile => profile.blend_code === code)) {
+        throw new ApiError(409, 'That blend code is already taken');
+      }
+      const profile: Profile = { id: randomUUID(), name, blend_code: code ?? generateBlendCode(), created_at: timestamp() };
       profiles.set(profile.id, profile);
       hearts.set(profile.id, []);
       return profile;

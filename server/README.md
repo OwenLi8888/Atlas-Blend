@@ -28,6 +28,10 @@ The API listens on `127.0.0.1:43871`. The screens are at `/gallery.html` on the 
 | `families.ts` | Display names for the 30 visual families |
 | `db.ts` | Profiles, hearts and blends in Supabase |
 | `memory-db.ts` | The same contract in memory, for tests and `dev:local` |
+| `commission.ts` | Makes the new piece for each blend in the background |
+| `atelier.ts` | The deep agent that writes its brief and wall label |
+| `gemini.ts` | The Gemini image model behind it |
+| `demo.ts` | The ready-made demo profile |
 | `app.ts` | The routes |
 
 At 6,674 works the collection is about 30 MB of vectors, so every request is scored exactly against all of it in memory. A recommendation wall takes about 0.1 s and a blend about 0.2 s. Typesense is only used to fill the cache.
@@ -38,11 +42,23 @@ At 6,674 works the collection is about 30 MB of vectors, so every request is sco
 
 **Recommendations.** The 12 slots are shared between tastes by the square root of their share of the hearts, so a small taste still gets room (each taste keeps at least one slot). Tastes take turns picking; each pick trades closeness to its taste against sameness with the wall so far, with at most two works per known artist. Closeness stops counting above 0.85, the level of a near copy, so the wall is not the next five prints from the same series. Every recommendation names the heart it is closest to.
 
-**Blend.** Every work is scored as the lower of its closeness to person A and its closeness to person B. The reveal is the best-scoring work, or an oil or watercolour among the top 20 when there is one, because those suit the painting animation. The bridge is the heart from each person closest to the reveal, with the reason they gave for it. The story is a short fact-only sentence built from those.
+**Blend.** The reveal comes from the whole of each person's taste, not from one heart each. Every pairing of one of A's tastes with one of B's scores a work as the lower of its closeness to each, and pairings count by how much of each person's hearts the two tastes hold. (Scoring only the closest pair finds a work in whatever the two already share, which is not a mix.) The reveal is the best-scoring work, or an oil or watercolour among the top 20 when there is one, because those suit the painting animation. The response also carries each person's leanings: the family, share of hearts, a few example hearts and a reason they gave. The story is a short fact-only sentence built from those.
 
 **Shared wall.** Like a shared playlist, it is mostly the two people's own hearts: works both hearted, then three of each person's hearts that the other is closest to, and six new works close to both. Each is tagged `both`, `you`, `friend` or `new`, and they take turns down the wall.
 
-**Overlap score.** Each taste is matched to the other person's closest taste, weighted by share of hearts, in both directions. The raw similarity is rescaled so that two unrelated works (about 0.55) score 0 and a work next to its nearest neighbour (about 0.85) scores 100. Both anchors are measured from the catalog at startup.
+**Commissioned piece.** With `GEMINI_API_KEY` set, every blend also gets a new artwork made for the two people: the centrepiece of the reveal. The blend answers at once with the piece marked `pending`, and the screen polls until the image and its wall label are ready, then paints it. Finished pieces are held in memory (the newest 40). Without a key, or if the image model fails, the reveal paints the collection work instead.
+
+**The atelier (deep agent).** The piece is briefed and labelled by a LangChain `deepagents` agent running on Gemini (`atelier.ts`). Its virtual filesystem starts with each person's taste portrait (`/portraits/you.md`, `/portraits/friend.md`: leanings with shares, a few loved works with captions, and their own words). The lead delegates to three subagents:
+
+- `art-director` writes the painting brief and hands it to the image model at once through a tool, then saves it to `/commission/brief.md`.
+- `label-writer` reads the brief and writes `/commission/label.md`: a title and the story of the piece: what the painting shows and what it takes from each person (a medium, a way of making marks, a palette or a subject), woven together.
+- `critic` checks it against the brief and the portraits (both people named, each credited only with what their own portrait supports, nothing invented); the writer revises once.
+
+Measured on one run: brief after about 5 s, image ready at about 13 s, label at about 11 s. If the brief has not arrived within 10 s, or the agent fails, the image is painted from a fixed template brief so the piece is still made; a failed label falls back to a plain title. Models: `GEMINI_AGENT_MODEL` (default `gemini-flash-lite-latest`) and `GEMINI_IMAGE_MODEL` (default `gemini-3.1-flash-lite-image`; `gemini-nano-banana-2.1` is slower).
+
+**Demo profile.** On startup the server makes sure a ready-made profile exists: "Juno", blend code `CANVAS`, with 22 hearts across three leanings (gold-ground screens, hard-edge abstraction, Indian miniatures). Enter `CANVAS` on the blend screen to show a blend without a second person. The name, code and leanings are at the top of `demo.ts`.
+
+**Match score.** Each taste is matched to the other person's closest taste, weighted by share of hearts, in both directions. The raw similarity is rescaled between two anchors measured from the catalog at startup: two unrelated works (about 0.55) and a work next to its nearest neighbour (about 0.85). That 0 to 1 overlap is then lifted onto 50 to 100 and curved, so it reads like a familiar match score: most pairs land between 65 and 95, and a closer pair always scores higher.
 
 **Onboarding.** One tile per visual family (`cluster_id`), shown by the family's most typical work. Families holding under 1.5% of the collection are skipped. Tiles are added most-different first, up to 24, and a family is left out when its tile would nearly duplicate one already shown.
 
@@ -59,7 +75,9 @@ Types for every request and response are in `src/rec/api.ts`. Artworks never inc
 | `POST /api/heart` `{user_id, art_id, why?}` | `{heart}`. Hearting again without `why` keeps the saved reason |
 | `DELETE /api/heart?user_id=&art_id=` | 204 |
 | `GET /api/recs/:user_id` | `{works: [{work, because}], taste_count}`. `works` is empty until the person has a heart |
-| `POST /api/blend` `{user_id, code}` | `{id, created_at, friend, score, top_artwork, wall: [{work, from}], bridge: {a, b}, story}` |
+| `POST /api/blend` `{user_id, code}` | `{id, created_at, friend, score, commission, top_artwork, wall: [{work, from}], trends: {you, friend}, story}` |
+| `GET /api/blend/:id/commission` | `{status, image_url, title, label_status, label}`; `label` is `{title, story}` once written |
+| `GET /api/blend/:id/commission/image` | The finished piece |
 | `GET /api/image?id=` | The artwork's image, served from this origin. The image host sends no CORS headers, and the painting animation has to read pixels |
 
 Errors are `{error}` with a 4xx or 5xx status. Missing database tables answer 503 with a pointer to `supabase/schema.sql`.
