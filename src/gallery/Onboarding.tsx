@@ -12,19 +12,26 @@ interface Props {
   profile: Profile | null;
   /** Called with the profile and the hearts just saved for it. */
   onDone: (entered: ProfileResponse) => void;
+  /**
+   * A first visit that goes on to the studio: the works chosen here are handed on, and the painter
+   * and name are asked for there, so this screen asks for neither and signs nobody up.
+   */
+  onChosen?: (picks: string[]) => void;
+  /** The works chosen before (coming back from the studio). */
+  initialPicks?: readonly string[];
 }
 
 const MAX_NAME_LENGTH = 80;
 
 /** The entrance: a spread of very different works. Choosing a few is the whole sign-up. */
-export function Onboarding({ profile, onDone }: Props) {
+export function Onboarding({ profile, onDone, onChosen, initialPicks = [] }: Props) {
   const [works, setWorks] = useState<Artwork[] | null>(null);
   /** Why the works could not be fetched; null while they are on their way and once they are here. */
   const [unreachable, setUnreachable] = useState<string | null>(null);
   /** How many times the works have been asked for again. */
   const [retries, setRetries] = useState(0);
   const [minPicks, setMinPicks] = useState(3);
-  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set(initialPicks));
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +72,7 @@ export function Onboarding({ profile, onDone }: Props) {
 
   const enter = async () => {
     if (missing > 0 || busy) return;
+    if (onChosen) return onChosen([...chosen]);
     setBusy(true);
     setError(null);
     try {
@@ -133,10 +141,10 @@ export function Onboarding({ profile, onDone }: Props) {
           <p className="entry-count" role="status">
             {error ?? (missing > 0 ? (chosen.size === 0 ? 'Nothing chosen yet' : 'Choose ' + missing + ' more') : chosen.size + ' chosen')}
           </p>
-          {!profile && (
+          {!profile && !onChosen && (
             <PainterPicker painter={painter} onChoose={setChosenPainter} />
           )}
-          {!profile && (
+          {!profile && !onChosen && (
             <label className="entry-name">
               <span className="visually-hidden">Your name</span>
               <input
@@ -150,7 +158,7 @@ export function Onboarding({ profile, onDone }: Props) {
             </label>
           )}
           <button type="submit" className="button" disabled={missing > 0 || busy}>
-            {busy ? 'Opening…' : 'Open my gallery'}
+            {onChosen ? 'Choose your painter →' : busy ? 'Opening…' : 'Open my gallery'}
           </button>
         </form>
       )}

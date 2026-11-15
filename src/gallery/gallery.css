@@ -2,17 +2,23 @@
    and nothing else on the wall. A blend opens in its own round room (see "The blend room"). */
 
 :root {
-  --wall: #f7f5f0;
-  --ink: #1c1b18;
-  --muted: #8b867c;
-  --line: rgba(28, 27, 24, 0.13);
-  --ground: #ebe7df;
-  --heart: #c2412d;
-  --shadow: 0 1px 2px rgba(28, 27, 24, 0.08), 0 18px 28px -18px rgba(28, 27, 24, 0.3);
+  /* A limewashed gallery wall, warm black ink, and one paint colour (cadmium red) for what you love. */
+  --wall: #e9e1d2;
+  --ink: #1f1a14;
+  --muted: #6b6152;
+  --line: rgba(31, 26, 20, 0.2);
+  --ground: #ddd3c1;
+  --heart: #b23a1c;
+  /* a hung work: the frame's own edge, then its shadow on the wall below the picture light */
+  --shadow: 0 1px 1px rgba(31, 26, 20, 0.25), 0 22px 26px -20px rgba(31, 26, 20, 0.55);
+  --frame: #2b231b;
+  --mat: #f6f1e6;
 
   --pad: clamp(20px, 4.5vw, 64px);
-  --serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
-  --sans: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --serif: 'Libre Caslon Text', 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --sans: 'Archivo', 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* plaster: a fine grain over the wall colour, so it reads as a surface rather than a screen */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .19 0 0 0 0 .15 0 0 0 0 .1 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 *,
@@ -28,7 +34,7 @@ html {
 body {
   margin: 0;
   min-height: 100dvh;
-  background: var(--wall);
+  background: var(--grain) var(--wall);
   color: var(--ink);
   font-family: var(--sans);
   font-size: 15px;
@@ -118,12 +124,12 @@ a {
 .profile-avatar {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   padding: 0;
-  border: 1px solid var(--line);
+  border: 1px solid var(--frame);
   border-radius: 50%;
-  background: var(--ground);
+  background: var(--mat);
   transition: box-shadow 0.2s ease;
 }
 
@@ -400,13 +406,14 @@ main:has(> .gallery) {
   font-size: 13.5px;
 }
 
+/* Small labels are set as a catalogue sets them: small capitals of the text face, not spaced-out sans. */
 .eyebrow {
   display: block;
-  font-family: var(--sans);
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 400;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.06em;
   color: var(--muted);
 }
 
@@ -475,13 +482,14 @@ main:has(> .gallery) {
   margin-bottom: clamp(30px, 3.4vw, 48px);
 }
 
+/* Every work is framed: a thin dark moulding and a cream mat around the picture. */
 .hung-image {
   display: block;
   width: 100%;
   min-height: 120px;
-  border: 0;
-  padding: 0;
-  background: var(--ground);
+  border: 3px solid var(--frame);
+  padding: clamp(7px, 1.4vw, 14px);
+  background: var(--mat);
   box-shadow: var(--shadow);
   transition: box-shadow 0.9s ease, background-color 0.9s ease;
 }
@@ -521,19 +529,19 @@ button.hung-image {
 }
 
 .plate-tag {
-  margin-bottom: 5px;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted);
+  margin-bottom: 4px;
+  font-family: var(--serif);
+  font-size: 12.5px;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.06em;
+  color: var(--heart);
 }
 
 .plate-title {
   font-family: var(--serif);
   font-style: italic;
-  font-size: 1.12rem;
-  line-height: 1.2;
+  font-size: 1.02rem;
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
@@ -644,10 +652,9 @@ button.heart:hover svg {
   align-items: center;
   gap: clamp(14px, 3vw, 32px);
   padding: 14px var(--pad) calc(14px + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--wall) 88%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  border-top: 3px solid var(--frame);
+  background: var(--grain) var(--mat);
+  box-shadow: 0 -14px 24px -18px rgba(31, 26, 20, 0.45);
 }
 
 .entry-count {
@@ -1058,6 +1065,26 @@ button.heart:hover svg {
 /* --- Small screens -------------------------------------------------------- */
 
 @media (max-width: 720px) {
+  /* the name stays on one line and the menu scrolls beside it, so the bar keeps to one row */
+  .bar {
+    gap: 14px;
+    padding: 14px var(--pad);
+  }
+
+  .wordmark {
+    flex: none;
+    white-space: nowrap;
+    font-size: 1.12rem;
+  }
+
+  .bar nav {
+    gap: 16px;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    white-space: nowrap;
+  }
+
   .detail-inner,
   .blend-columns {
     grid-template-columns: minmax(0, 1fr);
