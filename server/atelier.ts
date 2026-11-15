@@ -167,6 +167,7 @@ export function portrait(patron: Patron): string {
     }
     lines.push('');
   }
+  if (patron.notes) lines.push('## What their curator has noted about them', patron.notes, '');
   return lines.join('\n');
 }
 

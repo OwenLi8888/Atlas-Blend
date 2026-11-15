@@ -191,6 +191,38 @@ export interface SimilarResponse {
   similar: Artwork[];
 }
 
+/** A room the curator hung: works that belong together, with a short text on why. */
+export interface Room {
+  title: string;
+  text: string;
+  /** In hanging order. Some are the person's saved works, some are new to them. */
+  works: Artwork[];
+}
+
+/** GET /api/curator/:user_id */
+export interface CuratorResponse {
+  /** `working` while the curator is rehanging; `unavailable` when this server has no curator. */
+  status: 'working' | 'ready' | 'unavailable';
+  /** A sentence or two on what the person keeps saving; null until the curator has written one. */
+  portrait: string | null;
+  /** One easy question from the curator, with short answers to pick from; null when it has none. */
+  question: { text: string; answers: string[] } | null;
+  rooms: Room[];
+  /** How many more works the person must save before rooms are hung; 0 once there are enough. */
+  saves_until_rooms: number;
+}
+
+/** POST /api/curator/:user_id/note */
+export interface CuratorNoteRequest {
+  text: string;
+  /** The curator's question this answers, when it answers one. */
+  question?: string;
+}
+
+export interface CuratorNoteResponse {
+  reply: string;
+}
+
 export interface ErrorResponse {
   error: string;
 }

@@ -32,6 +32,8 @@ The API listens on `127.0.0.1:43871`. The screens are at `/gallery.html` on the 
 | `memory-db.ts` | The same contract in memory, for tests and `dev:local` |
 | `commission.ts` | Makes the new piece for each blend in the background |
 | `atelier.ts` | The deep agent that writes its brief and wall label |
+| `curator.ts` | The deep agent that keeps notes on each person and hangs their rooms |
+| `collection.ts` | How the curator searches the catalog: by words and by likeness |
 | `gemini.ts` | The Gemini image model behind it |
 | `demo.ts` | The ready-made demo profile |
 | `app.ts` | The routes |
@@ -58,6 +60,14 @@ At 6,674 works the collection is about 30 MB of vectors, so every request is sco
 
 Measured on one run: brief after about 5 s, image ready at about 13 s, label at about 11 s. If the brief has not arrived within 10 s, or the agent fails, the image is painted from a fixed template brief so the piece is still made; a failed label falls back to a plain title. Models: `GEMINI_AGENT_MODEL` (default `gemini-flash-lite-latest`) and `GEMINI_IMAGE_MODEL` (default `gemini-3.1-flash-lite-image`; `gemini-nano-banana-2.1` is slower).
 
+**The curator (deep agent with memory).** Each person has a curator (`curator.ts`), a `deepagents` agent whose filesystem is that person's own folder on disk (`server/.data/curator/<id>/`), so it remembers between runs. It keeps `/memories/taste.md` (its notes on the person, loaded into its prompt every run and rewritten by it) and `/memories/notes.md` (what the person told it, word for word).
+
+- Saving works or leaving a note makes it rehang in the background. It always writes a short portrait. Once eight works are saved it also plans two rooms (`/rooms/plan.md`) and gives each to a `room-maker` subagent at the same time; a room-maker searches the collection by words and by likeness, adds works the person has not saved, orders them and writes the wall text.
+- Leaving a note (`POST /api/curator/:id/note`) gets an answer in a few seconds and goes into its notes, which changes the next hanging.
+- The atelier reads the curator's notes on both people when it makes a blend's piece.
+
+Measured in one session: a note answered in 3 to 4 s; rooms hung in 10 to 16 s. Nobody waits on a rehang: `GET /api/curator/:id` answers at once with what it has and `status: working`. Search is by words in titles, captions and labels (`collection.ts`), not by meaning.
+
 **Demo profile.** On startup the server makes sure a ready-made profile exists: "Juno", blend code `CANVAS`, with 22 hearts across three leanings (gold-ground screens, hard-edge abstraction, Indian miniatures). Enter `CANVAS` on the blend screen to show a blend without a second person. The name, code and leanings are at the top of `demo.ts`.
 
 **Match score.** Each taste is matched to the other person's closest taste, weighted by share of hearts, in both directions. The raw similarity is rescaled between two anchors measured from the catalog at startup: two unrelated works (about 0.55) and a work next to its nearest neighbour (about 0.85). That 0 to 1 overlap is then lifted onto 50 to 100 and curved, so it reads like a familiar match score: most pairs land between 65 and 95, and a closer pair always scores higher.
@@ -77,9 +87,11 @@ Types for every request and response are in `src/rec/api.ts`. Artworks never inc
 | `POST /api/heart` `{user_id, art_id, why?}` | `{heart}`. Hearting again without `why` keeps the saved reason |
 | `DELETE /api/heart?user_id=&art_id=` | 204 |
 | `GET /api/recs/:user_id?count=` | `{works: [{work, because}], taste_count}`. 24 works by default, up to 48. `works` is empty until the person has a heart |
-| `GET /api/discover?seed=&offset=&limit=` | `{works, next_offset}`: the whole collection as one varied stroll. Each family is shuffled and the families take turns, so neighbours differ. The seed fixes the order, so paging is stable |
+| `GET /api/discover?seed=&offset=&limit=&user_id=` | `{works, next_offset}`: the whole collection as one varied stroll. With `user_id`, every sixth work is one that person is likely to love. Each family is shuffled and the families take turns, so neighbours differ. The seed fixes the order, so paging is stable |
 | `GET /api/similar?id=&limit=` | `{work, similar}`: a varied handful of the works nearest to one work |
 | `POST /api/blend` `{user_id, code}` | `{id, created_at, friend, score, commission, top_artwork, wall: [{work, from}], trends: {you, friend}, story}` |
+| `GET /api/curator/:user_id` | `{status, portrait, rooms: [{title, text, works}], saves_until_rooms}`. Starts a rehang when what the person saved or said has changed |
+| `POST /api/curator/:user_id/note` `{text}` | `{reply}`: the curator's answer in a sentence or two |
 | `GET /api/blends/:user_id` | `{blends}`: every blend the person made or was blended into, newest first, each with the friend's name, score, title and image |
 | `GET /api/blend/:id?user_id=` | A saved blend again, in the same shape as when it was made, from the point of view of whichever of the two people asks |
 | `GET /api/blend/:id/commission` | `{status, image_url, title, label_status, label}`; `label` is `{title, story}` once written |

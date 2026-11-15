@@ -19,6 +19,8 @@ export type ImageMaker = (brief: string, references: readonly ImageData[]) => Pr
 export interface Patron {
   name: string;
   trends: readonly Trend[];
+  /** What the curator has noted about this person, including things they said; null when it has nothing. */
+  notes?: string | null;
 }
 
 export interface CommissionRequest {

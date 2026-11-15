@@ -5,6 +5,8 @@ import type {
   BlendsResponse,
   BlendSummary,
   Commission,
+  CuratorNoteResponse,
+  CuratorResponse,
   DiscoverResponse,
   HeartResponse,
   OnboardingResponse,
@@ -31,6 +33,7 @@ import {
 } from '../src/rec/scoring';
 import type { Catalog } from './catalog';
 import { noCommissions, type Commissions } from './commission';
+import { ROOMS_MIN_SAVED, type Curator, type CuratorPerson } from './curator';
 import type { BlendRecord, Db, StoredBlend, StoredTrend } from './db';
 import { ApiError } from './errors';
 import { resizedImages } from './images';
@@ -52,6 +55,8 @@ const MAX_BLENDS_LISTED = 50;
 /** Discovery pages. */
 const DISCOVER_PAGE = 30;
 const MAX_DISCOVER_PAGE = 60;
+/** In a personal stroll, every this-many-th work is one the person is likely to love. */
+const DISCOVER_LIKELY_EVERY = 6;
 const SIMILAR_COUNT = 12;
 const MAX_SIMILAR_COUNT = 24;
 /** Similar works are picked for variety from this many nearest neighbours. */
@@ -63,6 +68,7 @@ const REVEAL_SEARCH_DEPTH = 20;
 
 const MAX_NAME_LENGTH = 80;
 const MAX_WHY_LENGTH = 500;
+const MAX_NOTE_LENGTH = 600;
 const MAX_ART_ID_LENGTH = 200;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -83,11 +89,14 @@ export interface AppOptions {
   fetchImage?: (url: string, init: { signal: AbortSignal }) => Promise<globalThis.Response>;
   /** Makes the commissioned piece for each blend. Without it, blends reveal a work from the collection. */
   commissions?: Commissions;
+  /** Keeps notes on each person and hangs their rooms. Without it there are no portraits or rooms. */
+  curator?: Curator;
 }
 
 export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
   const fetchImage = options.fetchImage ?? ((url, init) => fetch(url, init));
   const commissions = options.commissions ?? noCommissions;
+  const curator = options.curator;
   const { corpus, works } = catalog;
   const artistKeys = works.map(artistKey);
   const artistOf = (index: number) => artistKeys[index];
@@ -213,6 +222,43 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
     return order;
   }
 
+  /**
+   * The stroll for one person: the same varied order, with a work they are
+   * likely to love slipped in after every few others. It is worked out once
+   * per seed and person, so pages stay consistent while they scroll.
+   */
+  const personalOrders = new Map<string, number[]>();
+  async function personalOrder(seed: number, userId: string): Promise<number[]> {
+    const key = seed + ':' + userId;
+    const ready = personalOrders.get(key);
+    if (ready) return ready;
+
+    const profile = await requireProfile(userId);
+    const hearted = (await heartsOf(profile.id)).map(heart => heart.index);
+    const likely = recommend(corpus, findTastes(corpus, hearted), {
+      count: MAX_WALL_SIZE,
+      exclude: new Set(hearted),
+      artistOf,
+    }).map(pick => pick.index);
+
+    const slipped = new Set(likely);
+    const order: number[] = [];
+    let next = 0;
+    for (const index of discoverOrder(seed)) {
+      if (slipped.has(index)) continue;
+      order.push(index);
+      if (order.length % DISCOVER_LIKELY_EVERY === DISCOVER_LIKELY_EVERY - 1 && next < likely.length) order.push(likely[next++]);
+    }
+    order.push(...likely.slice(next));
+
+    personalOrders.set(key, order);
+    for (const oldest of personalOrders.keys()) {
+      if (personalOrders.size <= MAX_DISCOVER_ORDERS) break;
+      personalOrders.delete(oldest);
+    }
+    return order;
+  }
+
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '8kb' }));
@@ -314,8 +360,8 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
     const code = text(bodyField(req, 'code'), 'code', 12).toUpperCase();
     if (!BLEND_CODE.test(code)) throw new ApiError(400, 'Invalid blend code');
 
-    const me = await requireProfile(userId);
-    const friend = await db.findProfileByCode(code);
+    // Looked up together: each is a round trip to the database.
+    const [me, friend] = await Promise.all([requireProfile(userId), db.findProfileByCode(code)]);
     if (!friend) throw new ApiError(404, 'Blend code not found');
     if (friend.id === me.id) throw new ApiError(400, 'That is your own code. Enter a friend’s.');
 
@@ -373,10 +419,12 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
       result,
     });
 
+    // What the curator knows about each of them goes to the atelier too, so things they said can reach the piece.
+    const [myNotes, theirNotes] = curator ? await Promise.all([curator.notesOn(me.id), curator.notesOn(friend.id)]) : [null, null];
     const commission = commissions.start({
       blendId: saved.id,
-      you: { name: me.name, trends: trends.you },
-      friend: { name: friend.name, trends: trends.friend },
+      you: { name: me.name, trends: trends.you, notes: myNotes },
+      friend: { name: friend.name, trends: trends.friend, notes: theirNotes },
     });
     const record: BlendRecord = { id: saved.id, created_at: saved.created_at, userA: me.id, userB: friend.id, result };
     res.json(presentBlend(record, result, me.id, friend.name, commission));
@@ -433,12 +481,56 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
     res.send(image.bytes);
   });
 
+  /** A person as the curator needs them: who they are and what they have saved. */
+  async function curatorPerson(userId: string): Promise<CuratorPerson> {
+    const profile = await requireProfile(userId);
+    const hearts = await heartsOf(profile.id);
+    return { id: profile.id, name: profile.name, saved: hearts.map(heart => ({ work: works[heart.index], why: heart.why })) };
+  }
+
+  // The curator's portrait of a person and the rooms it has hung for them. Asking also starts a
+  // rehang in the background when what they saved or said has changed.
+  app.get('/api/curator/:user_id', async (req, res: Response<CuratorResponse>) => {
+    const person = await curatorPerson(uuid(req.params.user_id));
+    const savesUntilRooms = Math.max(0, ROOMS_MIN_SAVED - person.saved.length);
+    if (!curator) {
+      res.json({ status: 'unavailable', portrait: null, question: null, rooms: [], saves_until_rooms: savesUntilRooms });
+      return;
+    }
+    const view = await curator.view(person);
+    res.json({
+      status: view.status,
+      portrait: view.portrait,
+      question: view.question,
+      rooms: view.rooms
+        .map(room => ({ title: room.title, text: room.text, works: worksById(room.workIds) }))
+        .filter(room => room.works.length > 0),
+      saves_until_rooms: savesUntilRooms,
+    });
+  });
+
+  // A note left for the curator. It answers in a sentence or two and remembers what was said.
+  app.post('/api/curator/:user_id/note', async (req, res: Response<CuratorNoteResponse>) => {
+    const person = await curatorPerson(uuid(req.params.user_id));
+    const note = text(bodyField(req, 'text'), 'text', MAX_NOTE_LENGTH);
+    const asked = bodyField(req, 'question');
+    const question = asked === undefined || asked === null ? undefined : text(asked, 'question', MAX_NOTE_LENGTH);
+    if (!curator) throw new ApiError(503, 'The curator is not in today');
+    try {
+      res.json({ reply: await curator.note(person, note, question) });
+    } catch (error) {
+      console.error('Curator note failed: ' + (error instanceof Error ? error.message : String(error)));
+      throw new ApiError(502, 'The curator could not answer just now');
+    }
+  });
+
   // The whole collection as one long, varied stroll. A seed fixes the order, so paging is stable.
-  app.get('/api/discover', (req, res: Response<DiscoverResponse>) => {
+  // With a user_id, about one work in six is one that person is likely to love, unmarked.
+  app.get('/api/discover', async (req, res: Response<DiscoverResponse>) => {
     const seed = wholeNumber(req.query.seed, 'seed', 0, 0, 0xffffffff);
     const offset = wholeNumber(req.query.offset, 'offset', 0, 0, works.length);
     const limit = wholeNumber(req.query.limit, 'limit', DISCOVER_PAGE, 1, MAX_DISCOVER_PAGE);
-    const order = discoverOrder(seed);
+    const order = req.query.user_id === undefined ? discoverOrder(seed) : await personalOrder(seed, uuid(req.query.user_id));
     const end = Math.min(offset + limit, order.length);
     res.json({
       works: order.slice(offset, end).map(index => works[index]),

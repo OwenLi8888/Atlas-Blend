@@ -2,7 +2,9 @@ import path from 'node:path';
 import { createApp } from './app';
 import { createAtelier, DEFAULT_AGENT_MODEL } from './atelier';
 import { loadCatalog } from './catalog';
+import { createCollection } from './collection';
 import { createCommissions, noCommissions, type Commissions } from './commission';
+import { createCurator, type Curator } from './curator';
 import { createSupabaseDb, type Db } from './db';
 import { seedDemoProfile } from './demo';
 import { createGeminiImageMaker, DEFAULT_IMAGE_MODEL } from './gemini';
@@ -77,6 +79,19 @@ function commissionsFromEnv(): Commissions {
   });
 }
 
-createApp(catalog, db, { commissions: commissionsFromEnv() }).listen(port, host, () => {
+/** With GEMINI_API_KEY set, each person gets a curator that keeps notes on them and hangs their rooms. */
+function curatorFromEnv(): Curator | undefined {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return undefined;
+  return createCurator({
+    apiKey,
+    model: process.env.GEMINI_AGENT_MODEL || DEFAULT_AGENT_MODEL,
+    dir: path.join(import.meta.dirname, '.data', 'curator'),
+    // The curator's searches are for themes, not for one artist's work, so they are not capped by artist.
+    collection: createCollection(catalog, () => null),
+  });
+}
+
+createApp(catalog, db, { commissions: commissionsFromEnv(), curator: curatorFromEnv() }).listen(port, host, () => {
   console.log('Gallery API listening on http://' + host + ':' + port);
 });

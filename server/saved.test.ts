@@ -15,12 +15,12 @@ import { createApp } from './app';
 import { createMemoryDb } from './memory-db';
 import { testCatalog, type TestWork } from './testing';
 
-/** Three families of eight works each, on three axes, plus two works between families 0 and 1. */
+/** Three families of 22 works each, on three axes, plus two works between families 0 and 1. */
 const WORKS: TestWork[] = [
   ...[0, 1, 2].flatMap(family =>
-    Array.from({ length: 8 }, (_, n): TestWork => ({
+    Array.from({ length: 22 }, (_, n): TestWork => ({
       id: 'f' + family + '-' + n,
-      vector: [0, 1, 2].map(axis => (axis === family ? 1 : 0.02 * (n + 1) * (axis + 1))),
+      vector: [0, 1, 2].map(axis => (axis === family ? 1 : 0.01 * (n + 1) * (axis + 1))),
       cluster_id: family,
     })),
   ),
@@ -133,6 +133,22 @@ describe('discover', () => {
   it('mixes the families: the first works are not all one kind', async () => {
     const { body } = await call<DiscoverResponse>('GET', '/api/discover?seed=3&limit=6');
     expect(new Set(body.works.map(work => work.cluster_id)).size).toBe(3);
+  });
+
+  it('slips works a person is likely to love into their stroll, one in six, never repeating a work', async () => {
+    const jo = await person('Jo', ['f0-0']);
+    const plain = (await call<DiscoverResponse>('GET', '/api/discover?seed=5&limit=60')).body.works.map(work => work.id);
+    const mine = (await call<DiscoverResponse>('GET', '/api/discover?seed=5&limit=60&user_id=' + jo.id)).body.works.map(work => work.id);
+    expect(mine).toHaveLength(60);
+    expect(new Set(mine).size).toBe(60);
+    expect(mine).not.toEqual(plain);
+    // Every sixth work is the next of Jo's recommendations, in order.
+    const likely = (await call<RecsResponse>('GET', '/api/recs/' + jo.id + '?count=48')).body.works.map(rec => rec.work.id);
+    expect([5, 11, 17].map(position => mine[position])).toEqual(likely.slice(0, 3));
+    // Paging is stable: the second page continues the same order.
+    const page2 = (await call<DiscoverResponse>('GET', '/api/discover?seed=5&limit=10&offset=10&user_id=' + jo.id)).body.works.map(work => work.id);
+    expect(page2).toEqual(mine.slice(10, 20));
+    expect((await call('GET', '/api/discover?seed=5&user_id=nope')).status).toBe(400);
   });
 
   it('rejects bad paging', async () => {

@@ -5,7 +5,16 @@
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import type { BlendResponse, OnboardingResponse, Profile, ProfileResponse, RecsResponse } from '../src/rec/api';
+import type {
+  BlendResponse,
+  BlendsResponse,
+  DiscoverResponse,
+  OnboardingResponse,
+  Profile,
+  ProfileResponse,
+  RecsResponse,
+  SimilarResponse,
+} from '../src/rec/api';
 import { createApp } from './app';
 import { loadCatalog } from './catalog';
 import { createSupabaseDb } from './db';
@@ -62,7 +71,7 @@ try {
   assert.ok(profile.hearts.every(heart => heart.why === 'smoke test'));
 
   const recs = await request<RecsResponse>('GET', '/api/recs/' + a.id);
-  assert.equal(recs.works.length, 12);
+  assert.equal(recs.works.length, 24);
   assert.ok(recs.works.every(rec => !picksA.some(work => work.id === rec.work.id)), 'recs should not repeat hearts');
 
   const hearted = new Set([...picksA, ...picksB].map(work => work.id));
@@ -73,6 +82,22 @@ try {
   assert.ok(blend.wall.every(item => item.work.id !== blend.top_artwork.id));
   assert.equal(blend.trends.you[0].why, 'smoke test');
   assert.ok(blend.score >= 0 && blend.score <= 100);
+
+  // A blend is kept, for both people, and can be opened again.
+  const listed = await request<BlendsResponse>('GET', '/api/blends/' + b.id);
+  assert.ok(
+    listed.blends.some(saved => saved.id === blend.id),
+    'the blend was not kept: run supabase/migrations/001_blend_result.sql in the Supabase SQL editor',
+  );
+  const reopened = await request<BlendResponse>('GET', '/api/blend/' + blend.id + '?user_id=' + b.id);
+  assert.equal(reopened.score, blend.score);
+  assert.equal(reopened.friend.name, 'TEMP smoke A');
+  assert.deepEqual(reopened.trends.you, blend.trends.friend);
+
+  const stroll = await request<DiscoverResponse>('GET', '/api/discover?seed=1&limit=20');
+  assert.equal(stroll.works.length, 20);
+  const similar = await request<SimilarResponse>('GET', '/api/similar?id=' + encodeURIComponent(picksA[0].id));
+  assert.ok(similar.similar.length > 0 && similar.similar.every(work => work.id !== picksA[0].id));
 
   await request('DELETE', '/api/heart?user_id=' + a.id + '&art_id=' + encodeURIComponent(picksA[0].id));
   const afterRemoval = await request<ProfileResponse>('GET', '/api/profile/' + a.id);
