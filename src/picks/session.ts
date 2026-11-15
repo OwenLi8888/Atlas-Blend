@@ -86,3 +86,33 @@ export const rememberCharacter = (session: Session, characterId: string) => devi
 /** Whether this user was on the photo-picks screen, so a refresh returns there instead of page 1. */
 export const wasPicking = (session: Session) => deviceStore.get(session, 'screen') === 'picks';
 export const setPicking = (session: Session, on: boolean) => deviceStore.set(session, 'screen', on ? 'picks' : null);
+
+/** Whether this user was in the studio, so a refresh returns there (with their saved picks) instead of page 1. */
+export const wasPainting = (session: Session) => deviceStore.get(session, 'screen') === 'studio';
+export const setPainting = (session: Session, on: boolean) => {
+  if (on) deviceStore.set(session, 'screen', 'studio');
+  else if (deviceStore.get(session, 'screen') === 'studio') deviceStore.set(session, 'screen', null);
+};
+
+/**
+ * The player's name. Kept for the room (so a refresh has it) and for the device (so the next room,
+ * after Play again or Leave room, starts with it filled in).
+ */
+const DEVICE_NAME = 'atlas:name';
+export function recallName(session: Session): string {
+  const here = deviceStore.get(session, 'name');
+  if (here !== null) return here;
+  try {
+    return window.localStorage.getItem(DEVICE_NAME) ?? '';
+  } catch {
+    return '';
+  }
+}
+export function rememberName(session: Session, name: string): void {
+  deviceStore.set(session, 'name', name || null);
+  try {
+    if (name) window.localStorage.setItem(DEVICE_NAME, name);
+  } catch {
+    // Nothing to do: the next room asks for the name again.
+  }
+}

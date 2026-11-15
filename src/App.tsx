@@ -5,8 +5,8 @@ import { characters } from './characters';
 import { HANGING_CLASS, reducedMotion } from './gallery/flight';
 import { rememberFinalPainting, setInGallery, wasInGallery, type FinalPainting } from './gallery/galleryData';
 import { HangItUp } from './gallery/HangItUp';
-import { savePicks, type PicksRecord } from './picks/picksStore';
-import { deviceStore, getSession, joinRoom, newRoom, recallCharacter, rememberCharacter, setPicking, wasPicking } from './picks/session';
+import { recallPicks, savePicks, type PicksRecord } from './picks/picksStore';
+import { getSession, joinRoom, newRoom, recallCharacter, recallName, rememberCharacter, rememberName, setPainting, setPicking, wasPainting, wasPicking } from './picks/session';
 import { Gallery, type Arrival } from './screens/Gallery';
 import { GalleryWall, type GalleryItem } from './screens/GalleryWall';
 import { Home } from './screens/Home';
@@ -29,11 +29,17 @@ export function App() {
   // on the picks screen comes back to it as the same player.
   const [session] = useState(getSession);
   const [characterId, setCharacterId] = useState<string | null>(() => recallCharacter(session));
-  const [name, setName] = useState(() => deviceStore.get(session, 'name') ?? '');
-  const [screen, setScreen] = useState<Screen>(() =>
+  const [name, setName] = useState(() => recallName(session));
+  /** This player's saved picks. After a refresh in the studio they come back from the device. */
+  const [record, setRecord] = useState<PicksRecord | null>(() => (wasPainting(session) ? recallPicks(session) : null));
+  const [screen, setScreen] = useState<Screen>(() => {
     // A refresh in the gallery room, or a link to it (?view=gallery), opens the gallery room.
-    wasInGallery(session) ? 'gallery' : wasPicking(session) && recallCharacter(session) ? 'picks' : 'home',
-  );
+    if (wasInGallery(session)) return 'gallery';
+    if (!recallCharacter(session)) return 'home';
+    // A refresh in the studio starts the studio again with the same picks; on the picks screen, that screen.
+    if (wasPainting(session) && recallPicks(session)) return 'studio';
+    return wasPicking(session) ? 'picks' : 'home';
+  });
   /** How the gallery room was reached: it plays the painting's arrival differently for each. */
   const [arrival, setArrival] = useState<Arrival>({ kind: 'direct' });
   /** Resolves the hand-off's view transition once the gallery room has the painting in its frame. */
@@ -44,7 +50,6 @@ export function App() {
   /** A finished canvas is being read about in the studio: the hand-off waits. */
   const [reading, setReading] = useState(false);
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
-  const [record, setRecord] = useState<PicksRecord | null>(null);
   /** The gallery, while it is open: the canvases still being painted, to hang beside the saved ones. Null when closed. */
   const [wall, setWall] = useState<GalleryItem[] | null>(null);
   /** This player's profile in the Gallery API (server/); null while it is unknown or the API is not running. */
@@ -56,6 +61,7 @@ export function App() {
       setScreen(next);
       setPicking(session, next === 'picks');
       setInGallery(session, next === 'gallery');
+      setPainting(session, next === 'studio');
     },
     [screen, session],
   );
@@ -121,7 +127,7 @@ export function App() {
   const rename = useCallback(
     (value: string) => {
       setName(value);
-      deviceStore.set(session, 'name', value.trim() || null);
+      rememberName(session, value.trim());
     },
     [session],
   );

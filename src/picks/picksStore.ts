@@ -44,6 +44,12 @@ function deviceCopy(session: Session): PicksRecord | null {
   }
 }
 
+/** This user's saved picks as this device remembers them, without asking the server: for coming back after a refresh. */
+export function recallPicks(session: Session): PicksRecord | null {
+  const record = deviceCopy(session);
+  return record && Array.isArray(record.picks) && Array.isArray(record.shown) ? record : null;
+}
+
 /**
  * Saves a user's picks, replacing any earlier record for that user in that session.
  * Resolves to 'server' when the shared store has it, or 'device' when the server could not be
