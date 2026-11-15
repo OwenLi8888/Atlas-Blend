@@ -23,6 +23,11 @@ export interface Character {
   color: string;
   /** Tip of the brush in the sprite, as [x, y] fractions from the top-left corner. */
   brushTip: [number, number];
+  /**
+   * What this painter says on the photo-picks screen. Wrap the key phrase in *stars* to highlight
+   * it; {n} becomes the number of pictures to pick. Leave it out to use the default line.
+   */
+  pickLine?: string;
   /** Renders the artwork at 100% of its container. */
   Sprite: ComponentType;
 }
@@ -47,22 +52,27 @@ interface Painter {
   color: string;
   /** How much the little hands wave in the studio, 0..1. */
   arms: number;
+  /** Its own line on the photo-picks screen (see Character.pickLine). */
+  pickLine?: string;
 }
+
+const PSST = 'Psst... which *{n} pictures* call to you? Choose wisely, adventurer!';
+const TREASURE = "Let's fill your treasure chest! Tap the *{n} pictures* you love most.";
 
 const PAINTERS: Painter[] = [
   { id: 'ember', name: 'Ember', blurb: 'Warm and fiery', color: '#EF5A26', arms: 1 },
-  { id: 'sunny', name: 'Sunny', blurb: 'Loves the light', color: '#FFC62E', arms: 0.6 },
+  { id: 'sunny', name: 'Sunny', blurb: 'Loves the light', color: '#FFC62E', arms: 0.6, pickLine: TREASURE },
   { id: 'pop', name: 'Pop', blurb: 'Bold, bright colour', color: '#E2337F', arms: 1 },
-  { id: 'dot', name: 'Dot', blurb: 'Every last detail', color: '#2F55D8', arms: 0.45 },
-  { id: 'hue', name: 'Hue', blurb: 'A bit of everything', color: '#1F9E6E', arms: 1 },
-  { id: 'ivory', name: 'Ivory', blurb: 'An old master', color: '#EFE8DA', arms: 0.7 },
+  { id: 'dot', name: 'Dot', blurb: 'Every last detail', color: '#2F55D8', arms: 0.45, pickLine: PSST },
+  { id: 'hue', name: 'Hue', blurb: 'A bit of everything', color: '#1F9E6E', arms: 1, pickLine: TREASURE },
+  { id: 'ivory', name: 'Ivory', blurb: 'An old master', color: '#EFE8DA', arms: 0.7, pickLine: PSST },
 ];
 
 const art = (id: string) => `./studio/${id}.webp`;
 
 export const characters: Character[] = PAINTERS.map((p) =>
   // No brush in this art yet: the studio pins the left hand to the stroke being painted.
-  imageCharacter({ id: p.id, name: p.name, blurb: p.blurb, color: p.color, src: art(p.id), brushTip: [0.12, 0.62] }),
+  imageCharacter({ id: p.id, name: p.name, blurb: p.blurb, color: p.color, src: art(p.id), brushTip: [0.12, 0.62], pickLine: p.pickLine }),
 );
 
 /** The same painters as the first-screen studio scene draws them (paths relative to ./studio/). */
