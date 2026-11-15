@@ -51,6 +51,8 @@ export function App() {
   const [screen, setScreen] = useState<Screen>(() => (wasPicking(session) && recallCharacter(session) ? 'picks' : 'home'));
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
   const [pictures, setPictures] = useState<Picture[]>([]);
+  /** Bumped to remount the picks screen (its draft is kept) when the studio could not be set up. */
+  const [picksRun, setPicksRun] = useState(0);
 
   const go = useCallback(
     (next: Screen) => {
@@ -78,6 +80,7 @@ export function App() {
       )}
       {screen === 'picks' && (
         <PhotoPicks
+          key={picksRun}
           character={character}
           session={session}
           onBack={() => go('home')}
@@ -85,13 +88,14 @@ export function App() {
             // ---- HANDOFF: the recommendation step can read both users' records here ----
             //   import { getSessionPicks } from './picks/picksStore';
             //   const records = await getSessionPicks(session.sessionId);
+            // If the pictures cannot be fetched, the picks screen comes back with the same picks.
             picturesFor(record).then(
               (list) => {
-                if (!list.length) return;
+                if (!list.length) return setPicksRun((n) => n + 1);
                 setPictures(list);
                 go('studio');
               },
-              () => {},
+              () => setPicksRun((n) => n + 1),
             );
           }}
         />
