@@ -6,8 +6,8 @@ import { getPlan } from './plan/planStore';
 import { Home } from './screens/Home';
 import { MuseumSetup } from './screens/MuseumSetup';
 import { Paintings } from './screens/Paintings';
+import { PaintRoom } from './screens/PaintRoom';
 import { PhotoPicks } from './screens/PhotoPicks';
-import { Studio } from './screens/Studio';
 import type { Painting } from './types';
 
 type Screen = 'home' | 'picks' | 'paintings' | 'studio';
@@ -102,7 +102,7 @@ export function App() {
           />
         )}
         {screen === 'studio' && painting && !painting.missing && (
-          <Studio key={painting.id} painting={painting} character={character} onBack={() => go('paintings')} />
+          <PaintRoom key={painting.id} painting={painting} character={character} onBack={() => go('paintings')} />
         )}
       </div>
       {setupOpen && paintings && <MuseumSetup paintings={paintings} onReplace={replace} onClose={() => setSetupOpen(false)} />}
