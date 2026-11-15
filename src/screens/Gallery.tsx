@@ -94,7 +94,7 @@ function measure(el: HTMLElement): Dims {
   const char = Math.round(Math.min(120, Math.max(76, vw * 0.2)));
   const head = vw < 600 ? 104 : 96, plaque = 92, below = char + 30;
   const room = vh - head - plaque - below;
-  const slotH = Math.floor(Math.max(160, Math.min(slotW * 1.3, room)));
+  const slotH = Math.floor(Math.max(160, Math.min(slotW * 1.2, room)));
   return { r, p, slotW, slotH, char, top: Math.round(head + Math.max(0, room - slotH) / 2) };
 }
 

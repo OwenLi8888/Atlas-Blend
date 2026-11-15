@@ -1,6 +1,9 @@
 import { useCallback, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { characters } from './characters';
-import { setInGallery, wasInGallery } from './gallery/galleryData';
+import { HANGING_CLASS, reducedMotion } from './gallery/flight';
+import { rememberFinalPainting, setInGallery, wasInGallery, type FinalPainting } from './gallery/galleryData';
+import { HangItUp } from './gallery/HangItUp';
 import type { PicksRecord } from './picks/picksStore';
 import { loadPool, photoUrl } from './picks/pool';
 import { getSession, recallCharacter, rememberCharacter, setPicking, wasPicking } from './picks/session';
@@ -59,6 +62,8 @@ export function App() {
   /** Resolves the hand-off's view transition once the gallery has the painting in its frame. */
   const frontReady = useRef<(() => void) | null>(null);
   const onFrontReady = useCallback(() => frontReady.current?.(), []);
+  /** What the painting page reported as finished (onPaintingComplete), until it is hung. */
+  const [finished, setFinished] = useState<FinalPainting | null>(null);
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
   const [pictures, setPictures] = useState<Picture[]>([]);
   /** Bumped to remount the picks screen (its draft is kept) when the studio could not be set up. */
@@ -81,6 +86,45 @@ export function App() {
     },
     [session],
   );
+
+  const onPaintingComplete = useCallback(
+    (painting: FinalPainting | null) => {
+      setFinished(painting);
+      if (painting) rememberFinalPainting(session.sessionId, painting);
+    },
+    [session],
+  );
+
+  /**
+   * The painting goes to the gallery. With the View Transitions API the browser flies it from
+   * where it lifted off (`from`) into the gallery's frame while the room fades in; without it the
+   * gallery does the same flight itself (FLIP). Reduced motion: a plain crossfade.
+   */
+  const hang = (from: DOMRect | null) => {
+    const calm = reducedMotion();
+    const enter = (next: Arrival) => {
+      setArrival(next);
+      setFinished(null);
+      go('gallery');
+    };
+    if (typeof document.startViewTransition !== 'function') return enter({ kind: 'handoff', from: calm ? null : from, shared: false });
+    const root = document.documentElement;
+    root.classList.add(HANGING_CLASS);
+    const transition = document.startViewTransition(
+      () =>
+        new Promise<void>((resolve) => {
+          // The new picture is taken once the gallery has the painting in its frame.
+          frontReady.current = resolve;
+          window.setTimeout(resolve, 1500);
+          flushSync(() => enter({ kind: 'handoff', from: null, shared: !calm && !!from }));
+        }),
+    );
+    const done = () => {
+      frontReady.current = null;
+      root.classList.remove(HANGING_CLASS);
+    };
+    transition.finished.then(done, done);
+  };
 
   const character = characters.find((c) => c.id === characterId) ?? characters[0];
 
@@ -112,8 +156,9 @@ export function App() {
         />
       )}
       {screen === 'studio' && pictures.length > 0 && (
-        <PaintRoom pictures={pictures} character={character} onBack={() => go('picks')} />
+        <PaintRoom pictures={pictures} character={character} onBack={() => go('picks')} onPaintingComplete={onPaintingComplete} />
       )}
+      {screen === 'studio' && finished && <HangItUp character={character} painting={finished} onHang={hang} />}
       {screen === 'gallery' && (
         <Gallery
           session={session}

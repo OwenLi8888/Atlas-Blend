@@ -2,6 +2,7 @@ import './PaintRoom.css';
 import { useEffect, useRef, useState } from 'react';
 import { studioCast, type Character } from '../characters';
 import { Player } from '../engine/player';
+import type { FinalPainting } from '../gallery/galleryData';
 import { getPlan } from '../plan/planStore';
 import type { StudioScene } from '../scene/studioScene';
 import { STYLE_MENU, type Painting } from '../types';
@@ -19,6 +20,15 @@ interface Props {
   pictures: Picture[];
   character: Character;
   onBack: () => void;
+  /**
+   * HAND-OFF TO THE GALLERY (src/gallery/HangItUp.tsx listens to this through App.tsx).
+   * Called with the finished painting when the last canvas is done, and with null when painting
+   * starts again. This is the only thing the gallery needs from this page.
+   * TODO(painting page): three canvases are painted and the gallery hangs one; today that is the
+   * last one that was painted. Pass whichever is "the" painting, or a combined one.
+   * TODO(painting page): the no-WebGL fallback (<Studio>) does not report completion yet.
+   */
+  onPaintingComplete?: (painting: FinalPainting | null) => void;
 }
 
 /** One style per easel, so the three canvases also differ in look. */
@@ -41,7 +51,9 @@ export function PaintRoom(props: Props) {
   return webgl ? <Room {...props} /> : <Studio painting={first.painting} character={props.character} onBack={props.onBack} />;
 }
 
-function Room({ pictures, character, onBack }: Props) {
+function Room({ pictures, character, onBack, onPaintingComplete }: Props) {
+  const completeRef = useRef(onPaintingComplete);
+  completeRef.current = onPaintingComplete;
   const sceneRef = useRef<HTMLCanvasElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -70,6 +82,8 @@ function Room({ pictures, character, onBack }: Props) {
     let ro: ResizeObserver | null = null;
     let current = -1;
     const players: Player[] = [];
+    /** Canvases that could not be painted. */
+    const blank = new Set<number>();
     // Pixel size set up front, the same the Player will measure (CSS size x DPR, at most 2): the 3D
     // room uploads each sheet as a texture before its plan may be ready, and a texture cannot
     // change size once uploaded.
@@ -92,6 +106,7 @@ function Room({ pictures, character, onBack }: Props) {
     setIndex(-1);
     setDone(false);
     setSkipped([]);
+    completeRef.current?.(null);
     const bar = (progress: number) => {
       if (barRef.current) barRef.current.style.transform = `scaleX(${progress})`;
     };
@@ -111,6 +126,7 @@ function Room({ pictures, character, onBack }: Props) {
       setStudying(false);
       if (!plan) {
         // This picture could not be planned: the painter moves on, the canvas stays blank.
+        blank.add(i);
         setSkipped((s) => [...s, i]);
         scene?.workDone();
         return;
@@ -146,6 +162,19 @@ function Room({ pictures, character, onBack }: Props) {
         onAllDone: () => {
           bar(1);
           setDone(true);
+          // Hand-off to the gallery: see onPaintingComplete in Props.
+          const last = works.map((_, i) => i).filter((i) => !blank.has(i)).pop();
+          if (last === undefined) return;
+          try {
+            completeRef.current?.({
+              imageUrl: sheets[last].toDataURL('image/jpeg', 0.9),
+              title: works[last].painting.title,
+              style: STYLES[last].label,
+              createdAt: new Date().toISOString(),
+            });
+          } catch {
+            // The canvas could not be read: nothing to hang.
+          }
         },
       });
       ro = new ResizeObserver(() => {

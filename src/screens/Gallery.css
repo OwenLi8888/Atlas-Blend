@@ -120,6 +120,8 @@ body:has(.gallery) {
 
 .gal-panel {
   --far: 0;
+  /* Wall left above and below a picture that is wider than its slot is tall. */
+  --gap: max(0px, calc((var(--slot-h) - var(--slot-w) / var(--ar)) / 2));
   position: absolute;
   left: calc(var(--slot-w) / -2);
   top: 0;
@@ -131,10 +133,10 @@ body:has(.gallery) {
   backface-visibility: hidden;
 }
 
-/* A thin warm wood frame around a cream mat. Pictures hang with their bottom edges in line. */
+/* A thin warm wood frame around a cream mat. Pictures hang on one centre line. */
 .gal-frame {
   position: relative;
-  align-self: end;
+  align-self: center;
   width: min(100%, calc(var(--slot-h) * var(--ar)));
   aspect-ratio: var(--ar);
   padding: clamp(8px, 4%, 16px);
@@ -171,6 +173,8 @@ body:has(.gallery) {
 .gal-plaque {
   align-self: start;
   margin-top: 12px;
+  /* Just under its picture, however tall the picture is. */
+  transform: translateY(calc(-1 * var(--gap)));
   max-width: 100%;
   padding: 7px 16px 8px;
   border-radius: 12px;
@@ -636,6 +640,7 @@ body:has(.gallery) {
 
 .gal-focus .gal-plaque {
   margin: 0;
+  transform: none;
   padding: 10px 22px 12px;
   opacity: 1;
 }

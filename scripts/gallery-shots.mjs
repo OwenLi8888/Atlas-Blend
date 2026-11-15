@@ -190,6 +190,12 @@ async function flow(tag, size) {
   await shot(page, `${tag}-2a-lift`);
   await page.waitForFunction(() => !!document.querySelector('.gallery'), null, { timeout: 5000 });
   await page.waitForTimeout(380);
+  // Mid-flight: the browser is flying the painting (view transition), or the room is (FLIP).
+  const flying = await page.evaluate(() => ({
+    shared: document.getAnimations().filter((a) => String(a.effect?.pseudoElement ?? '').includes('view-transition-group(hung-painting)')).length,
+    flip: document.querySelectorAll('.gal-flyer:not(.waiting)').length,
+  }));
+  note(`${tag}: the painting flies into the frame as a shared element`, flying.shared + flying.flip > 0, flying.shared ? 'view transition running on hung-painting' : flying.flip ? 'FLIP flight running' : 'nothing in flight 380 ms in');
   await shot(page, `${tag}-2b-mid-transition`);
   await waitPhase(page, 'clap');
   await page.waitForTimeout(120);
