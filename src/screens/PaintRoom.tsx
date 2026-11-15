@@ -231,7 +231,8 @@ function Room({ character, session, record, player, onBack, onGallery, paused = 
           players.splice(players.indexOf(player2d), 1);
           setPainted((p) => [...p, i]);
           saveWork({
-            id: `${session.sessionId}:${session.user}:${i}`,
+            // one copy per round of picks and easel: a room code that comes round again keeps the earlier visit's paintings
+            id: `${session.sessionId}:${session.user}:${record.pickedAt}:${i}`,
             src: snapshot(sheet),
             aspect: slot.aspect,
             title: slot.painting.title,

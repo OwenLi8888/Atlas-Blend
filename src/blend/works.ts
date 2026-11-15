@@ -5,7 +5,7 @@
 import type { Group } from './pictures';
 
 export interface Work {
-  /** Room code and easel: painting the same canvas again replaces the earlier copy. */
+  /** Room code, player, round of picks and easel: painting the same canvas again replaces the earlier copy. */
   id: string;
   /** Data URL of the painted canvas. */
   src: string;
