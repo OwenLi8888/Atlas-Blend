@@ -103,3 +103,14 @@ Runs the whole flow against live Typesense and the real Supabase project. It cre
 ## Security
 
 This is a trusted hackathon demo with no authentication. A profile UUID is an identifier, not a credential: anyone who can reach the API and knows a UUID can change that profile's hearts. Keep it local or private. The server uses the Supabase secret key and bypasses RLS on purpose (the schema has no policies), so never put that key in a `VITE_*` variable or send it to the browser. Typesense is plain HTTP and is only ever called from this server.
+
+## Hosting the pages without Vite
+
+`serve.mjs` is the whole app as one Node process with no dependencies: the built pages (`dist/`) and the picks endpoint (`picksApi.mjs`). A host needs only Node 22 and three things copied to it: `dist/`, `server/serve.mjs` and `server/picksApi.mjs`.
+
+```bash
+npm run build
+node server/serve.mjs
+```
+
+It listens on `127.0.0.1:4830`; put a reverse proxy or a tunnel in front of it. Set `GALLERY_API=http://127.0.0.1:43871` to pass the other `/api` paths on to the Gallery API; without it they answer 503 and the studio chooses pictures from the pool. `PORT`, `HOST`, `DIST` and `PICKS_FILE` are listed at the top of the file. The picks file keeps the newest 500 sessions.

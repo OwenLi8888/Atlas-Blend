@@ -167,10 +167,37 @@
   color: var(--ink-soft);
 }
 
-.gallery-count {
-  font-size: 0.75rem;
-  color: var(--ink-soft);
-  font-variant-numeric: tabular-nums;
+/* Every painting, small, under the caption: tap one to walk to it. */
+.gallery-thumbs {
+  list-style: none;
+  margin: 0;
+  padding: 2px 2px 4px;
+  display: flex;
+  gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  pointer-events: auto;
+}
+
+.gallery-thumbs button {
+  display: block;
+  padding: 3px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  opacity: 0.6;
+}
+
+.gallery-thumbs button.on {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink);
+  opacity: 1;
+}
+
+.gallery-thumbs img {
+  display: block;
+  height: 44px;
+  width: auto;
 }
 
 .gallery-why {

@@ -145,9 +145,16 @@ export function Gallery({ live, onBack }: Props) {
             {reading && item.why ? (
               <p className="gallery-why">{item.why}</p>
             ) : (
-              <span className="gallery-count">
-                {index + 1} of {items.length}
-              </span>
+              // every painting at a glance: the wall shows one at a time on a phone
+              <ul className="gallery-thumbs" aria-label="All paintings">
+                {items.map((it, i) => (
+                  <li key={i}>
+                    <button type="button" className={i === index ? 'on' : undefined} aria-current={i === index} aria-label={`${it.title}, ${i + 1} of ${items.length}`} onClick={() => sceneRef.current?.go(i)}>
+                      <img src={it.src} alt="" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
             {item.why && (
               <button type="button" className="gallery-btn" aria-expanded={reading} onClick={() => setReading((on) => !on)}>
