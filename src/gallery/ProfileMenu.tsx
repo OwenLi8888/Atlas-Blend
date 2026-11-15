@@ -83,7 +83,7 @@ export function ProfileMenu({ name, painter, onSettings, code, onLogOut }: Props
             Settings
           </a>
           <p className="profile-code">
-            Your code is <strong>{code}</strong>. It gets you back in.
+            Your code is <strong>{code}</strong>. Set a username and passcode in Settings to sign in from anywhere.
           </p>
           <button
             type="button"
