@@ -1,17 +1,30 @@
-/* ---- Screen 2: pick 5 of 25 pictures ----
-   Phone: painter and bubble, then a 3-column grid that scrolls, with the count and Continue pinned
-   to the bottom. Tablet portrait: the same, 5 x 5. Wide screen: a column on the left (as on screen 1)
-   and the 5 x 5 grid on the right, sized to fit the height so nothing scrolls. */
+/* ---- Screen 2: pick 5 of 25 pictures, hung like a gallery wall ----
+   A quiet near-white page: the painter and its bubble, then the pictures at their true shapes in
+   equal columns (5 / 4 / 3 / 2 by width, see src/picks/masonry.ts), then a slim bar fixed to the
+   bottom with the count and Continue. One gap, --gap, is used between columns, between stacked
+   pictures and (x 1.5) at the sides of the page. */
+
+/* .picks-bar is rendered in <body> (see PhotoPicks.tsx), so it gets the same variables. */
+.picks,
+.picks-bar {
+  --gap: clamp(16px, 2.5vw, 40px);
+  --side: calc(var(--gap) * 1.5);
+  --wall: #fcfbf9;
+  --bar: 68px;
+}
 
 .picks {
-  --gap: clamp(8px, 1.6vw, 14px);
-  max-width: 1120px;
-  margin: 0 auto;
   min-height: 100dvh;
-  padding: calc(var(--pad) + env(safe-area-inset-top)) var(--pad) 0;
+  padding: calc(var(--side) + env(safe-area-inset-top)) var(--side) calc(var(--bar) + var(--side) + env(safe-area-inset-bottom));
+  background: var(--wall);
   display: flex;
   flex-direction: column;
-  gap: clamp(16px, 3vw, 28px);
+  gap: var(--side);
+}
+
+/* The page behind the screen (seen on overscroll) matches the wall. */
+body:has(.picks) {
+  background: #fcfbf9;
 }
 
 .picks .sr-only {
@@ -154,36 +167,45 @@
   }
 }
 
-/* ---- The grid ---- */
+/* ---- The wall ---- */
 
-.picks-grid {
+/* Each <li> is placed by the layout (left, top, width, height in px). column-gap is not used for
+   layout: it is how the script reads --gap in px. */
+.picks-wall {
+  position: relative;
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--gap);
+  column-gap: var(--gap);
 }
 
+.picks-wall li {
+  position: absolute;
+}
+
+/* A picture: flat, like a paper object on the wall. No border, shadow or rounding. */
 .pick-tile {
   position: relative;
   display: block;
   width: 100%;
-  aspect-ratio: 1;
+  height: 100%;
   padding: 0;
   border: 0;
-  border-radius: calc(var(--radius) * 0.6);
-  background: rgba(20, 47, 64, 0.06);
-  box-shadow: 0 0 0 1px var(--hairline);
-  transition: box-shadow 160ms, opacity 160ms;
+  border-radius: 0;
+  background: none;
+  transition: transform 160ms;
 }
 
 .pick-tile img {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 200ms;
+}
+
+.pick-tile img.loaded {
+  opacity: 1;
 }
 
 .pick-tile:disabled {
@@ -191,26 +213,33 @@
 }
 
 @media (hover: hover) {
-  .pick-tile:not(:disabled):not(.selected):hover {
-    box-shadow: 0 0 0 2px var(--teal);
+  .pick-tile:not(:disabled):hover {
+    transform: translateY(-2px);
   }
 }
 
-/* Selected: the rose ring of the painter chips on screen 1, with a gap so it reads on any picture. */
-.pick-tile.selected {
-  box-shadow: 0 0 0 2px var(--ivory), 0 0 0 5px var(--rose);
+/* Selected: a 3px line in the accent colour, 6px off the picture. Drawn as a frame rather than a
+   CSS outline so the keyboard focus ring can still show. On the narrowest gap it sits 4px off, so
+   the frames of two neighbours never touch. */
+.pick-tile.selected::after {
+  --off: min(6px, calc(var(--gap) / 2 - 4px));
+  content: '';
+  position: absolute;
+  inset: calc(-1 * (var(--off) + 3px));
+  border: 3px solid var(--rose);
+  pointer-events: none;
 }
 
 .pick-tile:focus-visible {
-  outline-offset: 7px;
+  outline-offset: 2px;
 }
 
 .pick-badge {
   position: absolute;
   top: 8px;
   left: 8px;
-  min-width: 30px;
-  height: 30px;
+  min-width: 28px;
+  height: 28px;
   padding: 0 6px;
   border-radius: 999px;
   display: grid;
@@ -219,10 +248,9 @@
   color: var(--white);
   border: 2px solid var(--white);
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 1px 2px rgba(20, 47, 64, 0.25);
   animation: badge-in 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
@@ -262,11 +290,6 @@
   }
 }
 
-/* After Continue: the pictures that were not picked step back. */
-.picks.is-saved .pick-tile:not(.selected) {
-  opacity: 0.35;
-}
-
 .picks-empty {
   flex: 1;
   display: grid;
@@ -276,34 +299,50 @@
   text-align: center;
 }
 
-/* ---- Count and Continue, pinned to the bottom ---- */
+/* ---- Count and Continue: a slim bar fixed to the bottom of the screen ---- */
 
 .picks-bar {
-  position: sticky;
+  position: fixed;
+  left: 0;
+  right: 0;
   bottom: 0;
-  z-index: 1;
-  margin: auto calc(-1 * var(--pad)) 0;
-  padding: 30px var(--pad) calc(var(--pad) + env(safe-area-inset-bottom));
-  display: grid;
-  grid-template-columns: 1fr auto;
+  z-index: 2;
+  min-height: var(--bar);
+  padding: 10px var(--side) calc(10px + env(safe-area-inset-bottom));
+  display: flex;
   align-items: center;
-  gap: 4px 16px;
-  background: linear-gradient(to top, rgb(231, 222, 205) 72%, rgba(231, 222, 205, 0));
-  pointer-events: none; /* the fade at the top must not swallow taps on the pictures under it */
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--wall);
+  border-top: 1px solid var(--hairline);
+  box-sizing: border-box;
+  /* It does not slide in with the screen, so it fades in as the screen settles. */
+  animation: bar-in 200ms ease-out 200ms both;
 }
 
-.picks-bar > * {
-  pointer-events: auto;
+@keyframes bar-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.picks-bar .btn.primary {
+  min-height: 48px;
+  padding: 0 32px;
+  font-size: 1rem;
 }
 
 /* A sixth pick, or a save that stayed on the device: a small note that floats over the bar. */
 .picks-hint {
   position: absolute;
   left: 50%;
-  bottom: calc(100% - 22px);
+  bottom: calc(100% + 12px);
   transform: translateX(-50%);
   width: max-content;
-  max-width: calc(100% - 2 * var(--pad));
+  max-width: calc(100% - 2 * var(--side));
   padding: 9px 16px;
   border-radius: var(--radius);
   border: 1px solid var(--hairline);
@@ -360,121 +399,17 @@
   box-shadow: none;
 }
 
-/* Tablet and up: 5 x 5. */
-@media (min-width: 600px) {
-  .picks-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-}
-
-/* Wide screens (laptop, tablet landscape): the column on the left, the whole grid on the right. */
-@media (min-width: 900px) and (min-aspect-ratio: 1/1) {
-  .picks {
-    --side: clamp(300px, 30vw, 380px);
-    max-width: none;
-    height: 100dvh;
-    padding: var(--pad);
-    display: grid;
-    grid-template-columns: var(--side) minmax(0, 1fr);
-    grid-template-rows: 1fr auto;
-    grid-template-areas:
-      'head grid'
-      'bar  grid';
-    gap: 24px clamp(28px, 4vw, 56px);
-  }
-
-  .picks-head {
-    grid-area: head;
-    align-content: start;
-    gap: clamp(20px, 5vh, 48px);
-  }
-
-  .picks-guide {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-
-  .picks-painter {
-    width: clamp(120px, 20vh, 168px);
-  }
-
-  /* The bubble now sits under the painter, so its tail points up. */
-  .speech {
-    transform-origin: 20% 0;
-  }
-
-  .speech::before {
-    left: 44px;
-    top: -7px;
-    border: 0;
-    border-left: 1px solid var(--hairline);
-    border-top: 1px solid var(--hairline);
-    border-radius: 3px 0 0 0;
-    transform: rotate(45deg);
-  }
-
-  .speech h1 {
-    font-size: clamp(1.7rem, 2.4vw, 2.2rem);
-  }
-
-  @keyframes speech-in {
-    from {
-      opacity: 0;
-      transform: translateY(-16px) scale(0.94);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  .picks-grid,
-  .picks-empty {
-    grid-area: grid;
-    align-self: center;
-    justify-self: center;
-    /* A square that fits the height left by the page padding. */
-    width: min(100%, calc(100dvh - 2 * var(--pad)));
-  }
-
-  .picks-bar {
-    grid-area: bar;
-    position: static;
-    margin: 0;
-    padding: 0;
-    background: none;
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  .picks-bar .btn {
-    width: 100%;
-  }
-
-  /* In the column the note sits in line, above the count. */
-  .picks-hint {
-    position: static;
-    transform: none;
-    width: auto;
-    max-width: none;
-    min-height: 2.6em;
-    padding: 0;
-    border: 0;
-    background: none;
-    box-shadow: none;
-    text-align: left;
-    display: flex;
-    align-items: flex-end;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .picks-painter,
   .picks-painter.cheer,
   .speech,
   .pick-badge,
-  .pick-tile.shake {
+  .pick-tile.shake,
+  .picks-bar {
     animation: none;
+  }
+
+  .pick-tile:not(:disabled):hover {
+    transform: none;
   }
 }
