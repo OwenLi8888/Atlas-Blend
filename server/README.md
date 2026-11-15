@@ -12,7 +12,9 @@ cp .env.example .env   # then fill in TYPESENSE_KEY and SUPABASE_SECRET_KEY
 npm run dev
 ```
 
-To run without Supabase (profiles and hearts kept in memory until the server stops), use `npm run dev:local` instead. It needs only the Typesense values in `.env`.
+To run without Supabase, use `npm run dev:local` instead. Profiles, hearts and blends are then kept in one local file (`server/.data/local-db.json`, git-ignored), so they survive restarts. It needs only the Typesense values in `.env`.
+
+With Supabase, run `supabase/migrations/001_blend_result.sql` once in the SQL editor. It adds the column that lets a saved blend be reopened; without it blends still work but are not listed afterwards.
 
 The API listens on `127.0.0.1:43871`. The screens are at `/gallery.html` on the Vite dev server. Run the normal Vite dev server from the repo root; its `/api` proxy forwards here. For deployment, put a same-origin `/api` reverse proxy in front of it (the Vite proxy only exists in development).
 
@@ -46,7 +48,7 @@ At 6,674 works the collection is about 30 MB of vectors, so every request is sco
 
 **Shared wall.** Like a shared playlist, it is mostly the two people's own hearts: works both hearted, then three of each person's hearts that the other is closest to, and six new works close to both. Each is tagged `both`, `you`, `friend` or `new`, and they take turns down the wall.
 
-**Commissioned piece.** With `GEMINI_API_KEY` set, every blend also gets a new artwork made for the two people: the centrepiece of the reveal. The blend answers at once with the piece marked `pending`, and the screen polls until the image and its wall label are ready, then paints it. Finished pieces are held in memory (the newest 40). Without a key, or if the image model fails, the reveal paints the collection work instead.
+**Commissioned piece.** With `GEMINI_API_KEY` set, every blend also gets a new artwork made for the two people: the centrepiece of the reveal. The blend answers at once with the piece marked `pending`, and the screen polls until the image and its wall label are ready, then paints it. Finished pieces are written to `server/.data/commissions/` (git-ignored), so a saved blend still has its piece after a restart. That folder is on the machine running the server: a piece made on one machine is not there on another. Without a key, or if the image model fails, the reveal paints the collection work instead.
 
 **The atelier (deep agent).** The piece is briefed and labelled by a LangChain `deepagents` agent running on Gemini (`atelier.ts`). Its virtual filesystem starts with each person's taste portrait (`/portraits/you.md`, `/portraits/friend.md`: leanings with shares, a few loved works with captions, and their own words). The lead delegates to three subagents:
 
@@ -74,8 +76,12 @@ Types for every request and response are in `src/rec/api.ts`. Artworks never inc
 | `GET /api/onboarding` | `{works, min_picks}` |
 | `POST /api/heart` `{user_id, art_id, why?}` | `{heart}`. Hearting again without `why` keeps the saved reason |
 | `DELETE /api/heart?user_id=&art_id=` | 204 |
-| `GET /api/recs/:user_id` | `{works: [{work, because}], taste_count}`. `works` is empty until the person has a heart |
+| `GET /api/recs/:user_id?count=` | `{works: [{work, because}], taste_count}`. 24 works by default, up to 48. `works` is empty until the person has a heart |
+| `GET /api/discover?seed=&offset=&limit=` | `{works, next_offset}`: the whole collection as one varied stroll. Each family is shuffled and the families take turns, so neighbours differ. The seed fixes the order, so paging is stable |
+| `GET /api/similar?id=&limit=` | `{work, similar}`: a varied handful of the works nearest to one work |
 | `POST /api/blend` `{user_id, code}` | `{id, created_at, friend, score, commission, top_artwork, wall: [{work, from}], trends: {you, friend}, story}` |
+| `GET /api/blends/:user_id` | `{blends}`: every blend the person made or was blended into, newest first, each with the friend's name, score, title and image |
+| `GET /api/blend/:id?user_id=` | A saved blend again, in the same shape as when it was made, from the point of view of whichever of the two people asks |
 | `GET /api/blend/:id/commission` | `{status, image_url, title, label_status, label}`; `label` is `{title, story}` once written |
 | `GET /api/blend/:id/commission/image` | The finished piece |
 | `GET /api/image?id=` | The artwork's image, served from this origin. The image host sends no CORS headers, and the painting animation has to read pixels |

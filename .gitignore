@@ -22,3 +22,5 @@ screenshots/
 
 # Gallery API: local copy of the art catalog (rebuilt from Typesense)
 server/.cache/
+# Gallery API: local database and generated pieces
+server/.data/

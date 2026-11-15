@@ -20,6 +20,8 @@ create table blends (
   top_art_id text,
   picks jsonb,
   story text,
+  -- Everything needed to show the blend again: score, wall, both people's leanings.
+  result jsonb,
   created_at timestamptz default now()
 );
 

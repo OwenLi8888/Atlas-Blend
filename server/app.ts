@@ -2,14 +2,19 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import type {
   Artwork,
   BlendResponse,
+  BlendsResponse,
+  BlendSummary,
   Commission,
+  DiscoverResponse,
   HeartResponse,
   OnboardingResponse,
   Profile,
   ProfileResponse,
   RecsResponse,
+  SimilarResponse,
   Trend,
   WallItem,
+  WallSource,
 } from '../src/rec/api';
 import {
   blendScores,
@@ -19,17 +24,20 @@ import {
   overlapPercent,
   recommend,
   selectDiverse,
+  similaritiesTo,
   similarity,
   topIndices,
   type Taste,
 } from '../src/rec/scoring';
 import type { Catalog } from './catalog';
 import { noCommissions, type Commissions } from './commission';
-import type { Db } from './db';
+import type { BlendRecord, Db, StoredBlend, StoredTrend } from './db';
 import { ApiError } from './errors';
 
 const MIN_ONBOARDING_PICKS = 3;
-const WALL_SIZE = 12;
+/** Works on the recommended wall: the default, and the most a request may ask for. */
+const WALL_SIZE = 24;
+const MAX_WALL_SIZE = 48;
 /** Only the newest hearts shape a taste, so it follows what the person likes now. */
 const MAX_HEARTS = 300;
 /** The shared wall: this many of each person's hearts, then new works for both. */
@@ -39,6 +47,16 @@ const BLEND_CANDIDATES = 200;
 /** How many hearts illustrate each of a person's leanings. */
 const TREND_EXAMPLES = 4;
 const IMAGE_TIMEOUT_MS = 20_000;
+const MAX_BLENDS_LISTED = 50;
+/** Discovery pages. */
+const DISCOVER_PAGE = 30;
+const MAX_DISCOVER_PAGE = 60;
+const SIMILAR_COUNT = 12;
+const MAX_SIMILAR_COUNT = 24;
+/** Similar works are picked for variety from this many nearest neighbours. */
+const SIMILAR_CANDIDATES = 80;
+/** How many discovery orders are kept ready; each visitor's seed has its own. */
+const MAX_DISCOVER_ORDERS = 20;
 /** The reveal may be any painterly work among this many best shared matches. */
 const REVEAL_SEARCH_DEPTH = 20;
 
@@ -91,8 +109,8 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
     return rows;
   }
 
-  /** A person's tastes summed up for display: the family, a few hearts, and a reason they gave. */
-  function trendsOf(tastes: readonly Taste[], hearts: readonly HeartedRow[]): Trend[] {
+  /** A person's tastes summed up for keeping: the family, a few hearts by ID, and a reason they gave. */
+  function storedTrends(tastes: readonly Taste[], hearts: readonly HeartedRow[]): StoredTrend[] {
     const reasons = new Map(hearts.map(heart => [heart.index, heart.why]));
     return tastes.map(taste => {
       const others = taste.members
@@ -103,10 +121,95 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
       return {
         family: commonFamily(taste.members.map(member => works[member].cluster), works[taste.medoid].cluster),
         share: taste.weight,
-        works: [taste.medoid, ...others].slice(0, TREND_EXAMPLES).map(index => works[index]),
         why: taste.members.map(member => reasons.get(member)).find(why => why) ?? null,
+        workIds: [taste.medoid, ...others].slice(0, TREND_EXAMPLES).map(index => works[index].id),
       };
     });
+  }
+
+  /** Looks artworks up again by ID; any that have left the catalog are skipped. */
+  const worksById = (ids: readonly string[]): Artwork[] =>
+    ids.flatMap(id => {
+      const index = catalog.indexOf(id);
+      return index === undefined ? [] : [works[index]];
+    });
+
+  const toTrend = (trend: StoredTrend): Trend => ({
+    family: trend.family,
+    share: trend.share,
+    why: trend.why,
+    works: worksById(trend.workIds),
+  });
+
+  /** A blend as its response, from the point of view of `viewerId` (either of the two people). */
+  function presentBlend(
+    record: BlendRecord,
+    result: StoredBlend,
+    viewerId: string,
+    friendName: string,
+    commission: Commission,
+  ): BlendResponse {
+    const viewerIsA = record.userA === viewerId;
+    const mine = (viewerIsA ? result.trends.a : result.trends.b).map(toTrend).filter(trend => trend.works.length > 0);
+    const theirs = (viewerIsA ? result.trends.b : result.trends.a).map(toTrend).filter(trend => trend.works.length > 0);
+    const reveal = worksById([result.revealId])[0];
+    const flip: Record<WallSource, WallSource> = { you: 'friend', friend: 'you', both: 'both', new: 'new' };
+
+    return {
+      id: record.id,
+      created_at: record.created_at,
+      friend: { name: friendName },
+      commission,
+      score: result.score,
+      top_artwork: reveal,
+      wall: result.wall.flatMap(({ id, from }): WallItem[] => {
+        const work = worksById([id])[0];
+        return work ? [{ work, from: viewerIsA ? from : flip[from] }] : [];
+      }),
+      trends: { you: mine, friend: theirs },
+      story: blendStory(reveal, mine, theirs, friendName),
+    };
+  }
+
+  /** The name of the other person in a blend. */
+  async function otherName(record: BlendRecord, viewerId: string): Promise<string> {
+    const other = await db.findProfile(record.userA === viewerId ? record.userB : record.userA);
+    return other?.name ?? '';
+  }
+
+  /**
+   * An order for strolling the whole collection: each visual family is shuffled,
+   * then the families take turns, so neighbours on the page differ and no stretch
+   * is all one kind of work.
+   */
+  const discoverOrders = new Map<number, number[]>();
+  function discoverOrder(seed: number): number[] {
+    const ready = discoverOrders.get(seed);
+    if (ready) return ready;
+
+    const random = seededRandom(seed);
+    const families = new Map<number, number[]>();
+    works.forEach((work, index) => {
+      const family = families.get(work.cluster_id);
+      if (family) family.push(index);
+      else families.set(work.cluster_id, [index]);
+    });
+    const queues = [...families.values()].map(members => shuffled(members, random));
+    const order: number[] = [];
+    while (order.length < works.length) {
+      // Each round takes one work from every family that still has any, in a fresh order.
+      for (const queue of shuffled(queues.filter(queue => queue.length > 0), random)) {
+        const next = queue.pop();
+        if (next !== undefined) order.push(next);
+      }
+    }
+
+    discoverOrders.set(seed, order);
+    for (const oldest of discoverOrders.keys()) {
+      if (discoverOrders.size <= MAX_DISCOVER_ORDERS) break;
+      discoverOrders.delete(oldest);
+    }
+    return order;
   }
 
   const app = express();
@@ -191,7 +294,8 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
     const profile = await requireProfile(uuid(req.params.user_id));
     const hearted = (await heartsOf(profile.id)).map(heart => heart.index);
     const tastes = findTastes(corpus, hearted);
-    const picks = recommend(corpus, tastes, { count: WALL_SIZE, exclude: new Set(hearted), artistOf });
+    const count = wholeNumber(req.query.count, 'count', WALL_SIZE, 1, MAX_WALL_SIZE);
+    const picks = recommend(corpus, tastes, { count, exclude: new Set(hearted), artistOf });
 
     res.json({
       works: picks.map(pick => {
@@ -250,14 +354,20 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
       discoveries,
     );
 
-    const trends = { you: trendsOf(myTastes, mine), friend: trendsOf(theirTastes, theirs) };
-    const story = blendStory(works[reveal], trends.you, trends.friend, friend.name);
+    const result: StoredBlend = {
+      score: overlapPercent(corpus, myTastes, theirTastes, catalog.calibration),
+      revealId: works[reveal].id,
+      wall: wall.map(item => ({ id: works[item.index].id, from: item.from })),
+      trends: { a: storedTrends(myTastes, mine), b: storedTrends(theirTastes, theirs) },
+    };
+    const trends = { you: result.trends.a.map(toTrend), friend: result.trends.b.map(toTrend) };
     const saved = await db.saveBlend({
       userA: me.id,
       userB: friend.id,
-      topArtId: works[reveal].id,
-      pickIds: wall.map(item => works[item.index].id),
-      story,
+      topArtId: result.revealId,
+      pickIds: result.wall.map(item => item.id),
+      story: blendStory(works[reveal], trends.you, trends.friend, friend.name),
+      result,
     });
 
     const commission = commissions.start({
@@ -265,32 +375,87 @@ export function createApp(catalog: Catalog, db: Db, options: AppOptions = {}) {
       you: { name: me.name, trends: trends.you },
       friend: { name: friend.name, trends: trends.friend },
     });
-
-    res.json({
-      id: saved.id,
-      created_at: saved.created_at,
-      friend: { name: friend.name },
-      commission,
-      score: overlapPercent(corpus, myTastes, theirTastes, catalog.calibration),
-      top_artwork: works[reveal],
-      wall: wall.map((item): WallItem => ({ work: works[item.index], from: item.from })),
-      trends,
-      story,
-    });
+    const record: BlendRecord = { id: saved.id, created_at: saved.created_at, userA: me.id, userB: friend.id, result };
+    res.json(presentBlend(record, result, me.id, friend.name, commission));
   });
 
-  app.get('/api/blend/:blend_id/commission', (req, res: Response<Commission>) => {
-    const commission = commissions.status(uuid(req.params.blend_id, 'blend_id'));
+  // A person's saved blends: the ones they made and the ones made with them.
+  app.get('/api/blends/:user_id', async (req, res: Response<BlendsResponse>) => {
+    const viewer = await requireProfile(uuid(req.params.user_id));
+    const records = await db.listBlends(viewer.id, MAX_BLENDS_LISTED);
+
+    const blends: BlendSummary[] = [];
+    for (const record of records) {
+      const revealIndex = record.result ? catalog.indexOf(record.result.revealId) : undefined;
+      if (!record.result || revealIndex === undefined) continue;
+      const commission = await commissions.status(record.id);
+      blends.push({
+        id: record.id,
+        created_at: record.created_at,
+        friend: { name: await otherName(record, viewer.id) },
+        score: record.result.score,
+        title: commission?.title ?? null,
+        image_url: commission?.image_url ?? null,
+        top_artwork: works[revealIndex],
+      });
+    }
+    res.json({ blends });
+  });
+
+  // One saved blend, shown from the point of view of whichever of the two people is asking.
+  app.get('/api/blend/:blend_id', async (req, res: Response<BlendResponse>) => {
+    const viewerId = uuid(req.query.user_id);
+    const record = await db.findBlend(uuid(req.params.blend_id, 'blend_id'));
+    if (!record || (record.userA !== viewerId && record.userB !== viewerId)) throw new ApiError(404, 'Blend not found');
+    if (!record.result || catalog.indexOf(record.result.revealId) === undefined) {
+      throw new ApiError(410, 'This blend can no longer be shown');
+    }
+    const commission = (await commissions.status(record.id)) ?? unavailableCommission;
+    res.json(presentBlend(record, record.result, viewerId, await otherName(record, viewerId), commission));
+  });
+
+  app.get('/api/blend/:blend_id/commission', async (req, res: Response<Commission>) => {
+    const commission = await commissions.status(uuid(req.params.blend_id, 'blend_id'));
     if (!commission) throw new ApiError(404, 'No piece is being made for this blend');
     res.json(commission);
   });
 
-  app.get('/api/blend/:blend_id/commission/image', (req, res) => {
-    const image = commissions.image(uuid(req.params.blend_id, 'blend_id'));
+  app.get('/api/blend/:blend_id/commission/image', async (req, res) => {
+    const image = await commissions.image(uuid(req.params.blend_id, 'blend_id'));
     if (!image) throw new ApiError(404, 'The piece is not ready');
     res.set('Content-Type', image.mimeType);
     res.set('Cache-Control', 'private, max-age=3600');
     res.send(image.bytes);
+  });
+
+  // The whole collection as one long, varied stroll. A seed fixes the order, so paging is stable.
+  app.get('/api/discover', (req, res: Response<DiscoverResponse>) => {
+    const seed = wholeNumber(req.query.seed, 'seed', 0, 0, 0xffffffff);
+    const offset = wholeNumber(req.query.offset, 'offset', 0, 0, works.length);
+    const limit = wholeNumber(req.query.limit, 'limit', DISCOVER_PAGE, 1, MAX_DISCOVER_PAGE);
+    const order = discoverOrder(seed);
+    const end = Math.min(offset + limit, order.length);
+    res.json({
+      works: order.slice(offset, end).map(index => works[index]),
+      next_offset: end < order.length ? end : null,
+    });
+  });
+
+  // One work and a varied handful of the works nearest to it.
+  app.get('/api/similar', (req, res: Response<SimilarResponse>) => {
+    const index = catalog.indexOf(text(req.query.id, 'id', MAX_ART_ID_LENGTH));
+    if (index === undefined) throw new ApiError(404, 'Artwork not found');
+    const limit = wholeNumber(req.query.limit, 'limit', SIMILAR_COUNT, 1, MAX_SIMILAR_COUNT);
+
+    const scores = similaritiesTo(corpus, index);
+    const nearestWorks = topIndices(scores, SIMILAR_CANDIDATES, new Set([index]));
+    const similar = selectDiverse(corpus, nearestWorks, {
+      count: limit,
+      relevance: candidate => scores[candidate],
+      shown: [index],
+      artistOf,
+    });
+    res.json({ work: works[index], similar: similar.map(candidate => works[candidate]) });
   });
 
   app.use((_req, res) => {
@@ -390,6 +555,37 @@ function text(value: unknown, label: string, maxLength: number): string {
   if (trimmed === '' || trimmed.length > maxLength) throw new ApiError(400, 'Invalid ' + label);
   return trimmed;
 }
+
+/** A whole number from a query string, or `fallback` when it is absent. */
+function wholeNumber(value: unknown, label: string, fallback: number, min: number, max: number): number {
+  if (value === undefined) return fallback;
+  const number = typeof value === 'string' && /^\d{1,10}$/.test(value) ? Number(value) : NaN;
+  if (!Number.isInteger(number) || number < min || number > max) throw new ApiError(400, 'Invalid ' + label);
+  return number;
+}
+
+/** A small seeded random number generator (mulberry32): the same seed always gives the same sequence. */
+function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffled<T>(items: readonly T[], random: () => number): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+const unavailableCommission: Commission = { status: 'unavailable', image_url: null, title: null, label_status: 'unavailable', label: null };
 
 function uuid(value: unknown, label = 'user_id'): string {
   if (typeof value !== 'string' || !UUID.test(value)) throw new ApiError(400, 'Invalid ' + label);

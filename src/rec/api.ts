@@ -73,7 +73,7 @@ export interface Recommendation {
   because: Artwork;
 }
 
-/** GET /api/recs/:user_id */
+/** GET /api/recs/:user_id?count= */
 export interface RecsResponse {
   /** Empty until the person has hearted something. */
   works: Recommendation[];
@@ -156,6 +156,39 @@ export interface BlendResponse {
   /** What each person leans toward, largest leaning first. */
   trends: { you: Trend[]; friend: Trend[] };
   story: string;
+}
+
+/** A saved blend as it appears in a list. */
+export interface BlendSummary {
+  id: string;
+  created_at: string;
+  friend: { name: string };
+  score: number;
+  /** Title of the piece made for the blend, if one was made. */
+  title: string | null;
+  /** The piece made for the blend, or null when there is none. */
+  image_url: string | null;
+  /** The collection work that best fits both people; shown when there is no piece. */
+  top_artwork: Artwork;
+}
+
+/** GET /api/blends/:user_id */
+export interface BlendsResponse {
+  /** Newest first. Includes blends other people made with this person. */
+  blends: BlendSummary[];
+}
+
+/** GET /api/discover?seed=&offset=&limit= */
+export interface DiscoverResponse {
+  works: Artwork[];
+  /** Pass as `offset` for the next page; null at the end of the collection. */
+  next_offset: number | null;
+}
+
+/** GET /api/similar?id=&limit= */
+export interface SimilarResponse {
+  work: Artwork;
+  similar: Artwork[];
 }
 
 export interface ErrorResponse {

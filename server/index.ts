@@ -27,11 +27,12 @@ function portFromEnv(): number {
 const port = portFromEnv();
 const host = process.env.HOST || '127.0.0.1';
 
-/** GALLERY_DB=memory runs without Supabase: profiles and hearts last until the server stops. */
+/** GALLERY_DB=memory runs without Supabase: profiles, hearts and blends are kept in a local file. */
 function databaseFromEnv(): Db {
   if (process.env.GALLERY_DB === 'memory') {
-    console.warn('Using the in-memory database: nothing is saved when the server stops.');
-    return createMemoryDb();
+    const file = path.join(import.meta.dirname, '.data', 'local-db.json');
+    console.warn('Using the local database (no Supabase): data is kept in ' + file);
+    return createMemoryDb({ file });
   }
   return createSupabaseDb(requiredEnv('SUPABASE_URL'), requiredEnv('SUPABASE_SECRET_KEY'));
 }
@@ -72,6 +73,7 @@ function commissionsFromEnv(): Commissions {
     makeImage: createGeminiImageMaker({ apiKey, model: imageModel }),
     fetchImage: (url, init) => fetch(url, init),
     atelier: createAtelier({ apiKey, model: agentModel }),
+    dir: path.join(import.meta.dirname, '.data', 'commissions'),
   });
 }
 

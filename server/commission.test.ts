@@ -1,4 +1,7 @@
+import { mkdtemp, rm } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { BlendResponse, Commission, Profile, Trend } from '../src/rec/api';
 import { createApp } from './app';
@@ -20,9 +23,9 @@ const request = (blendId: string) => ({
   friend: { name: 'Bo', trends: [trend('Japanese folding screens', 1)] },
 });
 
-async function settled(check: () => Commission | null): Promise<Commission> {
+async function settled(check: () => Promise<Commission | null>): Promise<Commission> {
   for (let attempt = 0; attempt < 200; attempt++) {
-    const commission = check();
+    const commission = await check();
     if (commission && commission.status !== 'pending') return commission;
     await new Promise(resolve => setTimeout(resolve, 5));
   }
@@ -45,11 +48,11 @@ describe('createCommissions', () => {
       label_status: 'unavailable',
       label: null,
     });
-    expect(commissions.image('b1')).toBeNull();
+    expect(await commissions.image('b1')).toBeNull();
 
     const ready = await settled(() => commissions.status('b1'));
     expect(ready).toMatchObject({ status: 'ready', image_url: '/api/blend/b1/commission/image', title: 'For Ada and Bo' });
-    expect(commissions.image('b1')).toEqual(jpeg([1, 2, 3]));
+    expect(await commissions.image('b1')).toEqual(jpeg([1, 2, 3]));
     // One reference per leaning: two of Ada's, one of Bo's.
     expect(calls).toHaveLength(1);
     expect(calls[0].references).toBe(3);
@@ -64,7 +67,7 @@ describe('createCommissions', () => {
     });
     commissions.start(request('b2'));
     expect((await settled(() => commissions.status('b2'))).status).toBe('failed');
-    expect(commissions.image('b2')).toBeNull();
+    expect(await commissions.image('b2')).toBeNull();
   });
 
   it('still makes the piece when a reference image cannot be fetched', async () => {
@@ -84,9 +87,40 @@ describe('createCommissions', () => {
   it('drops the oldest pieces past its limit and knows nothing of unknown blends', async () => {
     const commissions = createCommissions({ makeImage: async () => jpeg([1]), fetchImage: referenceHost, maxKept: 2 });
     for (const id of ['old', 'mid', 'new']) commissions.start(request(id));
-    expect(commissions.status('old')).toBeNull();
-    expect(commissions.status('mid')).not.toBeNull();
-    expect(commissions.status('never')).toBeNull();
+    expect(await commissions.status('old')).toBeNull();
+    expect(await commissions.status('mid')).not.toBeNull();
+    expect(await commissions.status('never')).toBeNull();
+  });
+});
+
+describe('kept pieces', () => {
+  it('finds a finished piece again after a restart, with its label', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'commissions-'));
+    const atelier = {
+      make: async (_you: unknown, _friend: unknown, onBrief: (brief: string) => void) => {
+        onBrief('a brief');
+        return { title: 'Harbour on gold', story: 'Ada and Bo\'s piece holds a harbour.' };
+      },
+    };
+    const first = createCommissions({ makeImage: async () => jpeg([5, 6]), fetchImage: referenceHost, atelier, dir });
+    first.start(request('aaaaaaaa-0000-4000-8000-000000000001'));
+    await settled(() => first.status('aaaaaaaa-0000-4000-8000-000000000001'));
+
+    // A new server process has nothing in memory, only the folder.
+    const second = createCommissions({ makeImage: async () => jpeg([0]), fetchImage: referenceHost, dir });
+    const found = await second.status('aaaaaaaa-0000-4000-8000-000000000001');
+    expect(found).toMatchObject({ status: 'ready', title: 'Harbour on gold', label_status: 'ready' });
+    expect(found?.label?.story).toContain('harbour');
+    expect(await second.image('aaaaaaaa-0000-4000-8000-000000000001')).toEqual(jpeg([5, 6]));
+    expect(await second.status('aaaaaaaa-0000-4000-8000-000000000002')).toBeNull();
+    await rm(dir, { recursive: true });
+  });
+
+  it('refuses IDs that could escape its folder', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'commissions-'));
+    const commissions = createCommissions({ makeImage: async () => jpeg([1]), fetchImage: referenceHost, dir });
+    expect(await commissions.status('../../etc/passwd')).toBeNull();
+    await rm(dir, { recursive: true });
   });
 });
 

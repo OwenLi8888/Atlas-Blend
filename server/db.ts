@@ -5,8 +5,29 @@
  */
 import { randomInt } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-import type { Heart, Profile } from '../src/rec/api';
+import type { Heart, Profile, WallSource } from '../src/rec/api';
 import { ApiError } from './errors';
+
+/** One leaning as it is stored: artworks by ID, so a saved blend survives changes to the catalog. */
+export interface StoredTrend {
+  family: string;
+  share: number;
+  why: string | null;
+  workIds: string[];
+}
+
+/**
+ * Everything needed to show a blend again later, from the point of view of the
+ * person who made it (A). Read back, it can be shown to either person.
+ */
+export interface StoredBlend {
+  score: number;
+  /** The collection work that best fits both people. */
+  revealId: string;
+  /** The shared wall in hanging order; `from` is relative to person A. */
+  wall: { id: string; from: WallSource }[];
+  trends: { a: StoredTrend[]; b: StoredTrend[] };
+}
 
 export interface NewBlend {
   userA: string;
@@ -14,6 +35,16 @@ export interface NewBlend {
   topArtId: string;
   pickIds: string[];
   story: string;
+  result: StoredBlend;
+}
+
+export interface BlendRecord {
+  id: string;
+  created_at: string;
+  userA: string;
+  userB: string;
+  /** Null for blends saved before results were kept; those cannot be reopened. */
+  result: StoredBlend | null;
 }
 
 export interface SavedBlend {
@@ -33,6 +64,9 @@ export interface Db {
   saveHeart(userId: string, artId: string, why: string | undefined): Promise<Heart>;
   removeHeart(userId: string, artId: string): Promise<void>;
   saveBlend(blend: NewBlend): Promise<SavedBlend>;
+  findBlend(id: string): Promise<BlendRecord | null>;
+  /** Blends a person made or was blended into, newest first. */
+  listBlends(userId: string, limit: number): Promise<BlendRecord[]>;
 }
 
 /** Mirrors supabase/schema.sql. */
@@ -59,6 +93,7 @@ interface Database {
           top_art_id: string | null;
           picks: string[] | null;
           story: string | null;
+          result: StoredBlend | null;
           created_at: string | null;
         };
         Insert: {
@@ -68,6 +103,7 @@ interface Database {
           top_art_id: string;
           picks: string[];
           story: string;
+          result?: StoredBlend | null;
           created_at?: string | null;
         };
         Update: { story?: string | null };
@@ -81,10 +117,12 @@ interface Database {
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 type HeartRow = Database['public']['Tables']['hearts']['Row'];
+type BlendRow = Database['public']['Tables']['blends']['Row'];
 type HeartInsert = Database['public']['Tables']['hearts']['Insert'];
 
 const PROFILE_COLUMNS = 'id,name,blend_code,created_at';
 const HEART_COLUMNS = 'user_id,art_id,why,created_at';
+const BLEND_COLUMNS = 'id,created_at,user_a,user_b,result';
 const REQUEST_TIMEOUT_MS = 15_000;
 
 export const BLEND_CODE_LENGTH = 6;
@@ -95,6 +133,8 @@ const BLEND_CODE_ATTEMPTS = 5;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
 const POSTGRES_FOREIGN_KEY_VIOLATION = '23503';
 const MISSING_TABLE_CODES = new Set(['PGRST205', '42P01']);
+/** PostgREST and Postgres codes for a column the table does not have. */
+const MISSING_COLUMN_CODES = new Set(['PGRST204', '42703']);
 
 export function generateBlendCode(): string {
   let code = '';
@@ -175,20 +215,41 @@ export function createSupabaseDb(url: string, secretKey: string): Db {
     },
 
     async saveBlend(blend) {
+      const row = {
+        user_a: blend.userA,
+        user_b: blend.userB,
+        top_art_id: blend.topArtId,
+        picks: blend.pickIds,
+        story: blend.story,
+      };
+      let { data, error } = await client.from('blends').insert({ ...row, result: blend.result }).select('id,created_at').single();
+      if (error?.code && MISSING_COLUMN_CODES.has(error.code)) {
+        // The blends table predates the `result` column. The blend still works now; it just cannot be reopened later.
+        console.warn('blends.result is missing: run supabase/migrations/001_blend_result.sql so blends can be reopened.');
+        ({ data, error } = await client.from('blends').insert(row).select('id,created_at').single());
+      }
+      if (error?.code === POSTGRES_FOREIGN_KEY_VIOLATION) throw new ApiError(404, 'Profile not found');
+      if (error || !data) throw storageError(error ?? { message: 'Blend was not saved' });
+      return { id: data.id, created_at: data.created_at ?? new Date().toISOString() };
+    },
+
+    async findBlend(id) {
+      const { data, error } = await client.from('blends').select(BLEND_COLUMNS).eq('id', id).maybeSingle();
+      if (error?.code && MISSING_COLUMN_CODES.has(error.code)) return null;
+      if (error) throw storageError(error);
+      return data ? toBlendRecord(data) : null;
+    },
+
+    async listBlends(userId, limit) {
       const { data, error } = await client
         .from('blends')
-        .insert({
-          user_a: blend.userA,
-          user_b: blend.userB,
-          top_art_id: blend.topArtId,
-          picks: blend.pickIds,
-          story: blend.story,
-        })
-        .select('id,created_at')
-        .single();
-      if (error?.code === POSTGRES_FOREIGN_KEY_VIOLATION) throw new ApiError(404, 'Profile not found');
+        .select(BLEND_COLUMNS)
+        .or('user_a.eq.' + userId + ',user_b.eq.' + userId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error?.code && MISSING_COLUMN_CODES.has(error.code)) return [];
       if (error) throw storageError(error);
-      return { id: data.id, created_at: data.created_at ?? new Date().toISOString() };
+      return data.flatMap(row => toBlendRecord(row) ?? []);
     },
   };
 }
@@ -200,6 +261,18 @@ function toProfile(row: ProfileRow): Profile {
     name: row.name ?? '',
     blend_code: row.blend_code,
     created_at: row.created_at ?? new Date().toISOString(),
+  };
+}
+
+/** A stored blend, or null when it has lost one of its two people. */
+function toBlendRecord(row: Pick<BlendRow, 'id' | 'created_at' | 'user_a' | 'user_b' | 'result'>): BlendRecord | null {
+  if (!row.user_a || !row.user_b) return null;
+  return {
+    id: row.id,
+    created_at: row.created_at ?? new Date().toISOString(),
+    userA: row.user_a,
+    userB: row.user_b,
+    result: row.result,
   };
 }
 
