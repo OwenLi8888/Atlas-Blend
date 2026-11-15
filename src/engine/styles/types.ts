@@ -1,4 +1,4 @@
-/**
+﻿/**
  * A style is one way of drawing the shared stroke list. The player owns timing; a style only
  * knows how to draw stroke `index` from its start up to progress `t`.
  */
@@ -12,7 +12,7 @@ export interface StyleRenderer {
    */
   draw(ctx: CanvasRenderingContext2D, index: number, t: number, mmPerPx: number): void;
   /**
-   * True for a style that keeps its own picture (Mosaic's tile grid). The player then always hands
+   * True for a style that keeps its own picture (Mosaic's shards). The player then always hands
    * draw() the committed canvas, strokes in progress included, and draw() adds only what is new
    * since its last call for that stroke. The result must not depend on the order of the calls.
    */
