@@ -99,4 +99,4 @@ react, typescript, vite, three.js, node.js, express, langchain, deepagents, lang
 
 **Best Practical AI Innovation (Amazon).** Agentic: plans rooms, delegates, searches, critiques and revises. Adaptive: it learns from every heart and every note, and remembers them. Useful: a real way to find art you'd like among thousands of works, alone or with someone. Simple: three taps to a personal wall.
 
-**Best Use of Gemini API (MLH / Google).** Gemini runs both agents and generates every commissioned piece from a written brief plus reference artworks from both people's hearts.
+**Best Use of Gemini API (MLH / Google).** Gemini is the model behind everything generative in the app. It runs the curator: reading each person's memory files, rewriting its notes on them, planning rooms, and driving the room-maker subagents that search the collection and write the wall text. It runs the atelier's art-director, label-writer and critic. And a Gemini image model paints every commissioned piece from the written brief plus reference artworks from both people's hearts.
